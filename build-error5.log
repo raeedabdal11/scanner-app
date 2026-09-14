@@ -1,0 +1,976 @@
+﻿› Building app...
+Configuration on demand is an incubating feature.
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-module-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-max-sdk-override-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :app
+ ℹ️  [33mApplying gradle plugin[0m '[32mexpo-max-sdk-override-plugin[0m'
+  [expo-max-sdk-override-plugin] This plugin will find all permissions declared with `android:maxSdkVersion`. If there exists a declaration with the `android:maxSdkVersion` annotation and another one without, the plugin will remove the annotation from the final merged manifest. In order to see a log with the changes run a clean build of the app.
+
+> Configure project :
+[32m[ExpoRootProject][0m Using the following versions:
+  - buildTools:  [32m36.0.0[0m
+  - minSdk:      [32m24[0m
+  - compileSdk:  [32m36[0m
+  - targetSdk:   [32m36[0m
+  - ndk:         [32m27.1.12297006[0m
+  - kotlin:      [32m2.1.20[0m
+  - ksp:         [32m2.1.20-2.0.1[0m
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-log-box[0m (57.0.4)
+  - [32mexpo-constants[0m (57.0.17)
+  - [32mexpo-modules-core[0m (57.0.16)
+  - [33m[📦][0m [32mexpo-dom-webview[0m (57.0.1)
+  - [33m[📦][0m [32mexpo-asset[0m (57.0.16)
+  - [33m[📦][0m [32mexpo-camera[0m (57.0.4)
+  - [33m[📦][0m [32mexpo-file-system[0m (57.0.7)
+  - [33m[📦][0m [32mexpo-font[0m (57.0.3)
+  - [33m[📦][0m [32mexpo-image-loader[0m (57.0.1)
+  - [33m[📦][0m [32mexpo-image-picker[0m (57.0.17)
+  - [33m[📦][0m [32mexpo-keep-awake[0m (57.0.1)
+  - [33m[📦][0m [32mexpo-media-library[0m (57.0.5)
+  - [33m[📦][0m [32mexpo-print[0m (57.0.2)
+  - [33m[📦][0m [32mexpo-sharing[0m (57.0.19)
+  - [33m[📦][0m [32mexpo-status-bar[0m (57.0.1)
+
+
+> Task :expo-log-box:preBuild UP-TO-DATE
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-log-box:preDebugBuild UP-TO-DATE
+> Task :expo-modules-core:preDebugBuild UP-TO-DATE
+> Task :app:generateAutolinkingNewArchitectureFiles UP-TO-DATE
+> Task :expo-log-box:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-modules-core:writeDebugAarMetadata UP-TO-DATE
+> Task :expo:generatePackagesList UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :expo:preBuild UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :expo:preDebugBuild UP-TO-DATE
+> Task :expo-modules-core:generateDebugResValues UP-TO-DATE
+> Task :expo-log-box:generateDebugResValues UP-TO-DATE
+> Task :expo:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateAutolinkingPackageList UP-TO-DATE
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :expo:generateDebugResValues UP-TO-DATE
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :expo-modules-core:generateDebugResources UP-TO-DATE
+> Task :expo-log-box:generateDebugResources UP-TO-DATE
+> Task :expo:generateDebugResources UP-TO-DATE
+> Task :app:generateReactNativeEntryPoint UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preDebugBuild UP-TO-DATE
+> Task :react-native-document-scanner-plugin:preBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :react-native-document-scanner-plugin:preDebugBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-async-storage_async-storage:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-document-scanner-plugin:writeDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResValues UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateDebugResValues UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :expo:packageDebugResources UP-TO-DATE
+> Task :expo-log-box:packageDebugResources UP-TO-DATE
+> Task :expo-modules-core:packageDebugResources UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugResources UP-TO-DATE
+> Task :expo:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-log-box:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-modules-core:extractDeepLinksDebug UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateDebugResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:packageDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :expo-modules-core:processDebugManifest UP-TO-DATE
+> Task :react-native-document-scanner-plugin:packageDebugResources UP-TO-DATE
+> Task :expo-log-box:processDebugManifest UP-TO-DATE
+> Task :react-native-async-storage_async-storage:extractDeepLinksDebug UP-TO-DATE
+> Task :expo:processDebugManifest UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-modules-core:compileDebugLibraryResources UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :expo:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-log-box:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-document-scanner-plugin:extractDeepLinksDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :expo-modules-core:parseDebugLocalResources UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :expo-log-box:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :expo:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugManifest UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugLibraryResources UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :expo-modules-core:generateDebugRFile UP-TO-DATE
+> Task :react-native-document-scanner-plugin:processDebugManifest UP-TO-DATE
+> Task :expo-log-box:generateDebugRFile UP-TO-DATE
+> Task :expo-log-box:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:generateDebugRFile UP-TO-DATE
+> Task :react-native-document-scanner-plugin:compileDebugLibraryResources UP-TO-DATE
+> Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-async-storage_async-storage:parseDebugLocalResources UP-TO-DATE
+> Task :expo-log-box:generateDebugBuildConfig UP-TO-DATE
+> Task :expo-modules-core:generateDebugBuildConfig UP-TO-DATE
+> Task :expo:generateDebugBuildConfig UP-TO-DATE
+> Task :expo-log-box:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-document-scanner-plugin:parseDebugLocalResources UP-TO-DATE
+> Task :expo:javaPreCompileDebug UP-TO-DATE
+> Task :expo-log-box:mergeDebugShaders UP-TO-DATE
+> Task :expo:mergeDebugShaders UP-TO-DATE
+> Task :expo-log-box:compileDebugShaders NO-SOURCE
+> Task :expo-log-box:generateDebugAssets UP-TO-DATE
+> Task :expo:compileDebugShaders NO-SOURCE
+> Task :expo:generateDebugAssets UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateDebugRFile UP-TO-DATE
+> Task :react-native-document-scanner-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-log-box:mergeDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugRFile UP-TO-DATE
+> Task :expo:mergeDebugAssets UP-TO-DATE
+> Task :react-native-document-scanner-plugin:generateDebugBuildConfig UP-TO-DATE
+> Task :expo-log-box:mergeDebugJniLibFolders UP-TO-DATE
+> Task :expo:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateDebugBuildConfig UP-TO-DATE
+> Task :expo:mergeDebugNativeLibs NO-SOURCE
+> Task :expo-log-box:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:javaPreCompileDebug UP-TO-DATE
+> Task :expo:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :expo-log-box:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :expo-constants:createExpoConfig
+> Task :expo-constants:preBuild
+> Task :expo-constants:preDebugBuild
+> Task :expo-constants:writeDebugAarMetadata UP-TO-DATE
+> Task :expo-constants:generateDebugResValues UP-TO-DATE
+> Task :expo-constants:generateDebugResources UP-TO-DATE
+> Task :expo-constants:packageDebugResources UP-TO-DATE
+> Task :expo-constants:extractDeepLinksDebug UP-TO-DATE
+> Task :expo-constants:processDebugManifest UP-TO-DATE
+> Task :expo-constants:compileDebugLibraryResources UP-TO-DATE
+> Task :expo-constants:parseDebugLocalResources UP-TO-DATE
+> Task :expo-constants:generateDebugRFile UP-TO-DATE
+> Task :expo-constants:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-constants:generateDebugBuildConfig UP-TO-DATE
+> Task :expo-constants:javaPreCompileDebug UP-TO-DATE
+> Task :expo-constants:mergeDebugShaders UP-TO-DATE
+> Task :expo-constants:compileDebugShaders NO-SOURCE
+> Task :expo-constants:generateDebugAssets UP-TO-DATE
+> Task :expo-constants:mergeDebugAssets UP-TO-DATE
+> Task :expo-constants:mergeDebugJniLibFolders UP-TO-DATE
+> Task :expo-constants:mergeDebugNativeLibs NO-SOURCE
+> Task :expo-constants:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugShaders UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileDebugShaders NO-SOURCE
+> Task :react-native-async-storage_async-storage:generateDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:processDebugJavaRes NO-SOURCE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-document-scanner-plugin:compileDebugKotlin UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-document-scanner-plugin:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-document-scanner-plugin:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-document-scanner-plugin:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-document-scanner-plugin:mergeDebugShaders UP-TO-DATE
+> Task :react-native-document-scanner-plugin:compileDebugShaders NO-SOURCE
+> Task :react-native-document-scanner-plugin:generateDebugAssets UP-TO-DATE
+> Task :react-native-document-scanner-plugin:mergeDebugAssets UP-TO-DATE
+> Task :react-native-document-scanner-plugin:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-document-scanner-plugin:processDebugJavaRes UP-TO-DATE
+> Task :react-native-document-scanner-plugin:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-document-scanner-plugin:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-document-scanner-plugin:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-document-scanner-plugin:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :expo-modules-core:compileDebugKotlin UP-TO-DATE
+> Task :expo-modules-core:javaPreCompileDebug UP-TO-DATE
+> Task :expo-modules-core:compileDebugJavaWithJavac UP-TO-DATE
+> Task :expo-modules-core:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :expo-modules-core:mergeDebugShaders UP-TO-DATE
+> Task :expo-modules-core:compileDebugShaders NO-SOURCE
+> Task :expo-modules-core:generateDebugAssets UP-TO-DATE
+> Task :expo-modules-core:mergeDebugAssets UP-TO-DATE
+> Task :expo-modules-core:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :expo-modules-core:processDebugJavaRes UP-TO-DATE
+> Task :expo-modules-core:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :expo-modules-core:configureCMakeDebug[arm64-v8a]
+> Task :expo-constants:compileDebugKotlin UP-TO-DATE
+> Task :expo-constants:compileDebugJavaWithJavac UP-TO-DATE
+> Task :expo-constants:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :expo-log-box:compileDebugKotlin UP-TO-DATE
+> Task :expo-constants:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :expo-constants:processDebugJavaRes UP-TO-DATE
+> Task :expo-constants:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :expo-log-box:compileDebugJavaWithJavac UP-TO-DATE
+> Task :expo-log-box:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :expo-log-box:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :expo-log-box:processDebugJavaRes UP-TO-DATE
+> Task :expo-log-box:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :expo:compileDebugKotlin UP-TO-DATE
+> Task :expo:compileDebugJavaWithJavac FROM-CACHE
+> Task :expo:processDebugJavaRes
+> Task :expo:bundleLibCompileToJarDebug
+> Task :expo:bundleLibRuntimeToJarDebug
+
+> Task :expo-modules-core:buildCMakeDebug[arm64-v8a] FAILED
+C/C++: ninja: Entering directory `C:\Users\Canon Co\pdf-scanner\scanner\node_modules\expo-modules-core\android\.cxx\Debug\3c3b1j1d\arm64-v8a'
+C/C++: ld.lld: error: undefined symbol: operator delete(void*)
+C/C++: >>> referenced by SharedObject.cpp:18 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp:18)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp.o:(expo::SharedObject::NativeState::~NativeState())
+C/C++: >>> referenced by new:280 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:280)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewEventEmitter.cpp.o:(expo::ExpoViewEventEmitter::dispatch(std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const&, std::__ndk1::function<facebook::jsi::Value (facebook::jsi::Runtime&)> const&) const)
+C/C++: >>> referenced by new:280 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:280)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewEventEmitter.cpp.o:(expo::ExpoViewEventEmitter::dispatch(std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const&, std::__ndk1::function<facebook::jsi::Value (facebook::jsi::Runtime&)> const&) const)
+C/C++: >>> referenced 1104 more times
+C/C++: ld.lld: error: undefined symbol: __cxa_guard_acquire
+C/C++: >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+C/C++: >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+C/C++: >>> referenced by CoreClasses-inl.h:147 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/CoreClasses-inl.h:147)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(facebook::jni::basic_strong_ref<expo::CodedException, facebook::jni::LocalReferenceAllocator> facebook::jni::JavaClass<expo::CodedException, facebook::jni::JThrowable, void>::newInstance<facebook::jni::basic_strong_ref<facebook::jni::JString, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JString, facebook::jni::LocalReferenceAllocator>))
+C/C++: >>> referenced 212 more times
+C/C++: ld.lld: error: undefined symbol: operator new(unsigned long)
+C/C++: >>> referenced by new:271 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::NativeStatePropsGetter::registerNatives())
+C/C++: >>> referenced by new:271 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/MainRuntimeInstaller.cpp.o:(expo::MainRuntimeInstaller::registerNatives())
+C/C++: >>> referenced by new:271 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp.o:(expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, std::__ndk1::function<void (long)> const&))
+C/C++: >>> referenced 345 more times
+C/C++: ld.lld: error: undefined symbol: __cxa_guard_release
+C/C++: >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+C/C++: >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+C/C++: >>> referenced by ConcreteShadowNode.h:97 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/workspace/transformed/react-android-0.86.3-debug/prefab/modules/reactnative/include/react/renderer/core/ConcreteShadowNode.h:97)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidExpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+C/C++: >>> referenced 212 more times
+C/C++: ld.lld: error: undefined symbol: __cxa_guard_abort
+C/C++: >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+C/C++: >>> referenced by ConcreteShadowNode.h:97 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/workspace/transformed/react-android-0.86.3-debug/prefab/modules/reactnative/include/react/renderer/core/ConcreteShadowNode.h:97)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidExpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+C/C++: >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+C/C++: >>> referenced 185 more times
+C/C++: ld.lld: error: undefined symbol: __dynamic_cast
+C/C++: >>> referenced by AndroidExpoViewComponentDescriptor.cpp:35 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp:35)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidExpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+C/C++: >>> referenced by shared_ptr.h:1245 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:1245)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp.o:(std::__ndk1::__function::__func<expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, std::__ndk1::function<void (long)> const&)::$_0, std::__ndk1::allocator<expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, std::__ndk1::function<void (long)> const&)::$_0>, facebook::jsi::Value (facebook::jsi::Runtime&, facebook::jsi::Value const&, facebook::jsi::Value const*, unsigned long)>::operator()(facebook::jsi::Runtime&, facebook::jsi::Value const&, facebook::jsi::Value const*&&, unsigned long&&))
+C/C++: >>> referenced by shared_ptr.h:1245 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:1245)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::concreteStateFrom(facebook::jni::alias_ref<_jobject*>))
+C/C++: >>> referenced 15 more times
+C/C++: ld.lld: error: undefined symbol: std::__ndk1::__shared_weak_count::__release_weak()
+C/C++: >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecorator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+C/C++: >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecorator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+C/C++: >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecorator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+C/C++: >>> referenced 708 more times
+C/C++: ld.lld: error: undefined symbol: __cxa_bad_cast
+C/C++: >>> referenced by AndroidExpoViewComponentDescriptor.cpp:35 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp:35)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidExpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+C/C++: ld.lld: error: undefined symbol: std::__ndk1::__next_prime(unsigned long)
+C/C++: >>> referenced by __hash_table:1657 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1657)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewProps.cpp.o:(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>>::unordered_map(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>> const&))
+C/C++: >>> referenced by __hash_table:1665 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1665)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewProps.cpp.o:(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>>::unordered_map(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>> const&))
+C/C++: >>> referenced by __hash_table:1657 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1657)
+C/C++: >>>               JSReferencesCache.cpp.o:(std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>, std::__ndk1::__unordered_map_hasher<expo::JSReferencesCache::JSKeys, std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>, std::__ndk1::hash<expo::JSReferencesCache::JSKeys>, std::__ndk1::equal_to<expo::JSReferencesCache::JSKeys>, true>, std::__ndk1::__unordered_map_equal<expo::JSReferencesCache::JSKeys, std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>, std::__ndk1::equal_to<expo::JSReferencesCache::JSKeys>, std::__ndk1::hash<expo::JSReferencesCache::JSKeys>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>>>::__emplace_unique_key_args<expo::JSReferencesCache::JSKeys, expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>(expo::JSReferencesCache::JSKeys const&, expo::JSReferencesCache::JSKeys&&, std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>&&)) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced 43 more times
+C/C++: ld.lld: error: undefined symbol: std::__ndk1::mutex::lock()
+C/C++: >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, facebook::react::Point))
+C/C++: >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clear(int))
+C/C++: >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clearAll())
+C/C++: >>> referenced 1 more times
+C/C++: ld.lld: error: undefined symbol: std::__ndk1::mutex::unlock()
+C/C++: >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, facebook::react::Point))
+C/C++: >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, facebook::react::Point))
+C/C++: >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clear(int))
+C/C++: >>> referenced 3 more times
+C/C++: ld.lld: error: undefined symbol: std::__ndk1::__shared_weak_count::~__shared_weak_count()
+C/C++: >>> referenced by shared_ptr.h:263 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:263)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidExpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+C/C++: >>> referenced by shared_ptr.h:263 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:263)
+C/C++: >>>               ObjectDeallocator.cpp.o:(expo::common::setDeallocator(facebook::jsi::Runtime&, std::__ndk1::shared_ptr<facebook::jsi::Object> const&, std::__ndk1::function<void ()>)) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by shared_ptr.h:246 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:246)
+C/C++: >>>               ObjectDeallocator.cpp.o:(std::__ndk1::__shared_ptr_emplace<expo::common::ObjectDeallocator, std::__ndk1::allocator<expo::common::ObjectDeallocator>>::~__shared_ptr_emplace()) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced 167 more times
+C/C++: ld.lld: error: undefined symbol: vtable for __cxxabiv1::__class_type_info
+C/C++: >>> referenced by ExpoViewState.cpp
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewState.cpp.o:(typeinfo for expo::ExpoViewState)
+C/C++: >>> referenced by JNIInjector.cpp
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIInjector.cpp.o:(typeinfo for std::__ndk1::__function::__base<void ()>)
+C/C++: >>> referenced by JNIInjector.cpp
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIInjector.cpp.o:(typeinfo for JNI_OnLoad::$_0)
+C/C++: >>> referenced 85 more times
+C/C++: >>> the vtable symbol may be undefined because the class is missing its key function (see https://lld.llvm.org/missingkeyfunction)
+C/C++: ld.lld: error: undefined symbol: __cxa_allocate_exception
+C/C++: >>> referenced by TypedArray.cpp:50 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+C/C++: >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by Exceptions.cpp:89 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:89)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::rethrowAsCodedError(facebook::jsi::Runtime&, facebook::jni::JniException&))
+C/C++: >>> referenced 62 more times
+C/C++: ld.lld: error: undefined symbol: std::bad_alloc::bad_alloc()
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject*>::plain_jni_reference_t, facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject*>(facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject* const&))
+C/C++: >>> referenced 28 more times
+C/C++: ld.lld: error: undefined symbol: typeinfo for std::bad_alloc
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+C/C++: >>> referenced 59 more times
+C/C++: ld.lld: error: undefined symbol: std::bad_alloc::~bad_alloc()
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+C/C++: >>> referenced 59 more times
+C/C++: ld.lld: error: undefined symbol: std::runtime_error::runtime_error(char const*)
+C/C++: >>> referenced by TypedArray.cpp:50 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+C/C++: >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by Exceptions.cpp:108 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:108)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::throwPendingJniExceptionAsCppException())
+C/C++: >>> referenced by BridgelessJSCallInvoker.h:24 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/../common/cpp/JSI/BridgelessJSCallInvoker.h:24)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/MainRuntimeInstaller.cpp.o:(expo::BridgelessJSCallInvoker::invokeSync(std::__ndk1::function<void (facebook::jsi::Runtime&)>&&))
+C/C++: >>> referenced 10 more times
+C/C++: ld.lld: error: undefined symbol: __cxa_throw
+C/C++: >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, facebook::jni::GlobalReferenceAllocator>>::type facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator> const&))
+C/C++: >>> referenced by TypedArray.cpp:50 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+C/C++: >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by Exceptions.cpp:89 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:89)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::rethrowAsCodedError(facebook::jsi::Runtime&, facebook::jni::JniException&))
+C/C++: >>> referenced 62 more times
+C/C++: ld.lld: error: undefined symbol: typeinfo for std::runtime_error
+C/C++: >>> referenced by TypedArray.cpp:50 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+C/C++: >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by TypedArray.cpp:50 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+C/C++: >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive libexpo-modules-jsi.a
+C/C++: >>> referenced by Exceptions.cpp:108 (C:/Users/Canon Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:108)
+C/C++: >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::throwPendingJniExceptionAsCppException())
+C/C++: >>> referenced 24 more times
+C/C++: ld.lld: error: too many errors emitted, stopping now (use --error-limit=0 to see all errors)
+C/C++: CLANG_~1: error: linker command failed with exit code 1 (use -v to see invocation)
+C/C++: ninja: build stopped: subcommand failed.
+
+> Task :expo:bundleLibRuntimeToDirDebug
+> Task :app:mergeExtDexDebug FROM-CACHE
+
+[Incubating] Problems report is available at: file:///C:/Users/Canon%20Co/pdf-scanner/scanner/android/build/reports/problems/problems-report.html
+node.exe : 
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':expo-modules-core:buildCMakeDebug[arm64-v8a]'.
+> com.android.ide.common.process.ProcessException: ninja: Entering directory `C:\Users\Canon 
+Co\pdf-scanner\scanner\node_modules\expo-modules-core\android\.cxx\Debug\3c3b1j1d\arm64-v8a'
+  [1/1] Linking CXX shared library ..\..\..\..\build\intermediates\cxx\Debug\3c3b1j1d\obj\arm64-v8a\libexpo-modules-core.so
+  FAILED: ../../../../build/intermediates/cxx/Debug/3c3b1j1d/obj/arm64-v8a/libexpo-modules-core.so 
+  cmd.exe /C "cd . && C:\Users\CANONC~1\AppData\Local\Android\Sdk\ndk\271~1.122\TOOLCH~1\llvm\prebuilt\WINDOW~1\bin\CLANG_~1.EXE 
+--target=aarch64-none-linux-android24 --sysroot="C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot" -fPIC -g -DANDROID 
+-fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes 
+-D__BIONIC_NO_PAGE_SIZE_MACRO -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  
+-Wl,-z,max-page-size=16384 -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings 
+-Wl,--no-undefined -Qunused-arguments -shared -Wl,-soname,libexpo-modules-core.so -o 
+..\..\..\..\build\intermediates\cxx\Debug\3c3b1j1d\obj\arm64-v8a\libexpo-modules-core.so CMakeFiles/expo-modules-core.dir/C_/User
+s/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/EventEmitter.cpp.o CMakeFiles/expo-modules-core.dir/C_/U
+sers/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/LazyObject.cpp.o CMakeFiles/expo-modules-core.dir/C_/
+Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/NativeModule.cpp.o CMakeFiles/expo-modules-core.dir/
+C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedRef.cpp.o 
+CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewEventE
+mitter.cpp.o CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/fab
+ric/ExpoViewProps.cpp.o CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/c
+pp/fabric/ExpoViewShadowNode.cpp.o CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modul
+es-core/common/cpp/fabric/ExpoViewState.cpp.o CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/ExpoModulesHostObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIDeallocator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIInjector.cpp.o CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIUtils.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JSIContext.cpp.o CMakeFiles/expo-modules-core.dir/src/main/cpp/JSharedObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaCallback.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaReferencesCache.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptArrayBuffer.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptFunction.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptModuleObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptRuntime.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptTypedArray.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptValue.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JavaScriptWeakObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/MethodMetadata.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/NativeArrayBuffer.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/RuntimeHolder.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSClassesDecorator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSConstantsDecorator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSDecoratorsBridgingObject.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSFunctionsDecorator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSObjectDecorator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewProps.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewState.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/ExpoComponentDescriptorFactory.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/FabricComponentsRegistry.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/MainRuntimeInstaller.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/WorkletRuntimeInstaller.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/types/AnyType.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/types/ExpectedType.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/types/FrontendConverter.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/types/FrontendConverterProvider.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/worklets/Serializable.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/worklets/Worklet.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/worklets/WorkletJSCallInvoker.cpp.o 
+CMakeFiles/expo-modules-core.dir/src/main/cpp/worklets/WorkletNativeRuntime.cpp.o  "C:/Users/Canon Co/AppData/Local/Android/Sdk/n
+dk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/lib/aarch64-linux-android/24/liblog.so"  -landroid  
+libexpo-modules-jsi.a  "C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/workspace/transformed/
+react-android-0.86.3-debug/prefab/modules/jsi/libs/android.arm64-v8a/libjsi.so"  "C:/Users/Canon Co/.gradle/caches/9.3.1/transfor
+ms/dd29849c799951ad0680f4b910344724/workspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.arm64-v8a/libfbjni.so"  
+"C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/workspace/transformed/react-android-0.86.3-de
+bug/prefab/modules/reactnative/libs/android.arm64-v8a/libreactnative.so"  -latomic -lm && cd ."
+  ld.lld: error: undefined symbol: operator delete(void*)
+  >>> referenced by SharedObject.cpp:18 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/SharedObject.cpp:18)
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/SharedObject.cpp.o:(expo::SharedObject::NativeState::~NativeState())
+  >>> referenced by new:280 (C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:280)
+  >>>               CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/cpp/f
+abric/ExpoViewEventEmitter.cpp.o:(expo::ExpoViewEventEmitter::dispatch(std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const&, std::__ndk1::function<facebook::jsi::Value 
+(facebook::jsi::Runtime&)> const&) const)
+  >>> referenced by new:280 (C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:280)
+  >>>               CMakeFiles/expo-modules-core.dir/2596c9091c7c40b7378eef1784ebb928/node_modules/expo-modules-core/common/cpp/f
+abric/ExpoViewEventEmitter.cpp.o:(expo::ExpoViewEventEmitter::dispatch(std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const&, std::__ndk1::function<facebook::jsi::Value 
+(facebook::jsi::Runtime&)> const&) const)
+  >>> referenced 1104 more times
+  
+  ld.lld: error: undefined symbol: __cxa_guard_acquire
+  >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+  >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+  >>> referenced by CoreClasses-inl.h:147 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/wor
+kspace/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/CoreClasses-inl.h:147)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(facebook::jni::basic_strong_ref<expo::CodedException, 
+facebook::jni::LocalReferenceAllocator> facebook::jni::JavaClass<expo::CodedException, facebook::jni::JThrowable, 
+void>::newInstance<facebook::jni::basic_strong_ref<facebook::jni::JString, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JString, 
+facebook::jni::LocalReferenceAllocator>))
+  >>> referenced 212 more times
+  
+  ld.lld: error: undefined symbol: operator new(unsigned long)
+  >>> referenced by new:271 (C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::NativeStatePropsGett
+er::registerNatives())
+  >>> referenced by new:271 (C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/MainRuntimeInstaller.cpp.o:(expo::MainRuntimeInstall
+er::registerNatives())
+  >>> referenced by new:271 (C:/Users/Canon 
+Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot/usr/include/c++/v1/new:271)
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/SharedObject.cpp.o:(expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, std::__ndk1::function<void (long)> const&))
+  >>> referenced 345 more times
+  
+  ld.lld: error: undefined symbol: __cxa_guard_release
+  >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+  >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+  >>> referenced by ConcreteShadowNode.h:97 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/w
+orkspace/transformed/react-android-0.86.3-debug/prefab/modules/reactnative/include/react/renderer/core/ConcreteShadowNode.h:97)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidE
+xpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, 
+std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+  >>> referenced 212 more times
+  
+  ld.lld: error: undefined symbol: __cxa_guard_abort
+  >>> referenced by JNIFunctionBody.cpp:20 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:20)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNINoArgsFunctionBody::invoke(_jobject*))
+  >>> referenced by ConcreteShadowNode.h:97 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/63665759bc44fa5b83dd6b6c18b77145/w
+orkspace/transformed/react-android-0.86.3-debug/prefab/modules/reactnative/include/react/renderer/core/ConcreteShadowNode.h:97)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidE
+xpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, 
+std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+  >>> referenced by JNIFunctionBody.cpp:40 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/JNIFunctionBody.cpp:40)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIFunctionBody.cpp.o:(expo::JNIFunctionBody::invoke(_jobject*, _jobjectArray*))
+  >>> referenced 185 more times
+  
+  ld.lld: error: undefined symbol: __dynamic_cast
+  >>> referenced by AndroidExpoViewComponentDescriptor.cpp:35 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp:35)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidE
+xpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, 
+std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+  >>> referenced by shared_ptr.h:1245 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/win
+dows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:1245)
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/SharedObject.cpp.o:(std::__ndk1::__function::__func<expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, 
+std::__ndk1::function<void (long)> const&)::$_0, 
+std::__ndk1::allocator<expo::SharedObject::installBaseClass(facebook::jsi::Runtime&, std::__ndk1::function<void (long)> 
+const&)::$_0>, facebook::jsi::Value (facebook::jsi::Runtime&, facebook::jsi::Value const&, facebook::jsi::Value const*, unsigned 
+long)>::operator()(facebook::jsi::Runtime&, facebook::jsi::Value const&, facebook::jsi::Value const*&&, unsigned long&&))
+  >>> referenced by shared_ptr.h:1245 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/win
+dows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:1245)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::concreteStateFrom(fa
+cebook::jni::alias_ref<_jobject*>))
+  >>> referenced 15 more times
+  
+  ld.lld: error: undefined symbol: std::__ndk1::__shared_weak_count::__release_weak()
+  >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecor
+ator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, 
+facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, 
+unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+  >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecor
+ator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, 
+facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, 
+unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+  >>> referenced by shared_ptr.h:184 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:184)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/decorators/JSPropertiesDecorator.cpp.o:(expo::JSPropertiesDecor
+ator::registerProperty(facebook::jni::alias_ref<_jstring*>, unsigned char, 
+facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>, 
+unsigned char, facebook::jni::alias_ref<facebook::jni::JArrayClass<expo::ExpectedType>>, 
+facebook::jni::alias_ref<facebook::jni::detail::JTypeFor<expo::JNIFunctionBody, facebook::jni::JObject, void>::_javaobject*>))
+  >>> referenced 708 more times
+  
+  ld.lld: error: undefined symbol: __cxa_bad_cast
+  >>> referenced by AndroidExpoViewComponentDescriptor.cpp:35 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp:35)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidE
+xpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, 
+std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+  
+  ld.lld: error: undefined symbol: std::__ndk1::__next_prime(unsigned long)
+  >>> referenced by __hash_table:1657 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/win
+dows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1657)
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/fabric/ExpoViewProps.cpp.o:(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, 
+folly::dynamic>>>::unordered_map(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>> const&))
+  >>> referenced by __hash_table:1665 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/win
+dows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1665)
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/fabric/ExpoViewProps.cpp.o:(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, 
+folly::dynamic>>>::unordered_map(std::__ndk1::unordered_map<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>, folly::dynamic, std::__ndk1::hash<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::equal_to<std::__ndk1::basic_string<char, std::__ndk1::char_traits<char>, 
+std::__ndk1::allocator<char>>>, std::__ndk1::allocator<std::__ndk1::pair<std::__ndk1::basic_string<char, 
+std::__ndk1::char_traits<char>, std::__ndk1::allocator<char>> const, folly::dynamic>>> const&))
+  >>> referenced by __hash_table:1657 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/win
+dows-x86_64/sysroot/usr/include/c++/v1/__hash_table:1657)
+  >>>               JSReferencesCache.cpp.o:(std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1:
+:__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, 
+std::__ndk1::default_delete<facebook::jsi::Object>>>, void*>*>, bool> 
+std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, 
+std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>>, 
+std::__ndk1::__unordered_map_hasher<expo::JSReferencesCache::JSKeys, 
+std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, 
+std::__ndk1::default_delete<facebook::jsi::Object>>>, std::__ndk1::hash<expo::JSReferencesCache::JSKeys>, 
+std::__ndk1::equal_to<expo::JSReferencesCache::JSKeys>, true>, 
+std::__ndk1::__unordered_map_equal<expo::JSReferencesCache::JSKeys, 
+std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, 
+std::__ndk1::default_delete<facebook::jsi::Object>>>, std::__ndk1::equal_to<expo::JSReferencesCache::JSKeys>, 
+std::__ndk1::hash<expo::JSReferencesCache::JSKeys>, true>, 
+std::__ndk1::allocator<std::__ndk1::__hash_value_type<expo::JSReferencesCache::JSKeys, 
+std::__ndk1::unique_ptr<facebook::jsi::Object, 
+std::__ndk1::default_delete<facebook::jsi::Object>>>>>::__emplace_unique_key_args<expo::JSReferencesCache::JSKeys, 
+expo::JSReferencesCache::JSKeys, std::__ndk1::unique_ptr<facebook::jsi::Object, 
+std::__ndk1::default_delete<facebook::jsi::Object>>>(expo::JSReferencesCache::JSKeys const&, expo::JSReferencesCache::JSKeys&&, 
+std::__ndk1::unique_ptr<facebook::jsi::Object, std::__ndk1::default_delete<facebook::jsi::Object>>&&)) in archive 
+libexpo-modules-jsi.a
+  >>> referenced 43 more times
+  
+  ld.lld: error: undefined symbol: std::__ndk1::mutex::lock()
+  >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, 
+facebook::react::Point))
+  >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clear(int))
+  >>> referenced by lock_guard.h:35 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:35)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clearAll())
+  >>> referenced 1 more times
+  
+  ld.lld: error: undefined symbol: std::__ndk1::mutex::unlock()
+  >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, 
+facebook::react::Point))
+  >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::set(int, 
+facebook::react::Point))
+  >>> referenced by lock_guard.h:41 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windo
+ws-x86_64/sysroot/usr/include/c++/v1/__mutex/lock_guard.h:41)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/NativeStatePropsGetter.cpp.o:(expo::ContentOriginRegistry::clear(int))
+  >>> referenced 3 more times
+  
+  ld.lld: error: undefined symbol: std::__ndk1::__shared_weak_count::~__shared_weak_count()
+  >>> referenced by shared_ptr.h:263 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:263)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(expo::AndroidE
+xpoViewComponentDescriptor::cloneProps(facebook::react::PropsParserContext const&, 
+std::__ndk1::shared_ptr<facebook::react::Props const> const&, facebook::react::RawProps) const)
+  >>> referenced by shared_ptr.h:263 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:263)
+  >>>               ObjectDeallocator.cpp.o:(expo::common::setDeallocator(facebook::jsi::Runtime&, 
+std::__ndk1::shared_ptr<facebook::jsi::Object> const&, std::__ndk1::function<void ()>)) in archive libexpo-modules-jsi.a
+  >>> referenced by shared_ptr.h:246 (C:/Users/Canon Co/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/wind
+ows-x86_64/sysroot/usr/include/c++/v1/__memory/shared_ptr.h:246)
+  >>>               ObjectDeallocator.cpp.o:(std::__ndk1::__shared_ptr_emplace<expo::common::ObjectDeallocator, 
+std::__ndk1::allocator<expo::common::ObjectDeallocator>>::~__shared_ptr_emplace()) in archive libexpo-modules-jsi.a
+  >>> referenced 167 more times
+  
+  ld.lld: error: undefined symbol: vtable for __cxxabiv1::__class_type_info
+  >>> referenced by ExpoViewState.cpp
+  >>>               CMakeFiles/expo-modules-core.dir/C_/Users/Canon_Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/
+cpp/fabric/ExpoViewState.cpp.o:(typeinfo for expo::ExpoViewState)
+  >>> referenced by JNIInjector.cpp
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIInjector.cpp.o:(typeinfo for 
+std::__ndk1::__function::__base<void ()>)
+  >>> referenced by JNIInjector.cpp
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/JNIInjector.cpp.o:(typeinfo for JNI_OnLoad::$_0)
+  >>> referenced 85 more times
+  >>> the vtable symbol may be undefined because the class is missing its key function (see 
+https://lld.llvm.org/missingkeyfunction)
+  
+  ld.lld: error: undefined symbol: __cxa_allocate_exception
+  >>> referenced by TypedArray.cpp:50 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+  >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive 
+libexpo-modules-jsi.a
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by Exceptions.cpp:89 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:89)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::rethrowAsCodedError(facebook::jsi::Runtime&, 
+facebook::jni::JniException&))
+  >>> referenced 62 more times
+  
+  ld.lld: error: undefined symbol: std::bad_alloc::bad_alloc()
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeak
+Reference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, 
+facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(std::__ndk1::enable_if<IsNonWeakReference<fac
+ebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject*>(), 
+facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::detail::JTypeFor<expo::CodedException, 
+facebook::jni::JThrowable, void>::_javaobject*>::plain_jni_reference_t, facebook::jni::LocalReferenceAllocator>>::type 
+facebook::jni::make_local<facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, 
+void>::_javaobject*>(facebook::jni::detail::JTypeFor<expo::CodedException, facebook::jni::JThrowable, void>::_javaobject* 
+const&))
+  >>> referenced 28 more times
+  
+  ld.lld: error: undefined symbol: typeinfo for std::bad_alloc
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeak
+Reference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, 
+facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+  >>> referenced 59 more times
+  
+  ld.lld: error: undefined symbol: std::bad_alloc::~bad_alloc()
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/types/JNIToJSIConverter.cpp.o:(std::__ndk1::enable_if<IsNonWeak
+Reference<_jbyteArray*>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<_jbyteArray*>::plain_jni_reference_t, 
+facebook::jni::LocalReferenceAllocator>>::type facebook::jni::make_local<_jbyteArray*>(_jbyteArray* const&))
+  >>> referenced 59 more times
+  
+  ld.lld: error: undefined symbol: std::runtime_error::runtime_error(char const*)
+  >>> referenced by TypedArray.cpp:50 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+  >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive 
+libexpo-modules-jsi.a
+  >>> referenced by Exceptions.cpp:108 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:108)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::throwPendingJniExceptionAsCppException())
+  >>> referenced by BridgelessJSCallInvoker.h:24 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/../common/cpp/JSI/BridgelessJSCallInvoker.h:24)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/installers/MainRuntimeInstaller.cpp.o:(expo::BridgelessJSCallIn
+voker::invokeSync(std::__ndk1::function<void (facebook::jsi::Runtime&)>&&))
+  >>> referenced 10 more times
+  
+  ld.lld: error: undefined symbol: __cxa_throw
+  >>> referenced by References-inl.h:120 (C:/Users/Canon Co/.gradle/caches/9.3.1/transforms/dd29849c799951ad0680f4b910344724/work
+space/transformed/fbjni-0.7.0/prefab/modules/fbjni/include/fbjni/detail/References-inl.h:120)
+  >>>               CMakeFiles/expo-modules-core.dir/src/main/cpp/fabric/AndroidExpoViewComponentDescriptor.cpp.o:(std::__ndk1::e
+nable_if<IsNonWeakReference<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(), facebook::jni::basic_strong_ref<facebook::jni::reference_traits<facebook::jni::basic_
+strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, facebook::jni::LocalReferenceAllocator>>::plain_jni_reference_t, 
+facebook::jni::GlobalReferenceAllocator>>::type 
+facebook::jni::make_global<facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator>>(facebook::jni::basic_strong_ref<facebook::jni::JHashMap<_jstring*, _jobject*>, 
+facebook::jni::LocalReferenceAllocator> const&))
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+173 actionable tasks: 7 executed, 2 from cache, 164 up-to-date
+  >>> referenced by TypedArray.cpp:50 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+  >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive 
+libexpo-modules-jsi.a
+  >>> referenced by Exceptions.cpp:89 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:89)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::rethrowAsCodedError(facebook::jsi::Runtime&, 
+facebook::jni::JniException&))
+  >>> referenced 62 more times
+  
+  ld.lld: error: undefined symbol: typeinfo for std::runtime_error
+  >>> referenced by TypedArray.cpp:50 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+  >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive 
+libexpo-modules-jsi.a
+  >>> referenced by TypedArray.cpp:50 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/common/cpp/JSI/TypedArray.cpp:50)
+  >>>               TypedArray.cpp.o:(expo::TypedArray::getBuffer(facebook::jsi::Runtime&) const) in archive 
+libexpo-modules-jsi.a
+  >>> referenced by Exceptions.cpp:108 (C:/Users/Canon 
+Co/pdf-scanner/scanner/node_modules/expo-modules-core/android/src/main/cpp/Exceptions.cpp:108)
+  >>>               
+CMakeFiles/expo-modules-core.dir/src/main/cpp/Exceptions.cpp.o:(expo::throwPendingJniExceptionAsCppException())
+  >>> referenced 24 more times
+  
+  ld.lld: error: too many errors emitted, stopping now (use --error-limit=0 to see all errors)
+  CLANG_~1: error: linker command failed with exit code 1 (use -v to see invocation)
+  ninja: build stopped: subcommand failed.
+  
+  C++ build system [build] failed while executing:
+      @echo off
+      "C:\\Users\\Canon Co\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe" ^
+        -C ^
+        "C:\\Users\\Canon Co\\pdf-scanner\\scanner\\node_modules\\expo-modules-core\\android\\.cxx\\Debug\\3c3b1j1d\\arm64-v8a" ^
+        expo-modules-core
+    from C:\Users\Canon Co\pdf-scanner\scanner\node_modules\expo-modules-core\android
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 7s
+Error: C:\Users\Canon Co\pdf-scanner\scanner\android\gradlew.bat app:assembleDebug -x lint -x test --configure-on-demand 
+--build-cache -PreactNativeDevServerPort=8081 -PreactNativeArchitectures=arm64-v8a exited with non-zero code: 1
+Error: C:\Users\Canon Co\pdf-scanner\scanner\android\gradlew.bat app:assembleDebug -x lint -x test --configure-on-demand 
+--build-cache -PreactNativeDevServerPort=8081 -PreactNativeArchitectures=arm64-v8a exited with non-zero code: 1
+    at ChildProcess.completionListener (C:\Users\Canon 
+Co\pdf-scanner\scanner\node_modules\@expo\spawn-async\build\spawnAsync.js:113:23)
+    at Object.onceWrapper (node:events:631:26)
+    at ChildProcess.emit (node:events:509:28)
+    at cp.emit (C:\Users\Canon Co\pdf-scanner\scanner\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at ChildProcess._handle.onexit (node:internal/child_process:295:12)
+    ...
+    at spawnAsync (C:\Users\Canon Co\pdf-scanner\scanner\node_modules\@expo\spawn-async\build\spawnAsync.js:9:23)
+    at spawnGradleAsync (C:\Users\Canon 
+Co\pdf-scanner\scanner\node_modules\expo\node_modules\@expo\cli\build\src\start\platforms\android\gradle.js:107:48)
+    at assembleAsync (C:\Users\Canon 
+Co\pdf-scanner\scanner\node_modules\expo\node_modules\@expo\cli\build\src\start\platforms\android\gradle.js:82:18)
+    at runAndroidAsync (C:\Users\Canon 
+Co\pdf-scanner\scanner\node_modules\expo\node_modules\@expo\cli\build\src\run\android\runAndroidAsync.js:85:41)

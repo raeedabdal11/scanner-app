@@ -1,4 +1,4 @@
-{
+﻿{
   "expo": {
     "name": "scanner",
     "slug": "scanner",
@@ -15,13 +15,36 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.raeedabdal.scanner"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "react-native-document-scanner-plugin"
-    ]
+      "react-native-document-scanner-plugin",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save scanned PDFs.",
+          "isAccessMediaLocationPermissionEnabled": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "ndkVersion": "27.1.12297006"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5db21a78-0a77-46e4-9984-7dc46ef643c1"
+      }
+    }
   }
 }
