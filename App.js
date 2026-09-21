@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -23,6 +23,7 @@ import DocumentScanner from 'react-native-document-scanner-plugin';
 import ImagePicker from 'react-native-image-crop-picker';
 import * as ExpoImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import ViewShot from 'react-native-view-shot';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
@@ -102,6 +103,7 @@ export default function App() {
   const [eraseImage, setEraseImage] = useState(null);
   const [dots, setDots] = useState([]);
   const [brushSize, setBrushSize] = useState(25);
+  const eraseViewShotRef = useRef(null);
 
   useEffect(() => {
     loadInitialData();
@@ -267,6 +269,27 @@ export default function App() {
     } catch (e) {} finally { setLoading(false); }
   };
 
+  const finishSmartErase = async () => {
+    if (dots.length === 0 || !eraseViewShotRef.current) {
+      setCurrentScreen('home');
+      return;
+    }
+    try {
+      setLoading(true);
+      const uri = await eraseViewShotRef.current.capture();
+      const newDoc = { id: Date.now().toString(), name: "سڕاوە_" + Date.now(), date: new Date().toLocaleDateString(), pages: [uri], thumbnail: uri, password: '' };
+      const updatedDocs = [newDoc, ...documents];
+      setDocuments(updatedDocs);
+      await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
+      Alert.alert("سەرکەوتوو", "وێنەکە سڕایەوە و پاشەکەوت کرا ✅");
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا وێنەکە پاشەکەوت بکرێت");
+    } finally {
+      setLoading(false);
+      setCurrentScreen('home');
+    }
+  };
+
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderMove: (evt) => {
@@ -334,11 +357,13 @@ export default function App() {
       <View style={styles.eraseHeader}>
         <TouchableOpacity onPress={() => setCurrentScreen('home')}><Text style={{color: '#fff', fontSize: 22}}>✕</Text></TouchableOpacity>
         <Text style={styles.eraseTitle}>سڕینەوەی زیرەک</Text>
-        <TouchableOpacity onPress={() => setCurrentScreen('home')} style={styles.saveEraseBtn}><Text style={{color: '#fff', fontWeight: 'bold'}}>تەواو</Text></TouchableOpacity>
+        <TouchableOpacity onPress={finishSmartErase} style={styles.saveEraseBtn}><Text style={{color: '#fff', fontWeight: 'bold'}}>تەواو</Text></TouchableOpacity>
       </View>
       <View style={{flex: 1, justifyContent: 'center'}} {...panResponder.panHandlers}>
-         <Image source={{ uri: eraseImage }} style={{width: width, height: height * 0.6}} resizeMode="contain" />
-         {dots.map((dot, index) => (<View key={index} style={{ position: 'absolute', left: dot.x - brushSize/2, top: dot.y - brushSize/2, width: brushSize, height: brushSize, borderRadius: brushSize/2, backgroundColor: '#fff', opacity: 0.9 }} />))}
+         <ViewShot ref={eraseViewShotRef} options={{ format: 'png', quality: 1 }} style={{width: width, height: height * 0.6}}>
+           <Image source={{ uri: eraseImage }} style={{width: width, height: height * 0.6}} resizeMode="contain" />
+           {dots.map((dot, index) => (<View key={index} style={{ position: 'absolute', left: dot.x - brushSize/2, top: dot.y - brushSize/2, width: brushSize, height: brushSize, borderRadius: brushSize/2, backgroundColor: '#fff', opacity: 1 }} />))}
+         </ViewShot>
       </View>
       <View style={styles.eraseFooter}>
          <TouchableOpacity onPress={() => setDots([])} style={styles.eraseBtn}><Text>🗑️ پاککردنەوە</Text></TouchableOpacity>
