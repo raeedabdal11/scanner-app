@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "scanner",
     "slug": "scanner",
@@ -18,9 +18,6 @@
       },
       "package": "com.raeedabdal.scanner"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
       "react-native-document-scanner-plugin",
       "expo-sharing",
@@ -36,15 +33,11 @@
         "expo-build-properties",
         {
           "android": {
-            "ndkVersion": "27.1.12297006"
+            "ndkVersion": "26.1.10909125"
           }
         }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "5db21a78-0a77-46e4-9984-7dc46ef643c1"
-      }
-    }
+      ],
+      "expo-asset"
+    ]
   }
 }
