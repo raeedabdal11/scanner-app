@@ -408,7 +408,8 @@ export default function App() {
               setImageHistory((prev) => [...prev, newUri]);
             }
           } catch (err) {
-            Alert.alert("هەڵە", "نەتوانرا سڕینەوەی وێنەکە ئەنجام بیدرێت");
+            const errorMsg = err?.message || "نەتوانرا سڕینەوەی وێنەکە ئەنجام بیدرێت";
+            Alert.alert("هەڵە", errorMsg);
           } finally {
             setInpainting(false);
             setDownloadProgress(null);
