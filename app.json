@@ -16,7 +16,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.raeedabdal.scanner"
+      "package": "com.raeedabdal.scanner",
+      "usesCleartextTraffic": true
     },
     "plugins": [
       "react-native-document-scanner-plugin",
@@ -33,6 +34,7 @@
         "expo-build-properties",
         {
           "android": {
+            "usesCleartextTraffic": true,
             "ndkVersion": "26.1.10909125"
           }
         }

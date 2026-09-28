@@ -24,6 +24,7 @@ import ImagePicker from 'react-native-image-crop-picker';
 import * as ExpoImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ViewShot from 'react-native-view-shot';
+import { inpaintImage } from './inpaint';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
@@ -99,11 +100,28 @@ export default function App() {
   const [targetDoc, setTargetDoc] = useState(null);
   const [enteredPass, setPassToCheck] = useState('');
 
-  // Erase Logic States
+  // Smart Local Inpaint Erase Logic States
   const [eraseImage, setEraseImage] = useState(null);
-  const [dots, setDots] = useState([]);
+  const [imageHistory, setImageHistory] = useState([]);
+  const [currentStroke, setCurrentStroke] = useState([]);
   const [brushSize, setBrushSize] = useState(25);
-  const eraseViewShotRef = useRef(null);
+  const [inpainting, setInpainting] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [imageLayout, setImageLayout] = useState({ width: width, height: height * 0.6 });
+  const [imageNatSize, setImageNatSize] = useState({ width: 1000, height: 1000 });
+
+  const currentStrokeRef = useRef([]);
+  const eraseImageRef = useRef(null);
+  const imageLayoutRef = useRef({ width: width, height: height * 0.6 });
+  const imageNatSizeRef = useRef({ width: 1000, height: 1000 });
+  const brushSizeRef = useRef(25);
+  const inpaintingRef = useRef(false);
+
+  useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
+  useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
+  useEffect(() => { imageNatSizeRef.current = imageNatSize; }, [imageNatSize]);
+  useEffect(() => { brushSizeRef.current = brushSize; }, [brushSize]);
+  useEffect(() => { inpaintingRef.current = inpainting; }, [inpainting]);
 
   useEffect(() => {
     loadInitialData();
@@ -233,8 +251,13 @@ export default function App() {
     setToolsModalVisible(false);
     try {
       const image = await ImagePicker.openPicker({ width: 1000, height: 1500, cropping: true });
-      setEraseImage(image.path);
-      setDots([]);
+      const imgPath = image.path;
+      setEraseImage(imgPath);
+      setImageHistory([imgPath]);
+      setCurrentStroke([]);
+      Image.getSize(imgPath, (w, h) => {
+        setImageNatSize({ width: w, height: h });
+      });
       setCurrentScreen('smart_erase');
     } catch (e) {}
   };
@@ -269,34 +292,131 @@ export default function App() {
     } catch (e) {} finally { setLoading(false); }
   };
 
+  const calculateRelativePoint = (touchX, touchY) => {
+    const containerW = imageLayoutRef.current.width || width;
+    const containerH = imageLayoutRef.current.height || (height * 0.6);
+    const imgW = imageNatSizeRef.current.width || 1000;
+    const imgH = imageNatSizeRef.current.height || 1000;
+
+    const scale = Math.min(containerW / imgW, containerH / imgH);
+    const displayW = imgW * scale;
+    const displayH = imgH * scale;
+
+    const offsetX = (containerW - displayW) / 2;
+    const offsetY = (containerH - displayH) / 2;
+
+    const relX = touchX - offsetX;
+    const relY = touchY - offsetY;
+
+    return {
+      x: Math.max(0, Math.min(displayW, relX)),
+      y: Math.max(0, Math.min(displayH, relY)),
+      displayW,
+      displayH
+    };
+  };
+
+  const handleUndo = () => {
+    if (imageHistory.length > 1) {
+      const newHistory = imageHistory.slice(0, -1);
+      setImageHistory(newHistory);
+      setEraseImage(newHistory[newHistory.length - 1]);
+    }
+  };
+
+  // Smart Erase Logic
   const finishSmartErase = async () => {
-    if (dots.length === 0 || !eraseViewShotRef.current) {
+    if (!eraseImage) {
       setCurrentScreen('home');
       return;
     }
+
     try {
       setLoading(true);
-      const uri = await eraseViewShotRef.current.capture();
-      const newDoc = { id: Date.now().toString(), name: "سڕاوە_" + Date.now(), date: new Date().toLocaleDateString(), pages: [uri], thumbnail: uri, password: '' };
+
+      const newDoc = {
+        id: Date.now().toString(),
+        name: "خێرا_سڕاوە_" + Date.now(),
+        date: new Date().toLocaleDateString(),
+        pages: [eraseImage],
+        thumbnail: eraseImage,
+        password: ''
+      };
+
       const updatedDocs = [newDoc, ...documents];
       setDocuments(updatedDocs);
       await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
-      Alert.alert("سەرکەوتوو", "وێنەکە سڕایەوە و پاشەکەوت کرا ✅");
+      setImageHistory([]);
+      Alert.alert("سەرکەوتوو", "نووسینەکە بە تەواوی سڕایەوە و پاشەکەوت کرا! 🚀");
     } catch (e) {
-      Alert.alert("هەڵە", "نەتوانرا وێنەکە پاشەکەوت بکرێت");
+      Alert.alert("هەڵە", "نەتوانرا پاشەکەوت بکرێت");
     } finally {
       setLoading(false);
       setCurrentScreen('home');
     }
   };
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: (evt) => {
-      const { locationX, locationY } = evt.nativeEvent;
-      setDots((prev) => [...prev, { x: locationX, y: locationY }]);
-    },
-  });
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !inpaintingRef.current,
+      onMoveShouldSetPanResponder: () => !inpaintingRef.current,
+      onPanResponderGrant: (evt) => {
+        if (inpaintingRef.current) return;
+        const { locationX, locationY } = evt.nativeEvent;
+        const rel = calculateRelativePoint(locationX, locationY);
+        currentStrokeRef.current = [{ x: rel.x, y: rel.y }];
+        setCurrentStroke([{ x: rel.x, y: rel.y }]);
+      },
+      onPanResponderMove: (evt) => {
+        if (inpaintingRef.current) return;
+        const { locationX, locationY } = evt.nativeEvent;
+        const rel = calculateRelativePoint(locationX, locationY);
+        currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
+        setCurrentStroke([...currentStrokeRef.current]);
+      },
+      onPanResponderRelease: async () => {
+        if (inpaintingRef.current) return;
+        const strokePts = [...currentStrokeRef.current];
+        currentStrokeRef.current = [];
+        setCurrentStroke([]);
+
+        if (strokePts.length > 0 && eraseImageRef.current) {
+          const containerW = imageLayoutRef.current.width || width;
+          const containerH = imageLayoutRef.current.height || (height * 0.6);
+          const imgW = imageNatSizeRef.current.width || 1000;
+          const imgH = imageNatSizeRef.current.height || 1000;
+
+          const scale = Math.min(containerW / imgW, containerH / imgH);
+          const displayW = imgW * scale;
+          const displayH = imgH * scale;
+
+          try {
+            setInpainting(true);
+            const currentUri = eraseImageRef.current;
+
+            const newUri = await inpaintImage(
+              currentUri,
+              strokePts,
+              brushSizeRef.current,
+              displayW,
+              displayH,
+              (progress) => setDownloadProgress(progress)
+            );
+
+            if (newUri) {
+              setEraseImage(newUri);
+              setImageHistory((prev) => [...prev, newUri]);
+            }
+          } catch (err) {
+            Alert.alert("هەڵە", "نەتوانرا سڕینەوەی وێنەکە ئەنجام بیدرێت");
+          } finally {
+            setInpainting(false);
+            setDownloadProgress(null);
+          }
+        }
+      },
+    })
+  ).current;
 
   // --- Screens Rendering ---
   const renderHome = () => (
@@ -352,26 +472,167 @@ export default function App() {
     </View>
   );
 
-  const renderSmartErase = () => (
-    <View style={[styles.flex1, {backgroundColor: '#000'}]}>
-      <View style={styles.eraseHeader}>
-        <TouchableOpacity onPress={() => setCurrentScreen('home')}><Text style={{color: '#fff', fontSize: 22}}>✕</Text></TouchableOpacity>
-        <Text style={styles.eraseTitle}>سڕینەوەی زیرەک</Text>
-        <TouchableOpacity onPress={finishSmartErase} style={styles.saveEraseBtn}><Text style={{color: '#fff', fontWeight: 'bold'}}>تەواو</Text></TouchableOpacity>
+  const renderSingleStroke = (strokePoints, strokeIndex, color) => {
+    if (!strokePoints || strokePoints.length === 0) return null;
+
+    return (
+      <React.Fragment key={strokeIndex}>
+        {strokePoints.map((pt, i) => (
+          <View
+            key={`pt-${strokeIndex}-${i}`}
+            style={{
+              position: 'absolute',
+              left: pt.x - brushSize / 2,
+              top: pt.y - brushSize / 2,
+              width: brushSize,
+              height: brushSize,
+              borderRadius: brushSize / 2,
+              backgroundColor: color,
+            }}
+          />
+        ))}
+        {strokePoints.map((pt, i) => {
+          if (i === 0) return null;
+          const prev = strokePoints[i - 1];
+          const dx = pt.x - prev.x;
+          const dy = pt.y - prev.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance < 1) return null;
+
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const cx = (prev.x + pt.x) / 2;
+          const cy = (prev.y + pt.y) / 2;
+
+          return (
+            <View
+              key={`seg-${strokeIndex}-${i}`}
+              style={{
+                position: 'absolute',
+                left: cx - distance / 2,
+                top: cy - brushSize / 2,
+                width: distance,
+                height: brushSize,
+                borderRadius: brushSize / 2,
+                backgroundColor: color,
+                transform: [{ rotate: `${angle}deg` }],
+              }}
+            />
+          );
+        })}
+      </React.Fragment>
+    );
+  };
+
+  const renderSmartErase = () => {
+    const containerW = imageLayout.width || width;
+    const containerH = imageLayout.height || (height * 0.6);
+    const imgW = imageNatSize.width || 1000;
+    const imgH = imageNatSize.height || 1000;
+
+    const scale = Math.min(containerW / imgW, containerH / imgH);
+    const displayW = imgW * scale;
+    const displayH = imgH * scale;
+
+    const offsetX = (containerW - displayW) / 2;
+    const offsetY = (containerH - displayH) / 2;
+
+    const undoCount = imageHistory.length - 1;
+
+    return (
+      <View style={[styles.flex1, {backgroundColor: '#000'}]}>
+        <View style={styles.eraseHeader}>
+          <TouchableOpacity onPress={() => { setImageHistory([]); setCurrentStroke([]); setCurrentScreen('home'); }}>
+            <Text style={{color: '#fff', fontSize: 22}}>✕</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.eraseTitle}>سڕینەوەی دەق ✨</Text>
+
+          <TouchableOpacity onPress={finishSmartErase} style={styles.saveEraseBtn}>
+            <Text style={{color: '#fff', fontWeight: 'bold'}}>پاشەکەوتکردن</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* IMAGE CANVAS CONTAINER WITH ONLAYOUT */}
+        <View
+          style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}
+          onLayout={(e) => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            setImageLayout({ width: w, height: h });
+          }}
+        >
+          <View style={{ width: containerW, height: containerH, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+            {/* BASE FULL DOCUMENT IMAGE (MODIFIED DIRECTLY IN FULL RESOLUTION) */}
+            <Image
+              source={{ uri: eraseImage }}
+              style={{ width: containerW, height: containerH }}
+              resizeMode="contain"
+            />
+
+            {/* ACTIVE RED MASK PREVIEW WHILE DRAGGING FINGER */}
+            {currentStroke.length > 0 && (
+              <View style={{ position: 'absolute', left: offsetX, top: offsetY, width: displayW, height: displayH, overflow: 'hidden' }}>
+                {renderSingleStroke(currentStroke, 'preview-stroke', 'rgba(255, 0, 0, 0.4)')}
+              </View>
+            )}
+
+            {/* TOUCH OVERLAY */}
+            <View
+              style={StyleSheet.absoluteFill}
+              {...panResponder.panHandlers}
+            />
+          </View>
+
+          {/* INPAINTING / DOWNLOAD LOADING INDICATOR */}
+          {(inpainting || downloadProgress !== null) && (
+            <View style={[StyleSheet.absoluteFill, {backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 20}]}>
+              <ActivityIndicator size="large" color="#3DBB8F" />
+              {downloadProgress !== null ? (
+                <View style={{alignItems: 'center', marginTop: 12}}>
+                  <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>داگرتنی مۆدێلی AI...</Text>
+                  <Text style={{color: '#3DBB8F', fontWeight: 'bold', marginTop: 6, fontSize: 18}}>
+                    %{Math.round(downloadProgress * 100)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={{color: '#fff', marginTop: 12, fontWeight: 'bold'}}>خەریکی سڕینەوە لەسەر پیکسڵەکانە...</Text>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* BOTTOM TOOLBAR */}
+        <View style={styles.eraseFooter}>
+           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10}}>
+             <TouchableOpacity
+               onPress={() => {
+                 if (imageHistory.length > 0) {
+                   const initial = imageHistory[0];
+                   setEraseImage(initial);
+                   setImageHistory([initial]);
+                 }
+               }}
+               style={styles.eraseBtn}
+             >
+               <Text style={{color: '#ff3b30', fontWeight: 'bold'}}>🗑️ پاککردنەوەی هەمووی</Text>
+             </TouchableOpacity>
+
+             <TouchableOpacity onPress={handleUndo} disabled={undoCount <= 0} style={[styles.eraseBtn, undoCount <= 0 && {opacity: 0.5}]}>
+               <Text style={{color: '#007AFF', fontWeight: 'bold'}}>↩️ پاشگەزبوونەوە ({undoCount})</Text>
+             </TouchableOpacity>
+           </View>
+
+           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 5}}>
+             <Text style={{color: '#333', fontWeight: 'bold', fontSize: 13}}>قەبارەی فرچە: {brushSize}</Text>
+             <View style={styles.brushTrack}>
+               {[15, 25, 35, 45].map(s => (
+                 <TouchableOpacity key={s} onPress={() => setBrushSize(s)} style={[styles.brushDot, brushSize === s && {backgroundColor: '#3DBB8F'}]} />
+               ))}
+             </View>
+           </View>
+        </View>
       </View>
-      <View style={{flex: 1, justifyContent: 'center'}} {...panResponder.panHandlers}>
-         <ViewShot ref={eraseViewShotRef} options={{ format: 'png', quality: 1 }} style={{width: width, height: height * 0.6}}>
-           <Image source={{ uri: eraseImage }} style={{width: width, height: height * 0.6}} resizeMode="contain" />
-           {dots.map((dot, index) => (<View key={index} style={{ position: 'absolute', left: dot.x - brushSize/2, top: dot.y - brushSize/2, width: brushSize, height: brushSize, borderRadius: brushSize/2, backgroundColor: '#fff', opacity: 1 }} />))}
-         </ViewShot>
-      </View>
-      <View style={styles.eraseFooter}>
-         <TouchableOpacity onPress={() => setDots([])} style={styles.eraseBtn}><Text>🗑️ پاککردنەوە</Text></TouchableOpacity>
-         <Text style={{marginTop: 10, color: '#333'}}>قەبارەی فرچە: {brushSize}</Text>
-         <View style={styles.brushTrack}>{[15, 25, 35, 45].map(s => (<TouchableOpacity key={s} onPress={() => setBrushSize(s)} style={[styles.brushDot, brushSize === s && {backgroundColor: '#3DBB8F'}]} />))}</View>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderEdit = () => (
     <View style={styles.flex1}>
