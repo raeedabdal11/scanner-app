@@ -128,6 +128,8 @@ export default function App() {
   const initialZoomRef = useRef(1);
   const initialPinchCenterRef = useRef(null);
   const initialPanRef = useRef({ x: 0, y: 0 });
+  const drawTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0, pageX: 0, pageY: 0 });
 
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
@@ -445,6 +447,12 @@ export default function App() {
       onMoveShouldSetPanResponder: () => !inpaintingRef.current,
       onPanResponderGrant: (evt) => {
         if (inpaintingRef.current) return;
+
+        if (drawTimerRef.current) {
+          clearTimeout(drawTimerRef.current);
+          drawTimerRef.current = null;
+        }
+
         const touches = evt.nativeEvent.touches || [];
 
         if (touches.length >= 2) {
@@ -462,12 +470,28 @@ export default function App() {
             y: (p1.pageY + p2.pageY) / 2
           };
           initialPanRef.current = { ...panRef.current };
-        } else {
-          gestureTypeRef.current = 'draw';
-          const { locationX, locationY } = evt.nativeEvent;
-          const rel = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
-          currentStrokeRef.current = [{ x: rel.x, y: rel.y }];
-          setCurrentStroke([{ x: rel.x, y: rel.y }]);
+        } else if (touches.length === 1) {
+          if (gestureTypeRef.current === 'disabled_until_all_up' || gestureTypeRef.current === 'zoom_pan') {
+            return;
+          }
+
+          const { locationX, locationY, pageX, pageY } = evt.nativeEvent;
+          gestureTypeRef.current = 'pending_draw';
+          touchStartPosRef.current = { x: locationX, y: locationY, pageX, pageY };
+
+          drawTimerRef.current = setTimeout(() => {
+            if (gestureTypeRef.current === 'pending_draw') {
+              gestureTypeRef.current = 'draw';
+              const rel = calculateRelativePoint(
+                touchStartPosRef.current.x,
+                touchStartPosRef.current.y,
+                zoomRef.current,
+                panRef.current
+              );
+              currentStrokeRef.current = [{ x: rel.x, y: rel.y }];
+              setCurrentStroke([{ x: rel.x, y: rel.y }]);
+            }
+          }, 120);
         }
       },
       onPanResponderMove: (evt) => {
@@ -475,11 +499,16 @@ export default function App() {
         const touches = evt.nativeEvent.touches || [];
 
         if (touches.length >= 2) {
+          if (drawTimerRef.current) {
+            clearTimeout(drawTimerRef.current);
+            drawTimerRef.current = null;
+          }
+
+          currentStrokeRef.current = [];
+          setCurrentStroke([]);
+
           if (gestureTypeRef.current !== 'zoom_pan') {
             gestureTypeRef.current = 'zoom_pan';
-            currentStrokeRef.current = [];
-            setCurrentStroke([]);
-
             const p1 = touches[0];
             const p2 = touches[1];
             const dist = Math.hypot(p1.pageX - p2.pageX, p1.pageY - p2.pageY);
@@ -530,15 +559,53 @@ export default function App() {
           panRef.current = { x: newPanX, y: newPanY };
           setZoom(newZoom);
           setPan({ x: newPanX, y: newPanY });
-        } else if (gestureTypeRef.current === 'draw' && touches.length === 1) {
-          const { locationX, locationY } = evt.nativeEvent;
-          const rel = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
-          currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
-          setCurrentStroke([...currentStrokeRef.current]);
+        } else if (touches.length === 1) {
+          if (gestureTypeRef.current === 'zoom_pan' || gestureTypeRef.current === 'disabled_until_all_up') {
+            gestureTypeRef.current = 'disabled_until_all_up';
+            return;
+          }
+
+          const { locationX, locationY, pageX, pageY } = evt.nativeEvent;
+
+          if (gestureTypeRef.current === 'pending_draw') {
+            const dx = pageX - touchStartPosRef.current.pageX;
+            const dy = pageY - touchStartPosRef.current.pageY;
+            const distMoved = Math.hypot(dx, dy);
+
+            if (distMoved >= 8) {
+              if (drawTimerRef.current) {
+                clearTimeout(drawTimerRef.current);
+                drawTimerRef.current = null;
+              }
+              gestureTypeRef.current = 'draw';
+
+              const relStart = calculateRelativePoint(
+                touchStartPosRef.current.x,
+                touchStartPosRef.current.y,
+                zoomRef.current,
+                panRef.current
+              );
+              const relCurrent = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
+
+              currentStrokeRef.current = [{ x: relStart.x, y: relStart.y }, { x: relCurrent.x, y: relCurrent.y }];
+              setCurrentStroke([...currentStrokeRef.current]);
+            }
+          } else if (gestureTypeRef.current === 'draw') {
+            const rel = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
+            currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
+            setCurrentStroke([...currentStrokeRef.current]);
+          }
         }
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (evt) => {
         if (inpaintingRef.current) return;
+
+        if (drawTimerRef.current) {
+          clearTimeout(drawTimerRef.current);
+          drawTimerRef.current = null;
+        }
+
+        const remainingTouches = (evt && evt.nativeEvent && evt.nativeEvent.touches) || [];
 
         if (gestureTypeRef.current === 'draw') {
           const strokePts = [...currentStrokeRef.current];
@@ -553,21 +620,36 @@ export default function App() {
           setCurrentStroke([]);
         }
 
-        gestureTypeRef.current = null;
-        initialPinchDistanceRef.current = null;
-        initialPinchCenterRef.current = null;
+        if (remainingTouches.length > 0) {
+          gestureTypeRef.current = 'disabled_until_all_up';
+        } else {
+          gestureTypeRef.current = null;
+          initialPinchDistanceRef.current = null;
+          initialPinchCenterRef.current = null;
 
-        if (zoomRef.current <= 1) {
-          setPan({ x: 0, y: 0 });
-          panRef.current = { x: 0, y: 0 };
+          if (zoomRef.current <= 1) {
+            setPan({ x: 0, y: 0 });
+            panRef.current = { x: 0, y: 0 };
+          }
         }
       },
-      onPanResponderTerminate: () => {
+      onPanResponderTerminate: (evt) => {
+        if (drawTimerRef.current) {
+          clearTimeout(drawTimerRef.current);
+          drawTimerRef.current = null;
+        }
+
         currentStrokeRef.current = [];
         setCurrentStroke([]);
-        gestureTypeRef.current = null;
-        initialPinchDistanceRef.current = null;
-        initialPinchCenterRef.current = null;
+
+        const remainingTouches = (evt && evt.nativeEvent && evt.nativeEvent.touches) || [];
+        if (remainingTouches.length > 0) {
+          gestureTypeRef.current = 'disabled_until_all_up';
+        } else {
+          gestureTypeRef.current = null;
+          initialPinchDistanceRef.current = null;
+          initialPinchCenterRef.current = null;
+        }
       }
     })
   ).current;
