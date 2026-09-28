@@ -103,25 +103,30 @@ export default function App() {
   // Smart Local Inpaint Erase Logic States
   const [eraseImage, setEraseImage] = useState(null);
   const [imageHistory, setImageHistory] = useState([]);
+  const [strokes, setStrokes] = useState([]);
   const [currentStroke, setCurrentStroke] = useState([]);
   const [brushSize, setBrushSize] = useState(25);
   const [inpainting, setInpainting] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [eraseProgress, setEraseProgress] = useState({ current: 0, total: 0 });
   const [imageLayout, setImageLayout] = useState({ width: width, height: height * 0.6 });
   const [imageNatSize, setImageNatSize] = useState({ width: 1000, height: 1000 });
 
-  const currentStrokeRef = useRef([]);
   const eraseImageRef = useRef(null);
   const imageLayoutRef = useRef({ width: width, height: height * 0.6 });
   const imageNatSizeRef = useRef({ width: 1000, height: 1000 });
   const brushSizeRef = useRef(25);
   const inpaintingRef = useRef(false);
+  const strokesRef = useRef([]);
+  const currentStrokeRef = useRef([]);
 
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
   useEffect(() => { imageNatSizeRef.current = imageNatSize; }, [imageNatSize]);
   useEffect(() => { brushSizeRef.current = brushSize; }, [brushSize]);
   useEffect(() => { inpaintingRef.current = inpainting; }, [inpainting]);
+  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
+  useEffect(() => { currentStrokeRef.current = currentStroke; }, [currentStroke]);
 
   useEffect(() => {
     loadInitialData();
@@ -254,6 +259,7 @@ export default function App() {
       const imgPath = image.path;
       setEraseImage(imgPath);
       setImageHistory([imgPath]);
+      setStrokes([]);
       setCurrentStroke([]);
       Image.getSize(imgPath, (w, h) => {
         setImageNatSize({ width: w, height: h });
@@ -317,10 +323,66 @@ export default function App() {
   };
 
   const handleUndo = () => {
-    if (imageHistory.length > 1) {
+    if (strokes.length > 0) {
+      setStrokes((prev) => prev.slice(0, -1));
+    } else if (imageHistory.length > 1) {
       const newHistory = imageHistory.slice(0, -1);
       setImageHistory(newHistory);
       setEraseImage(newHistory[newHistory.length - 1]);
+    }
+  };
+
+  const handleClearAll = () => {
+    setStrokes([]);
+  };
+
+  const handleEraseAllStrokes = async () => {
+    if (strokesRef.current.length === 0 || inpaintingRef.current) return;
+
+    try {
+      setInpainting(true);
+      const strokesToProcess = [...strokesRef.current];
+      setEraseProgress({ current: 1, total: strokesToProcess.length });
+
+      let currentUri = eraseImageRef.current;
+
+      const containerW = imageLayoutRef.current.width || width;
+      const containerH = imageLayoutRef.current.height || (height * 0.6);
+      const imgW = imageNatSizeRef.current.width || 1000;
+      const imgH = imageNatSizeRef.current.height || 1000;
+
+      const scale = Math.min(containerW / imgW, containerH / imgH);
+      const displayW = imgW * scale;
+      const displayH = imgH * scale;
+
+      for (let i = 0; i < strokesToProcess.length; i++) {
+        setEraseProgress({ current: i + 1, total: strokesToProcess.length });
+        const strokePts = strokesToProcess[i];
+
+        const newUri = await inpaintImage(
+          currentUri,
+          strokePts,
+          brushSizeRef.current,
+          displayW,
+          displayH,
+          (progress) => setDownloadProgress(progress)
+        );
+
+        if (newUri) {
+          currentUri = newUri;
+        }
+      }
+
+      setEraseImage(currentUri);
+      setImageHistory((prev) => [...prev, currentUri]);
+      setStrokes([]);
+    } catch (err) {
+      const errorMsg = err?.message || "نەتوانرا سڕینەوەی وێنەکە ئەنجام بیدرێت";
+      Alert.alert("هەڵە", errorMsg);
+    } finally {
+      setInpainting(false);
+      setDownloadProgress(null);
+      setEraseProgress({ current: 0, total: 0 });
     }
   };
 
@@ -347,6 +409,8 @@ export default function App() {
       setDocuments(updatedDocs);
       await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
       setImageHistory([]);
+      setStrokes([]);
+      setCurrentStroke([]);
       Alert.alert("سەرکەوتوو", "نووسینەکە بە تەواوی سڕایەوە و پاشەکەوت کرا! 🚀");
     } catch (e) {
       Alert.alert("هەڵە", "نەتوانرا پاشەکەوت بکرێت");
@@ -374,46 +438,14 @@ export default function App() {
         currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
         setCurrentStroke([...currentStrokeRef.current]);
       },
-      onPanResponderRelease: async () => {
+      onPanResponderRelease: () => {
         if (inpaintingRef.current) return;
         const strokePts = [...currentStrokeRef.current];
         currentStrokeRef.current = [];
         setCurrentStroke([]);
 
-        if (strokePts.length > 0 && eraseImageRef.current) {
-          const containerW = imageLayoutRef.current.width || width;
-          const containerH = imageLayoutRef.current.height || (height * 0.6);
-          const imgW = imageNatSizeRef.current.width || 1000;
-          const imgH = imageNatSizeRef.current.height || 1000;
-
-          const scale = Math.min(containerW / imgW, containerH / imgH);
-          const displayW = imgW * scale;
-          const displayH = imgH * scale;
-
-          try {
-            setInpainting(true);
-            const currentUri = eraseImageRef.current;
-
-            const newUri = await inpaintImage(
-              currentUri,
-              strokePts,
-              brushSizeRef.current,
-              displayW,
-              displayH,
-              (progress) => setDownloadProgress(progress)
-            );
-
-            if (newUri) {
-              setEraseImage(newUri);
-              setImageHistory((prev) => [...prev, newUri]);
-            }
-          } catch (err) {
-            const errorMsg = err?.message || "نەتوانرا سڕینەوەی وێنەکە ئەنجام بیدرێت";
-            Alert.alert("هەڵە", errorMsg);
-          } finally {
-            setInpainting(false);
-            setDownloadProgress(null);
-          }
+        if (strokePts.length > 0) {
+          setStrokes((prev) => [...prev, strokePts]);
         }
       },
     })
@@ -537,12 +569,13 @@ export default function App() {
     const offsetX = (containerW - displayW) / 2;
     const offsetY = (containerH - displayH) / 2;
 
-    const undoCount = imageHistory.length - 1;
+    const hasStrokes = strokes.length > 0;
+    const undoAvailable = strokes.length > 0 || imageHistory.length > 1;
 
     return (
       <View style={[styles.flex1, {backgroundColor: '#000'}]}>
         <View style={styles.eraseHeader}>
-          <TouchableOpacity onPress={() => { setImageHistory([]); setCurrentStroke([]); setCurrentScreen('home'); }}>
+          <TouchableOpacity onPress={() => { setImageHistory([]); setStrokes([]); setCurrentStroke([]); setCurrentScreen('home'); }}>
             <Text style={{color: '#fff', fontSize: 22}}>✕</Text>
           </TouchableOpacity>
 
@@ -562,19 +595,33 @@ export default function App() {
           }}
         >
           <View style={{ width: containerW, height: containerH, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-            {/* BASE FULL DOCUMENT IMAGE (MODIFIED DIRECTLY IN FULL RESOLUTION) */}
+            {/* BASE FULL DOCUMENT IMAGE */}
             <Image
               source={{ uri: eraseImage }}
               style={{ width: containerW, height: containerH }}
               resizeMode="contain"
             />
 
-            {/* ACTIVE RED MASK PREVIEW WHILE DRAGGING FINGER */}
-            {currentStroke.length > 0 && (
-              <View style={{ position: 'absolute', left: offsetX, top: offsetY, width: displayW, height: displayH, overflow: 'hidden' }}>
-                {renderSingleStroke(currentStroke, 'preview-stroke', 'rgba(255, 0, 0, 0.4)')}
-              </View>
-            )}
+            {/* SELECTION OVERLAY LAYER FOR DRAWN STROKES */}
+            <View
+              style={{
+                position: 'absolute',
+                left: offsetX,
+                top: offsetY,
+                width: displayW,
+                height: displayH,
+                overflow: 'hidden'
+              }}
+              pointerEvents="none"
+            >
+              {strokes.map((strokePts, index) =>
+                renderSingleStroke(strokePts, `stroke-${index}`, 'rgba(255, 0, 0, 0.3)')
+              )}
+
+              {currentStroke.length > 0 &&
+                renderSingleStroke(currentStroke, 'current-stroke', 'rgba(255, 0, 0, 0.3)')
+              }
+            </View>
 
             {/* TOUCH OVERLAY */}
             <View
@@ -595,7 +642,14 @@ export default function App() {
                   </Text>
                 </View>
               ) : (
-                <Text style={{color: '#fff', marginTop: 12, fontWeight: 'bold'}}>خەریکی سڕینەوە لەسەر پیکسڵەکانە...</Text>
+                <View style={{alignItems: 'center', marginTop: 12}}>
+                  <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>خەریکی سڕینەوە لەسەر پیکسڵەکانە...</Text>
+                  {eraseProgress.total > 0 && (
+                    <Text style={{color: '#3DBB8F', fontWeight: 'bold', marginTop: 6, fontSize: 16}}>
+                      ({eraseProgress.current} لە {eraseProgress.total})
+                    </Text>
+                  )}
+                </View>
               )}
             </View>
           )}
@@ -603,33 +657,50 @@ export default function App() {
 
         {/* BOTTOM TOOLBAR */}
         <View style={styles.eraseFooter}>
-           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 10}}>
-             <TouchableOpacity
-               onPress={() => {
-                 if (imageHistory.length > 0) {
-                   const initial = imageHistory[0];
-                   setEraseImage(initial);
-                   setImageHistory([initial]);
-                 }
-               }}
-               style={styles.eraseBtn}
-             >
-               <Text style={{color: '#ff3b30', fontWeight: 'bold'}}>🗑️ پاککردنەوەی هەمووی</Text>
-             </TouchableOpacity>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 15}}>
+            {/* CLEAR ALL STROKES */}
+            <TouchableOpacity
+              onPress={handleClearAll}
+              disabled={!hasStrokes || inpainting}
+              style={[styles.eraseBtn, (!hasStrokes || inpainting) && {opacity: 0.4}]}
+            >
+              <Text style={{color: '#ff3b30', fontWeight: 'bold', fontSize: 13}}>🗑️ پاککردنەوە</Text>
+            </TouchableOpacity>
 
-             <TouchableOpacity onPress={handleUndo} disabled={undoCount <= 0} style={[styles.eraseBtn, undoCount <= 0 && {opacity: 0.5}]}>
-               <Text style={{color: '#007AFF', fontWeight: 'bold'}}>↩️ پاشگەزبوونەوە ({undoCount})</Text>
-             </TouchableOpacity>
-           </View>
+            {/* UNDO LAST STROKE */}
+            <TouchableOpacity
+              onPress={handleUndo}
+              disabled={!undoAvailable || inpainting}
+              style={[styles.eraseBtn, (!undoAvailable || inpainting) && {opacity: 0.4}]}
+            >
+              <Text style={{color: '#007AFF', fontWeight: 'bold', fontSize: 13}}>
+                ↩️ پاشگەزبوونەوە {hasStrokes ? `(${strokes.length})` : ''}
+              </Text>
+            </TouchableOpacity>
 
-           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 5}}>
-             <Text style={{color: '#333', fontWeight: 'bold', fontSize: 13}}>قەبارەی فرچە: {brushSize}</Text>
-             <View style={styles.brushTrack}>
-               {[15, 25, 35, 45].map(s => (
-                 <TouchableOpacity key={s} onPress={() => setBrushSize(s)} style={[styles.brushDot, brushSize === s && {backgroundColor: '#3DBB8F'}]} />
-               ))}
-             </View>
-           </View>
+            {/* ERASE ACTION BUTTON */}
+            <TouchableOpacity
+              onPress={handleEraseAllStrokes}
+              disabled={!hasStrokes || inpainting}
+              style={[
+                styles.actionEraseBtn,
+                (!hasStrokes || inpainting) ? {backgroundColor: '#555'} : {backgroundColor: '#3DBB8F'}
+              ]}
+            >
+              <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 14}}>
+                🪄 سڕینەوە {hasStrokes ? `(${strokes.length})` : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 5}}>
+            <Text style={{color: '#333', fontWeight: 'bold', fontSize: 13}}>قەبارەی فرچە: {brushSize}</Text>
+            <View style={styles.brushTrack}>
+              {[15, 25, 35, 45].map(s => (
+                <TouchableOpacity key={s} onPress={() => setBrushSize(s)} style={[styles.brushDot, brushSize === s && {backgroundColor: '#3DBB8F'}]} />
+              ))}
+            </View>
+          </View>
         </View>
       </View>
     );
