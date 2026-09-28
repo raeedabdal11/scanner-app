@@ -272,8 +272,8 @@ async function runFallbackInpaint(imageUri, existingRgba, W, H, cropX, cropY, cr
 async function runOnDeviceInpaint(
   safeUri,
   rgba,
-  W,
-  H,
+  fullW,
+  fullH,
   cropX,
   cropY,
   cropDim,
@@ -299,10 +299,11 @@ async function runOnDeviceInpaint(
   const cropBytes = toByteArray(cropResult.base64);
   const cropImg = UPNG.decode(cropBytes.buffer);
   const cropRgba = new Uint8Array(UPNG.toRGBA8(cropImg)[0]);
-  const cropW = cropImg.width;
-  const cropH = cropImg.height;
+  const cropW = cropImg.width;  // Width W
+  const cropH = cropImg.height; // Height H
+  const HW = cropH * cropW;
 
-  const rawMask = new Uint8Array(cropW * cropH);
+  const rawMask = new Uint8Array(HW);
   const cropPts = realPts.map((pt) => ({
     x: pt.x - cropX,
     y: pt.y - cropY,
@@ -317,9 +318,9 @@ async function runOnDeviceInpaint(
     }
   }
 
-  // Dilate mask by 8 pixels as requested
+  // Dilate mask by 8 pixels
   const dilateR = 8;
-  const dilatedCropMask = new Uint8Array(cropW * cropH);
+  const dilatedCropMask = new Uint8Array(HW);
   for (let y = 0; y < cropH; y++) {
     for (let x = 0; x < cropW; x++) {
       if (rawMask[y * cropW + x] === 1) {
@@ -339,28 +340,52 @@ async function runOnDeviceInpaint(
   }
 
   // Model inputs:
-  // "image" uint8 [1,3,H,W] RGB channels-first
+  // "image" uint8 [1,3,H,W] RGB planar CHW (alpha dropped)
   // "mask" uint8 [1,1,H,W] where 0 = erase and 255 = keep
-  const N = cropW * cropH;
-  const imageBuffer = new Uint8Array(3 * N);
-  const maskBuffer = new Uint8Array(N);
+  const imageBuffer = new Uint8Array(3 * HW);
+  const maskBuffer = new Uint8Array(HW);
 
   for (let y = 0; y < cropH; y++) {
     for (let x = 0; x < cropW; x++) {
-      const idx = y * cropW + x;
-      const rgbaIdx = idx * 4;
+      const spatialIdx = y * cropW + x;
+      const rgbaIdx = spatialIdx * 4;
 
-      imageBuffer[0 * N + idx] = cropRgba[rgbaIdx];     // Red
-      imageBuffer[1 * N + idx] = cropRgba[rgbaIdx + 1]; // Green
-      imageBuffer[2 * N + idx] = cropRgba[rgbaIdx + 2]; // Blue
+      // Channel c at (y, x) goes to c * H * W + y * W + x
+      imageBuffer[0 * HW + spatialIdx] = cropRgba[rgbaIdx];     // Red
+      imageBuffer[1 * HW + spatialIdx] = cropRgba[rgbaIdx + 1]; // Green
+      imageBuffer[2 * HW + spatialIdx] = cropRgba[rgbaIdx + 2]; // Blue
 
-      maskBuffer[idx] = dilatedCropMask[idx] === 1 ? 0 : 255;
+      maskBuffer[spatialIdx] = dilatedCropMask[spatialIdx] === 1 ? 0 : 255;
     }
   }
 
   const { Tensor } = getOnnxRuntime();
   const imageTensor = new Tensor('uint8', imageBuffer, [1, 3, cropH, cropW]);
   const maskTensor = new Tensor('uint8', maskBuffer, [1, 1, cropH, cropW]);
+
+  // Debug test: run model once with an all-255 mask (nothing to erase) and log average pixel difference
+  try {
+    const allKeepMask = new Uint8Array(HW);
+    allKeepMask.fill(255);
+    const debugMaskTensor = new Tensor('uint8', allKeepMask, [1, 1, cropH, cropW]);
+    const debugResults = await session.run({
+      image: imageTensor,
+      mask: debugMaskTensor,
+    });
+    const debugOutTensor = debugResults[session.outputNames[0]] || Object.values(debugResults)[0];
+    if (debugOutTensor && debugOutTensor.data) {
+      const debugOutData = debugOutTensor.data;
+      let totalDiff = 0;
+      const totalElements = 3 * HW;
+      for (let i = 0; i < totalElements; i++) {
+        totalDiff += Math.abs(imageBuffer[i] - debugOutData[i]);
+      }
+      const avgDiff = totalDiff / totalElements;
+      console.log(`[Eraser Debug] Average pixel difference with all-255 mask: ${avgDiff.toFixed(4)}`);
+    }
+  } catch (debugErr) {
+    console.warn(`[Eraser Debug] Debug test with all-255 mask failed:`, debugErr);
+  }
 
   const feeds = {
     image: imageTensor,
@@ -376,10 +401,10 @@ async function runOnDeviceInpaint(
     throw new Error("پێشبینی مۆدێلی AI سەرکەوتوو نەبوو.");
   }
 
-  const outputData = outputTensor.data; // uint8 [1,3,cropH,cropW]
+  const outputData = outputTensor.data; // uint8 [1,3,cropH,cropW] in planar CHW layout
 
   // Feathered alpha map for soft edge blending
-  const alphaMap = new Float32Array(cropW * cropH);
+  const alphaMap = new Float32Array(HW);
   const blurR = 4;
   for (let y = 0; y < cropH; y++) {
     for (let x = 0; x < cropW; x++) {
@@ -401,21 +426,22 @@ async function runOnDeviceInpaint(
   // Paste ONLY masked pixels back into original full-resolution image with soft edge
   for (let cy = 0; cy < cropH; cy++) {
     const fullY = cropY + cy;
-    if (fullY < 0 || fullY >= H) continue;
+    if (fullY < 0 || fullY >= fullH) continue;
 
     for (let cx = 0; cx < cropW; cx++) {
       const fullX = cropX + cx;
-      if (fullX < 0 || fullX >= W) continue;
+      if (fullX < 0 || fullX >= fullW) continue;
 
       const idx = cy * cropW + cx;
       const alpha = alphaMap[idx];
       if (alpha <= 0.001) continue; // Unmasked pixels stay identical!
 
-      const outR = outputData[0 * N + idx];
-      const outG = outputData[1 * N + idx];
-      const outB = outputData[2 * N + idx];
+      // Read back with planar CHW layout: c * H * W + cy * W + cx
+      const outR = Math.min(255, Math.max(0, Math.round(outputData[0 * HW + idx])));
+      const outG = Math.min(255, Math.max(0, Math.round(outputData[1 * HW + idx])));
+      const outB = Math.min(255, Math.max(0, Math.round(outputData[2 * HW + idx])));
 
-      const fullIdx = (fullY * W + fullX) * 4;
+      const fullIdx = (fullY * fullW + fullX) * 4;
       const origR = rgba[fullIdx];
       const origG = rgba[fullIdx + 1];
       const origB = rgba[fullIdx + 2];
@@ -427,7 +453,7 @@ async function runOnDeviceInpaint(
     }
   }
 
-  const pngBuffer = UPNG.encode([rgba.buffer], W, H, 0);
+  const pngBuffer = UPNG.encode([rgba.buffer], fullW, fullH, 0);
   const newBase64 = fromByteArray(new Uint8Array(pngBuffer));
   const newFileUri = `${ERASED_DIR}erased_${Date.now()}.png`;
 
