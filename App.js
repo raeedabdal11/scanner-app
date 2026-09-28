@@ -111,6 +111,8 @@ export default function App() {
   const [eraseProgress, setEraseProgress] = useState({ current: 0, total: 0 });
   const [imageLayout, setImageLayout] = useState({ width: width, height: height * 0.6 });
   const [imageNatSize, setImageNatSize] = useState({ width: 1000, height: 1000 });
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
 
   const eraseImageRef = useRef(null);
   const imageLayoutRef = useRef({ width: width, height: height * 0.6 });
@@ -119,6 +121,13 @@ export default function App() {
   const inpaintingRef = useRef(false);
   const strokesRef = useRef([]);
   const currentStrokeRef = useRef([]);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const gestureTypeRef = useRef(null);
+  const initialPinchDistanceRef = useRef(null);
+  const initialZoomRef = useRef(1);
+  const initialPinchCenterRef = useRef(null);
+  const initialPanRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
@@ -127,6 +136,8 @@ export default function App() {
   useEffect(() => { inpaintingRef.current = inpainting; }, [inpainting]);
   useEffect(() => { strokesRef.current = strokes; }, [strokes]);
   useEffect(() => { currentStrokeRef.current = currentStroke; }, [currentStroke]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { panRef.current = pan; }, [pan]);
 
   useEffect(() => {
     loadInitialData();
@@ -261,6 +272,10 @@ export default function App() {
       setImageHistory([imgPath]);
       setStrokes([]);
       setCurrentStroke([]);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      zoomRef.current = 1;
+      panRef.current = { x: 0, y: 0 };
       Image.getSize(imgPath, (w, h) => {
         setImageNatSize({ width: w, height: h });
       });
@@ -298,7 +313,7 @@ export default function App() {
     } catch (e) {} finally { setLoading(false); }
   };
 
-  const calculateRelativePoint = (touchX, touchY) => {
+  const calculateRelativePoint = (touchX, touchY, currentZoom = zoomRef.current, currentPan = panRef.current) => {
     const containerW = imageLayoutRef.current.width || width;
     const containerH = imageLayoutRef.current.height || (height * 0.6);
     const imgW = imageNatSizeRef.current.width || 1000;
@@ -308,15 +323,15 @@ export default function App() {
     const displayW = imgW * scale;
     const displayH = imgH * scale;
 
-    const offsetX = (containerW - displayW) / 2;
-    const offsetY = (containerH - displayH) / 2;
+    const Cx = containerW / 2;
+    const Cy = containerH / 2;
 
-    const relX = touchX - offsetX;
-    const relY = touchY - offsetY;
+    const unzoomedX = (touchX - Cx - currentPan.x) / currentZoom + displayW / 2;
+    const unzoomedY = (touchY - Cy - currentPan.y) / currentZoom + displayH / 2;
 
     return {
-      x: Math.max(0, Math.min(displayW, relX)),
-      y: Math.max(0, Math.min(displayH, relY)),
+      x: Math.max(0, Math.min(displayW, unzoomedX)),
+      y: Math.max(0, Math.min(displayH, unzoomedY)),
       displayW,
       displayH
     };
@@ -411,6 +426,10 @@ export default function App() {
       setImageHistory([]);
       setStrokes([]);
       setCurrentStroke([]);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      zoomRef.current = 1;
+      panRef.current = { x: 0, y: 0 };
       Alert.alert("سەرکەوتوو", "نووسینەکە بە تەواوی سڕایەوە و پاشەکەوت کرا! 🚀");
     } catch (e) {
       Alert.alert("هەڵە", "نەتوانرا پاشەکەوت بکرێت");
@@ -426,28 +445,130 @@ export default function App() {
       onMoveShouldSetPanResponder: () => !inpaintingRef.current,
       onPanResponderGrant: (evt) => {
         if (inpaintingRef.current) return;
-        const { locationX, locationY } = evt.nativeEvent;
-        const rel = calculateRelativePoint(locationX, locationY);
-        currentStrokeRef.current = [{ x: rel.x, y: rel.y }];
-        setCurrentStroke([{ x: rel.x, y: rel.y }]);
+        const touches = evt.nativeEvent.touches || [];
+
+        if (touches.length >= 2) {
+          gestureTypeRef.current = 'zoom_pan';
+          currentStrokeRef.current = [];
+          setCurrentStroke([]);
+
+          const p1 = touches[0];
+          const p2 = touches[1];
+          const dist = Math.hypot(p1.pageX - p2.pageX, p1.pageY - p2.pageY);
+          initialPinchDistanceRef.current = dist > 0 ? dist : 1;
+          initialZoomRef.current = zoomRef.current;
+          initialPinchCenterRef.current = {
+            x: (p1.pageX + p2.pageX) / 2,
+            y: (p1.pageY + p2.pageY) / 2
+          };
+          initialPanRef.current = { ...panRef.current };
+        } else {
+          gestureTypeRef.current = 'draw';
+          const { locationX, locationY } = evt.nativeEvent;
+          const rel = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
+          currentStrokeRef.current = [{ x: rel.x, y: rel.y }];
+          setCurrentStroke([{ x: rel.x, y: rel.y }]);
+        }
       },
       onPanResponderMove: (evt) => {
         if (inpaintingRef.current) return;
-        const { locationX, locationY } = evt.nativeEvent;
-        const rel = calculateRelativePoint(locationX, locationY);
-        currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
-        setCurrentStroke([...currentStrokeRef.current]);
+        const touches = evt.nativeEvent.touches || [];
+
+        if (touches.length >= 2) {
+          if (gestureTypeRef.current !== 'zoom_pan') {
+            gestureTypeRef.current = 'zoom_pan';
+            currentStrokeRef.current = [];
+            setCurrentStroke([]);
+
+            const p1 = touches[0];
+            const p2 = touches[1];
+            const dist = Math.hypot(p1.pageX - p2.pageX, p1.pageY - p2.pageY);
+            initialPinchDistanceRef.current = dist > 0 ? dist : 1;
+            initialZoomRef.current = zoomRef.current;
+            initialPinchCenterRef.current = {
+              x: (p1.pageX + p2.pageX) / 2,
+              y: (p1.pageY + p2.pageY) / 2
+            };
+            initialPanRef.current = { ...panRef.current };
+            return;
+          }
+
+          const p1 = touches[0];
+          const p2 = touches[1];
+          const dist = Math.hypot(p1.pageX - p2.pageX, p1.pageY - p2.pageY);
+          const initDist = initialPinchDistanceRef.current || 1;
+          const scaleRatio = dist / initDist;
+
+          let newZoom = initialZoomRef.current * scaleRatio;
+          newZoom = Math.max(1, Math.min(5, newZoom));
+
+          const currentCenter = {
+            x: (p1.pageX + p2.pageX) / 2,
+            y: (p1.pageY + p2.pageY) / 2
+          };
+
+          const deltaX = currentCenter.x - (initialPinchCenterRef.current?.x || currentCenter.x);
+          const deltaY = currentCenter.y - (initialPinchCenterRef.current?.y || currentCenter.y);
+
+          let newPanX = initialPanRef.current.x + deltaX;
+          let newPanY = initialPanRef.current.y + deltaY;
+
+          const containerW = imageLayoutRef.current.width || width;
+          const containerH = imageLayoutRef.current.height || (height * 0.6);
+
+          if (newZoom <= 1) {
+            newPanX = 0;
+            newPanY = 0;
+          } else {
+            const maxPanX = (containerW * (newZoom - 1)) / 2 + 50;
+            const maxPanY = (containerH * (newZoom - 1)) / 2 + 50;
+            newPanX = Math.max(-maxPanX, Math.min(maxPanX, newPanX));
+            newPanY = Math.max(-maxPanY, Math.min(maxPanY, newPanY));
+          }
+
+          zoomRef.current = newZoom;
+          panRef.current = { x: newPanX, y: newPanY };
+          setZoom(newZoom);
+          setPan({ x: newPanX, y: newPanY });
+        } else if (gestureTypeRef.current === 'draw' && touches.length === 1) {
+          const { locationX, locationY } = evt.nativeEvent;
+          const rel = calculateRelativePoint(locationX, locationY, zoomRef.current, panRef.current);
+          currentStrokeRef.current = [...currentStrokeRef.current, { x: rel.x, y: rel.y }];
+          setCurrentStroke([...currentStrokeRef.current]);
+        }
       },
       onPanResponderRelease: () => {
         if (inpaintingRef.current) return;
-        const strokePts = [...currentStrokeRef.current];
-        currentStrokeRef.current = [];
-        setCurrentStroke([]);
 
-        if (strokePts.length > 0) {
-          setStrokes((prev) => [...prev, strokePts]);
+        if (gestureTypeRef.current === 'draw') {
+          const strokePts = [...currentStrokeRef.current];
+          currentStrokeRef.current = [];
+          setCurrentStroke([]);
+
+          if (strokePts.length > 0) {
+            setStrokes((prev) => [...prev, strokePts]);
+          }
+        } else {
+          currentStrokeRef.current = [];
+          setCurrentStroke([]);
+        }
+
+        gestureTypeRef.current = null;
+        initialPinchDistanceRef.current = null;
+        initialPinchCenterRef.current = null;
+
+        if (zoomRef.current <= 1) {
+          setPan({ x: 0, y: 0 });
+          panRef.current = { x: 0, y: 0 };
         }
       },
+      onPanResponderTerminate: () => {
+        currentStrokeRef.current = [];
+        setCurrentStroke([]);
+        gestureTypeRef.current = null;
+        initialPinchDistanceRef.current = null;
+        initialPinchCenterRef.current = null;
+      }
     })
   ).current;
 
@@ -575,7 +696,7 @@ export default function App() {
     return (
       <View style={[styles.flex1, {backgroundColor: '#000'}]}>
         <View style={styles.eraseHeader}>
-          <TouchableOpacity onPress={() => { setImageHistory([]); setStrokes([]); setCurrentStroke([]); setCurrentScreen('home'); }}>
+          <TouchableOpacity onPress={() => { setZoom(1); setPan({ x: 0, y: 0 }); zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; setImageHistory([]); setStrokes([]); setCurrentStroke([]); setCurrentScreen('home'); }}>
             <Text style={{color: '#fff', fontSize: 22}}>✕</Text>
           </TouchableOpacity>
 
@@ -588,13 +709,26 @@ export default function App() {
 
         {/* IMAGE CANVAS CONTAINER WITH ONLAYOUT */}
         <View
-          style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}
+          style={{flex: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden'}}
           onLayout={(e) => {
             const { width: w, height: h } = e.nativeEvent.layout;
             setImageLayout({ width: w, height: h });
           }}
         >
-          <View style={{ width: containerW, height: containerH, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+          <View
+            style={{
+              width: containerW,
+              height: containerH,
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: '#000',
+              transform: [
+                { translateX: pan.x },
+                { translateY: pan.y },
+                { scale: zoom }
+              ]
+            }}
+          >
             {/* BASE FULL DOCUMENT IMAGE */}
             <Image
               source={{ uri: eraseImage }}
@@ -622,13 +756,28 @@ export default function App() {
                 renderSingleStroke(currentStroke, 'current-stroke', 'rgba(255, 0, 0, 0.3)')
               }
             </View>
-
-            {/* TOUCH OVERLAY */}
-            <View
-              style={StyleSheet.absoluteFill}
-              {...panResponder.panHandlers}
-            />
           </View>
+
+          {/* TOUCH OVERLAY */}
+          <View
+            style={StyleSheet.absoluteFill}
+            {...panResponder.panHandlers}
+          />
+
+          {/* RESET ZOOM BUTTON */}
+          {(zoom > 1 || pan.x !== 0 || pan.y !== 0) && (
+            <TouchableOpacity
+              style={styles.resetZoomBtn}
+              onPress={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+                zoomRef.current = 1;
+                panRef.current = { x: 0, y: 0 };
+              }}
+            >
+              <Text style={styles.resetZoomText}>🔍 ڕێکخستنەوە ({zoom.toFixed(1)}x)</Text>
+            </TouchableOpacity>
+          )}
 
           {/* INPAINTING / DOWNLOAD LOADING INDICATOR */}
           {(inpainting || downloadProgress !== null) && (
@@ -812,6 +961,23 @@ const styles = StyleSheet.create({
   eraseToolsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
   footerTool: { alignItems: 'center' }, brushTrack: { flexDirection: 'row', justifyContent: 'space-around', width: '80%', marginTop: 15 },
   brushDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#ddd' },
+  resetZoomBtn: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3DBB8F',
+    zIndex: 15
+  },
+  resetZoomText: {
+    color: '#3DBB8F',
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
   idBox: { backgroundColor: '#fff', width: '100%', height: '70%', borderTopLeftRadius: 40, borderTopRightRadius: 40, position: 'absolute', bottom: 0, padding: 25 },
   idPreviewBox: { backgroundColor: '#f8f9fa', borderRadius: 20, padding: 30, alignItems: 'center', marginBottom: 30 }, idIllustration: { width: 150, height: 100, resizeMode: 'contain' },
   idCats: { flexDirection: 'row', marginBottom: 30 }, catBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: '#f1f3f5', marginRight: 10 },
