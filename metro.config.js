@@ -1,6 +1,9 @@
 const { getDefaultConfig } = require('expo/metro-config');
 
-/** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
+
+if (!config.resolver.assetExts.includes('traineddata')) {
+  config.resolver.assetExts.push('traineddata');
+}
 
 module.exports = config;

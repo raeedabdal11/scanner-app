@@ -1,0 +1,9 @@
+{
+  "name": "expo-tesseract-ocr",
+  "version": "1.0.0",
+  "description": "Expo module for Tesseract OCR",
+  "main": "index.ts",
+  "types": "index.ts",
+  "author": "",
+  "license": "MIT"
+}

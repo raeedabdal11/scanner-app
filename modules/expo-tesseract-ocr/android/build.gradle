@@ -1,0 +1,23 @@
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'expo.modules.tesseract'
+version = '1.0.0'
+
+repositories {
+  google()
+  mavenCentral()
+  maven { url 'https://jitpack.io' }
+}
+
+android {
+  namespace 'expo.modules.tesseract'
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'
+}

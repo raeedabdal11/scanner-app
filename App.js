@@ -25,8 +25,10 @@ import * as ExpoImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ViewShot from 'react-native-view-shot';
 import { inpaintImage } from './inpaint';
+import * as Sharing from 'expo-sharing';
 import { processAndSaveSignatureImage, mergeSignatures, recolorSignature } from './signatureHelper';
 import SignatureCropper from './SignatureCropper';
+import { performOnDeviceOCR } from './ocrHelper';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
@@ -169,6 +171,12 @@ export default function App() {
   const [sigNatSize, setSigNatSize] = useState({ width: 500, height: 300 });
   const [activePanel, setActivePanel] = useState(null);
 
+  // On-Device OCR States
+  const [ocrImageUri, setOcrImageUri] = useState(null);
+  const [ocrLang, setOcrLang] = useState('ckb');
+  const [ocrProgressText, setOcrProgressText] = useState('');
+  const [ocrProcessing, setOcrProcessing] = useState(false);
+
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
   useEffect(() => { imageNatSizeRef.current = imageNatSize; }, [imageNatSize]);
@@ -258,17 +266,38 @@ export default function App() {
     if (!(await checkPremiumLimit())) return;
     setToolsModalVisible(false);
     try {
-      const image = await ImagePicker.openPicker({ width: 600, height: 800, cropping: true });
-      setLoading(true);
-      const manipulated = await ImageManipulator.manipulateAsync(image.path, [{ resize: { width: 800 } }], { base64: true, format: 'jpeg', compress: 0.5 });
-      let formData = new FormData();
-      formData.append('base64Image', `data:image/jpeg;base64,${manipulated.base64}`);
-      formData.append('language', 'ara'); formData.append('apikey', 'K81828384888957'); formData.append('OCREngine', '2');
-      const response = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: formData });
-      const data = await response.json();
-      if (data && data.ParsedResults && data.ParsedResults[0]) { setOcrText(data.ParsedResults[0].ParsedText); setOcrModalVisible(true); }
-      else { Alert.alert("هەڵە", "نەتوانرا دەقەکە بخوێنرێتەوە."); }
-    } catch (e) { Alert.alert("هەڵە", "کێشەی سێرڤەر."); } finally { setLoading(false); }
+      const image = await ImagePicker.openPicker({ width: 1000, height: 1400, cropping: true });
+      if (image && image.path) {
+        setOcrImageUri(image.path);
+        setOcrText('');
+        setOcrModalVisible(true);
+        startOCRRecognition(image.path, ocrLang);
+      }
+    } catch (e) {
+      // User cancelled
+    }
+  };
+
+  const startOCRRecognition = async (imgUri = ocrImageUri, lang = ocrLang) => {
+    if (!imgUri) return;
+    try {
+      setOcrProcessing(true);
+      const text = await performOnDeviceOCR(imgUri, lang, (status) => {
+        setOcrProgressText(status);
+      });
+      if (text && text.trim().length > 0) {
+        setOcrText(text);
+      } else {
+        setOcrText('');
+        Alert.alert("زانیاری", "هیچ دەقێک نەدۆزرایەوە. تکایە وێنەیەکی ڕوونتر بگرە و تەنها دەقەکە ببڕە");
+      }
+    } catch (err) {
+      console.error("OCR Error:", err);
+      Alert.alert("هەڵە", "نەتوانرا خوێندنەوەی دەق ئەنجام بپڕێدرێت: " + (err?.message || err));
+    } finally {
+      setOcrProcessing(false);
+      setOcrProgressText('');
+    }
   };
 
   const handleSignature = async () => {
@@ -1533,7 +1562,120 @@ export default function App() {
       {/* Other Modals */}
       <Modal visible={vipModalVisible} transparent animationType="slide"><View style={styles.overlay}><View style={styles.vipFullBox}><ScrollView contentContainerStyle={{alignItems: 'center'}}><Text style={styles.vipHeaderTitle}>Scanner Pro VIP ⭐</Text><View style={styles.fibInfoCard}><Text style={{color: '#fff'}}>FIB: 0750 715 9851</Text></View><TextInput style={styles.codeIn} placeholder="کۆد..." placeholderTextColor="#555" value={secretCode} onChangeText={setSecretCode} /><TouchableOpacity style={styles.actBtn} onPress={activateVipOnline}><Text style={{color: '#fff', fontWeight: 'bold'}}>چالاککردن</Text></TouchableOpacity><TouchableOpacity onPress={() => setVipModalVisible(false)} style={{marginTop: 20}}><Text style={{color: '#fff'}}>✕</Text></TouchableOpacity></ScrollView></View></View></Modal>
       <Modal visible={transModalVisible} transparent animationType="slide"><View style={styles.overlay}><View style={styles.transBox}><Text style={styles.transTitle}>وەرگێڕی پڕۆ 🌐</Text><View style={styles.langRow}><TouchableOpacity style={[styles.langBtn, targetLang === 'en' && styles.langBtnActive]} onPress={() => setTargetLang('en')}><Text style={styles.langText}>EN</Text></TouchableOpacity><TouchableOpacity style={[styles.langBtn, targetLang === 'ar' && styles.langBtnActive]} onPress={() => setTargetLang('ar')}><Text style={styles.langText}>AR</Text></TouchableOpacity><TouchableOpacity style={[styles.langBtn, targetLang === 'ku' && styles.langBtnActive]} onPress={() => setTargetLang('ku')}><Text style={styles.langText}>KU</Text></TouchableOpacity></View><TextInput style={styles.transIn} placeholder="لێرە بنووسە..." placeholderTextColor="#888" multiline value={transInput} onChangeText={setTransInput} textAlign="right" autoFocus /><TouchableOpacity style={styles.actBtn} onPress={handleTranslateAction}><Text style={{color: '#fff', fontWeight: 'bold'}}>ئێستا وەریگێڕە</Text></TouchableOpacity><View style={styles.resBox}><ScrollView><Text style={{color: '#000', fontSize: 16, textAlign: 'right'}}>{transOutput || "ئەنجام..."}</Text></ScrollView>{transOutput !== '' && (<TouchableOpacity onPress={() => { Clipboard.setString(transOutput); Alert.alert("کۆپی کرا"); }} style={{alignSelf: 'flex-start', padding: 5}}><Text style={{color: '#007AFF', fontSize: 12}}>📋 کۆپی کردن</Text></TouchableOpacity>)}</View><TouchableOpacity onPress={() => { setTransModalVisible(false); setTransOutput(''); }} style={{marginTop: 15}}><Text style={{color: '#ff3b30', textAlign: 'center', fontWeight: 'bold'}}>داخستن</Text></TouchableOpacity></View></View></Modal>
-      <Modal visible={ocrModalVisible} transparent><View style={styles.overlay}><View style={styles.ocrBox}><Text style={styles.ocrTitle}>دەق 🔎</Text><ScrollView style={{maxHeight: 200}}><Text style={{color: '#fff'}}>{ocrText}</Text></ScrollView><TouchableOpacity onPress={() => setOcrModalVisible(false)} style={{marginTop: 15}}><Text style={{color: '#007AFF', textAlign: 'center'}}>داخستن</Text></TouchableOpacity></View></View></Modal>
+      {/* PROFESSIONAL ON-DEVICE OCR MODAL */}
+      <Modal visible={ocrModalVisible} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={{backgroundColor: '#1c1c1e', width: '94%', height: '88%', borderRadius: 30, padding: 20, justifyContent: 'space-between'}}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
+              <Text style={{color: '#007AFF', fontSize: 20, fontWeight: 'bold'}}>خوێنەرەوەی دەق (OCR) 🔎</Text>
+              <TouchableOpacity onPress={() => setOcrModalVisible(false)}>
+                <Text style={{color: '#888', fontSize: 22}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Language Selector Row */}
+            <View style={{flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#2c2c2e', padding: 8, borderRadius: 15, marginBottom: 12}}>
+              {[
+                { key: 'ckb', label: 'کوردی (Sorani)' },
+                { key: 'ara', label: 'عەرەبی' },
+                { key: 'eng', label: 'English' }
+              ].map((l) => (
+                <TouchableOpacity
+                  key={l.key}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 10,
+                    backgroundColor: ocrLang === l.key ? '#007AFF' : 'transparent'
+                  }}
+                  onPress={() => {
+                    setOcrLang(l.key);
+                    if (ocrImageUri) startOCRRecognition(ocrImageUri, l.key);
+                  }}
+                >
+                  <Text style={{color: '#fff', fontSize: 13, fontWeight: 'bold'}}>{l.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Progress Indicator */}
+            {ocrProcessing ? (
+              <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', borderRadius: 20, padding: 20}}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={{color: '#fff', fontSize: 15, fontWeight: 'bold', marginTop: 15, textAlign: 'center'}}>
+                  {ocrProgressText || 'خەریکی خوێندنەوەی دەقە...'}
+                </Text>
+              </View>
+            ) : (
+              /* Editable Result TextInput */
+              <View style={{flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 12, marginBottom: 12}}>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    color: '#000',
+                    fontSize: 16,
+                    textAlign: ocrLang === 'eng' ? 'left' : 'right',
+                    writingDirection: ocrLang === 'eng' ? 'ltr' : 'rtl',
+                    textAlignVertical: 'top'
+                  }}
+                  multiline
+                  value={ocrText}
+                  onChangeText={setOcrText}
+                  placeholder={ocrText ? '' : 'هیچ دەقێک نەدۆزرایەوە. تکایە وێنەیەکی ڕوونتر بگرە و تەنها دەقەکە ببڕە'}
+                  placeholderTextColor="#888"
+                />
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8}}>
+              <TouchableOpacity
+                style={{backgroundColor: '#007AFF', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, flex: 1, alignItems: 'center'}}
+                onPress={() => {
+                  if (ocrText) {
+                    Clipboard.setString(ocrText);
+                    Alert.alert("سەرکەوتوو", "دەقەکە کۆپی کرا ✅");
+                  }
+                }}
+              >
+                <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>📋 کۆپی کردن</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{backgroundColor: '#34C759', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, flex: 1, alignItems: 'center'}}
+                onPress={async () => {
+                  if (!ocrText) return;
+                  try {
+                    const txtUri = `${FileSystem.documentDirectory}ocr_text_${Date.now()}.txt`;
+                    await FileSystem.writeAsStringAsync(txtUri, ocrText, { encoding: FileSystem.EncodingType.UTF8 });
+                    await Sharing.shareAsync(txtUri);
+                  } catch (e) {}
+                }}
+              >
+                <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>📤 هاوبەشکردن / TXT</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{backgroundColor: '#AF52DE', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, flex: 1, alignItems: 'center'}}
+                onPress={() => {
+                  if (!ocrText) return;
+                  if (editingDoc) {
+                    setEditingDoc({
+                      ...editingDoc,
+                      ocrText: (editingDoc.ocrText ? editingDoc.ocrText + '\n\n' : '') + ocrText
+                    });
+                    Alert.alert("سەرکەوتوو", "دەقەکە بۆ بەڵگەنامەکە زیاد کرا ✅");
+                  } else {
+                    Alert.alert("زانیاری", "سەرەتا بەڵگەنامەیەک بکەرەوە بۆ زیادکردنی دەقەکە");
+                  }
+                }}
+              >
+                <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>📄 زیادکردن بۆ بەڵگە</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={idModalVisible} transparent animationType="fade"><View style={styles.overlay}><View style={styles.idBox}><View style={styles.idPreviewBox}><Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1042/1042340.png' }} style={styles.idIllustration} /><View style={styles.passportGuideBox}><Text style={styles.guideLine}>┌                                          ┐</Text><View style={{height: 60}} /><Text style={{color: '#fff', fontSize: 10, textAlign: 'center'}}>وێنەی {idCategory} لێرە ڕێکبخە</Text><View style={{height: 20}} /><Text style={styles.guideLine}>└                                          ┘</Text></View></View><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.idCats}>{['گشتی', 'ناسنامە', 'مۆڵەت', 'پاسپۆرت', 'کارتی بانکی', 'بڕوانامە'].map(cat => (<TouchableOpacity key={cat} style={[styles.catBtn, idCategory === cat && styles.catBtnActive]} onPress={() => setIdCategory(cat)}><Text style={[styles.catText, idCategory === cat && {color: '#fff'}]}>{cat}</Text></TouchableOpacity>))}</ScrollView><TouchableOpacity style={styles.makeBtn} onPress={startIDScan}><Text style={styles.makeBtnText}>ئێستا وێنەکە بگرە</Text></TouchableOpacity><TouchableOpacity onPress={() => setIdModalVisible(false)} style={{marginTop: 15}}><Text style={{color: '#888', textAlign: 'center'}}>پاشگەزبوونەوە</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={lockModalVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15, textAlign:'center'}}>کۆد بۆ فایل دابنێ</Text><TextInput style={styles.renameIn} placeholder="Pass..." value={docPassword} onChangeText={setDocPassword} keyboardType="numeric" /><TouchableOpacity onPress={() => { if(editingDoc) setEditingDoc({...editingDoc, password: docPassword}); setLockModalVisible(false); Alert.alert("سەرکەوتوو", "فایلەکە قفڵ کرا"); }}><Text style={{color: '#34C759', fontWeight: 'bold', textAlign: 'center'}}>تەواو</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={passInputVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15}}>قفڵ کراوە 🔒</Text><TextInput style={styles.renameIn} placeholder="کۆد..." value={enteredPass} onChangeText={setPassToCheck} secureTextEntry /><TouchableOpacity onPress={() => { if(enteredPass===targetDoc.password) { setEditingDoc(targetDoc); setCurrentScreen('edit'); setPassInputVisible(false); setPassToCheck(''); } else Alert.alert("هەڵە","کۆدەکە هەڵەیە"); }}><Text style={{color: '#007AFF', fontWeight: 'bold', textAlign: 'center'}}>بیکەرەوە</Text></TouchableOpacity></View></View></Modal>
