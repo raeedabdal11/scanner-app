@@ -137,7 +137,7 @@ async function runFallbackInpaint(imageUri, existingRgba, W, H, cropX, cropY, cr
       }
     }
 
-    const dilateR = 4;
+    const dilateR = 6;
     const dilatedCropMask = new Uint8Array(cropDim * cropDim);
     for (let y = 0; y < cropDim; y++) {
       for (let x = 0; x < cropDim; x++) {
@@ -318,8 +318,8 @@ async function runOnDeviceInpaint(
     }
   }
 
-  // Dilate mask by 8 pixels
-  const dilateR = 8;
+  // Dilate mask by 6 pixels
+  const dilateR = 6;
   const dilatedCropMask = new Uint8Array(HW);
   for (let y = 0; y < cropH; y++) {
     for (let x = 0; x < cropW; x++) {
@@ -494,7 +494,7 @@ async function runIOPaintServerInpaint(safeUri, rgba, W, H, cropX, cropY, cropDi
     }
   }
 
-  const dilateR = 4;
+  const dilateR = 6;
   const dilatedCropMask = new Uint8Array(cropDim * cropDim);
   for (let y = 0; y < cropDim; y++) {
     for (let x = 0; x < cropDim; x++) {

@@ -105,7 +105,7 @@ export default function App() {
   const [imageHistory, setImageHistory] = useState([]);
   const [strokes, setStrokes] = useState([]);
   const [currentStroke, setCurrentStroke] = useState([]);
-  const [brushSize, setBrushSize] = useState(25);
+  const [brushSize, setBrushSize] = useState(30);
   const [inpainting, setInpainting] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [eraseProgress, setEraseProgress] = useState({ current: 0, total: 0 });
@@ -117,7 +117,7 @@ export default function App() {
   const eraseImageRef = useRef(null);
   const imageLayoutRef = useRef({ width: width, height: height * 0.6 });
   const imageNatSizeRef = useRef({ width: 1000, height: 1000 });
-  const brushSizeRef = useRef(25);
+  const brushSizeRef = useRef(30);
   const inpaintingRef = useRef(false);
   const strokesRef = useRef([]);
   const currentStrokeRef = useRef([]);
@@ -710,6 +710,7 @@ export default function App() {
 
   const renderSingleStroke = (strokePoints, strokeIndex, color) => {
     if (!strokePoints || strokePoints.length === 0) return null;
+    const currentBrushSize = brushSize / zoom;
 
     return (
       <React.Fragment key={strokeIndex}>
@@ -718,11 +719,11 @@ export default function App() {
             key={`pt-${strokeIndex}-${i}`}
             style={{
               position: 'absolute',
-              left: pt.x - brushSize / 2,
-              top: pt.y - brushSize / 2,
-              width: brushSize,
-              height: brushSize,
-              borderRadius: brushSize / 2,
+              left: pt.x - currentBrushSize / 2,
+              top: pt.y - currentBrushSize / 2,
+              width: currentBrushSize,
+              height: currentBrushSize,
+              borderRadius: currentBrushSize / 2,
               backgroundColor: color,
             }}
           />
@@ -745,10 +746,10 @@ export default function App() {
               style={{
                 position: 'absolute',
                 left: cx - distance / 2,
-                top: cy - brushSize / 2,
+                top: cy - currentBrushSize / 2,
                 width: distance,
-                height: brushSize,
-                borderRadius: brushSize / 2,
+                height: currentBrushSize,
+                borderRadius: currentBrushSize / 2,
                 backgroundColor: color,
                 transform: [{ rotate: `${angle}deg` }],
               }}
@@ -925,10 +926,23 @@ export default function App() {
           </View>
 
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: 5}}>
-            <Text style={{color: '#333', fontWeight: 'bold', fontSize: 13}}>قەبارەی فرچە: {brushSize}</Text>
-            <View style={styles.brushTrack}>
-              {[15, 25, 35, 45].map(s => (
-                <TouchableOpacity key={s} onPress={() => setBrushSize(s)} style={[styles.brushDot, brushSize === s && {backgroundColor: '#3DBB8F'}]} />
+            <Text style={{color: '#333', fontWeight: 'bold', fontSize: 13}}>قەبارەی فرچە: {brushSize === 15 ? 'بچووک' : brushSize === 30 ? 'ناوەەند' : 'گەورە'}</Text>
+            <View style={{flexDirection: 'row'}}>
+              {[
+                { label: 'بچووک', size: 15 },
+                { label: 'ناوەەند', size: 30 },
+                { label: 'گەورە', size: 50 }
+              ].map(item => (
+                <TouchableOpacity
+                  key={item.size}
+                  onPress={() => setBrushSize(item.size)}
+                  style={[
+                    styles.brushSizeBtn,
+                    brushSize === item.size && styles.brushSizeBtnActive
+                  ]}
+                >
+                  <Text style={[styles.brushSizeText, brushSize === item.size && {color: '#fff'}]}>{item.label}</Text>
+                </TouchableOpacity>
               ))}
             </View>
           </View>
@@ -1076,5 +1090,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginTop: 15, marginBottom: 10, textAlign: 'right' },
   renameBox: { backgroundColor: '#1c1c1e', padding: 30, borderRadius: 30, width: '85%' },
   renameIn: { backgroundColor: '#2c2c2e', color: '#fff', padding: 15, borderRadius: 15, marginBottom: 20, textAlign: 'center' },
+  brushSizeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#f1f3f5', marginHorizontal: 4 },
+  brushSizeBtnActive: { backgroundColor: '#3DBB8F' },
+  brushSizeText: { fontSize: 12, fontWeight: 'bold', color: '#333' },
   viewAllBtn: { alignItems: 'center', marginTop: 15, padding: 10 }
 });
