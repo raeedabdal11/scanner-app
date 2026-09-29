@@ -25,6 +25,8 @@ import * as ExpoImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ViewShot from 'react-native-view-shot';
 import { inpaintImage } from './inpaint';
+import { processAndSaveSignatureImage, mergeSignatures, recolorSignature } from './signatureHelper';
+import SignatureCropper from './SignatureCropper';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
@@ -43,6 +45,21 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const { width, height } = Dimensions.get('window');
+
+const SIGNATURE_COLORS = [
+  { name: 'Black', hex: '#000000' },
+  { name: 'Pen Blue', hex: '#0B2E8A' },
+  { name: 'Blue', hex: '#1565C0' },
+  { name: 'Navy', hex: '#001F3F' },
+  { name: 'Red', hex: '#C62828' },
+  { name: 'Dark Red', hex: '#7F0000' },
+  { name: 'Green', hex: '#1B5E20' },
+  { name: 'Purple', hex: '#4A148C' },
+  { name: 'Brown', hex: '#4E342E' },
+  { name: 'Gray', hex: '#424242' },
+  { name: 'Gold', hex: '#B8860B' },
+  { name: 'White', hex: '#FFFFFF' },
+];
 
 // --- Global Helper Components ---
 const ToolIcon = ({ icon, label, color, onPress }) => (
@@ -130,6 +147,27 @@ export default function App() {
   const initialPanRef = useRef({ x: 0, y: 0 });
   const drawTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0, pageX: 0, pageY: 0 });
+
+  // Signature Feature States & 3 New Features (Crop, Colors, Rotate)
+  const [signingDoc, setSigningDoc] = useState(null);
+  const [signatures, setSignatures] = useState([]);
+  const [savedSignatures, setSavedSignatures] = useState([]);
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+  const [sigStrokes, setSigStrokes] = useState([]);
+  const [sigCurrentStroke, setSigCurrentStroke] = useState([]);
+  const [sigColor, setSigColor] = useState('#000000');
+  const [sigThickness, setSigThickness] = useState(4);
+  const [signingLayout, setSigningLayout] = useState({ width: width, height: height * 0.6 });
+  const sigViewShotRef = useRef(null);
+
+  const [activeSigId, setActiveSigId] = useState(null);
+  const [activeSigColorPicker, setActiveSigColorPicker] = useState(null);
+  const [lastChosenColor, setLastChosenColor] = useState('#000000');
+  const [cropModalVisible, setCropModalVisible] = useState(false);
+  const [croppingSig, setCroppingSig] = useState(null);
+  const [cropRect, setCropRect] = useState({ x: 20, y: 20, width: 250, height: 150 });
+  const [sigNatSize, setSigNatSize] = useState({ width: 500, height: 300 });
+  const [activePanel, setActivePanel] = useState(null);
 
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
@@ -236,13 +274,502 @@ export default function App() {
   const handleSignature = async () => {
     if (!(await checkPremiumLimit())) return;
     setToolsModalVisible(false);
-    const res = await ExpoImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.6 });
-    if (!res.canceled && editingDoc) {
-      const newPages = [...editingDoc.pages];
-      newPages.push(res.assets[0].uri);
-      setEditingDoc({ ...editingDoc, pages: newPages });
-      Alert.alert("سەرکەوتوو", "ئیمزا زیاد کرا");
+    try {
+      const res = await ExpoImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+      if (!res.canceled && res.assets && res.assets[0]) {
+        const docUri = res.assets[0].uri;
+        setSigningDoc({
+          id: Date.now().toString(),
+          name: "واژۆکراو_" + Date.now(),
+          date: new Date().toLocaleDateString(),
+          pages: [docUri],
+          thumbnail: docUri,
+          password: ''
+        });
+        setSignatures([]);
+        const saved = await AsyncStorage.getItem('saved_signatures');
+        if (saved) {
+          setSavedSignatures(JSON.parse(saved));
+        } else {
+          setSavedSignatures([]);
+        }
+        setCurrentScreen('signing');
+      }
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا وێنە هەڵبژێردرێت");
     }
+  };
+
+  const saveAndUseSignature = async (sigUri) => {
+    const updatedSaved = [sigUri, ...savedSignatures];
+    setSavedSignatures(updatedSaved);
+    await AsyncStorage.setItem('saved_signatures', JSON.stringify(updatedSaved));
+
+    let uriToUse = sigUri;
+    if (lastChosenColor !== '#000000') {
+      uriToUse = await recolorSignature(sigUri, lastChosenColor);
+    }
+
+    const newSig = {
+      id: Date.now().toString(),
+      uri: uriToUse,
+      x: (signingLayout.width / 2) - 75,
+      y: (signingLayout.height / 2) - 50,
+      width: 150,
+      height: 100,
+      rotation: 0,
+      color: lastChosenColor
+    };
+    setSignatures(prev => [...prev, newSig]);
+    setSignatureModalVisible(false);
+    setSigStrokes([]);
+  };
+
+  const cropBoxStartRectRef = useRef({ x: 20, y: 20, width: 250, height: 150 });
+
+  const createCropHandlePanResponder = (handleType) => {
+    let startX = 0, startY = 0, startW = 0, startH = 0;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        startX = cropRect.x;
+        startY = cropRect.y;
+        startW = cropRect.width;
+        startH = cropRect.height;
+      },
+      onPanResponderMove: (evt, gs) => {
+        const containerW = width * 0.85;
+        const containerH = 280;
+        const minSize = 40;
+
+        setCropRect(() => {
+          let x = startX;
+          let y = startY;
+          let w = startW;
+          let h = startH;
+
+          if (handleType.includes('l')) {
+            const newX = Math.max(0, Math.min(startX + startW - minSize, startX + gs.dx));
+            w = startW + (startX - newX);
+            x = newX;
+          }
+          if (handleType.includes('r')) {
+            w = Math.max(minSize, Math.min(containerW - startX, startW + gs.dx));
+          }
+          if (handleType.includes('t')) {
+            const newY = Math.max(0, Math.min(startY + startH - minSize, startY + gs.dy));
+            h = startH + (startY - newY);
+            y = newY;
+          }
+          if (handleType.includes('b')) {
+            h = Math.max(minSize, Math.min(containerH - startY, startH + gs.dy));
+          }
+
+          return { x, y, width: w, height: h };
+        });
+      },
+      onPanResponderRelease: () => {},
+    });
+  };
+
+  const openCropModal = (sig) => {
+    setCroppingSig(sig);
+    const containerW = width * 0.85;
+    const containerH = 280;
+    Image.getSize(sig.uri, (w, h) => {
+      setSigNatSize({ width: w, height: h });
+      setCropRect({ x: 20, y: 20, width: containerW - 40, height: containerH - 40 });
+    }, () => {
+      setSigNatSize({ width: 500, height: 300 });
+      setCropRect({ x: 20, y: 20, width: containerW - 40, height: containerH - 40 });
+    });
+    setCropModalVisible(true);
+  };
+
+  const handleApplyCrop = async () => {
+    if (!croppingSig) return;
+    try {
+      const containerW = width * 0.85;
+      const containerH = 280;
+      const scaleX = sigNatSize.width / containerW;
+      const scaleY = sigNatSize.height / containerH;
+
+      const originX = Math.max(0, Math.floor(cropRect.x * scaleX));
+      const originY = Math.max(0, Math.floor(cropRect.y * scaleY));
+      const cropW = Math.min(sigNatSize.width - originX, Math.floor(cropRect.width * scaleX));
+      const cropH = Math.min(sigNatSize.height - originY, Math.floor(cropRect.height * scaleY));
+
+      if (cropW > 10 && cropH > 10) {
+        const manip = await ImageManipulator.manipulateAsync(
+          croppingSig.uri,
+          [{ crop: { originX, originY, width: cropW, height: cropH } }],
+          { format: ImageManipulator.SaveFormat.PNG, base64: true }
+        );
+        if (manip.uri) {
+          setSignatures(prev => prev.map(s => s.id === croppingSig.id ? { ...s, uri: manip.uri } : s));
+        }
+      }
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا واژۆ بڕدرێت");
+    } finally {
+      setCropModalVisible(false);
+      setCroppingSig(null);
+    }
+  };
+
+  const handleFinishDrawingSignature = async () => {
+    try {
+      if (sigStrokes.length === 0) {
+        Alert.alert("هەڵە", "تکایە سەرەتا واژۆ بکە");
+        return;
+      }
+      const uri = await sigViewShotRef.current.capture();
+      if (uri) {
+        await saveAndUseSignature(uri);
+      }
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا واژۆ تۆمار بکرێت");
+    }
+  };
+
+  const handleImportSignatureImage = async () => {
+    try {
+      const res = await ExpoImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.8 });
+      if (!res.canceled && res.assets && res.assets[0]) {
+        const processedUri = await processAndSaveSignatureImage(res.assets[0].uri);
+        if (processedUri) {
+          await saveAndUseSignature(processedUri);
+        }
+      }
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا وێنەی واژۆ بهێنرێت");
+    }
+  };
+
+  const finishSigning = async () => {
+    if (!signingDoc) return;
+    try {
+      setLoading(true);
+      const finalUri = await mergeSignatures(
+        signingDoc.pages[0],
+        signatures,
+        signingLayout.width,
+        signingLayout.height
+      );
+
+      const completedDoc = {
+        ...signingDoc,
+        pages: [finalUri],
+        thumbnail: finalUri
+      };
+
+      const updatedDocs = [completedDoc, ...documents];
+      setDocuments(updatedDocs);
+      await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
+      Alert.alert("سەرکەوتوو", "واژۆ و پاشەکەوت کردن سەرکەوتوو بوو ✅");
+      setCurrentScreen('home');
+    } catch (e) {
+      Alert.alert("هەڵە", "نەتوانرا واژۆکان تێکەڵ ببن");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderSigStroke = (pts, key, color, thickness) => {
+    if (!pts || pts.length === 0) return null;
+    return (
+      <React.Fragment key={key}>
+        {pts.map((pt, i) => (
+          <View
+            key={`spt-${key}-${i}`}
+            style={{
+              position: 'absolute',
+              left: pt.x - thickness / 2,
+              top: pt.y - thickness / 2,
+              width: thickness,
+              height: thickness,
+              borderRadius: thickness / 2,
+              backgroundColor: color,
+            }}
+          />
+        ))}
+        {pts.map((pt, i) => {
+          if (i === 0) return null;
+          const prev = pts[i - 1];
+          const dx = pt.x - prev.x;
+          const dy = pt.y - prev.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 1) return null;
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          const cx = (prev.x + pt.x) / 2;
+          const cy = (prev.y + pt.y) / 2;
+          return (
+            <View
+              key={`sseg-${key}-${i}`}
+              style={{
+                position: 'absolute',
+                left: cx - dist / 2,
+                top: cy - thickness / 2,
+                width: dist,
+                height: thickness,
+                borderRadius: thickness / 2,
+                backgroundColor: color,
+                transform: [{ rotate: `${angle}deg` }],
+              }}
+            />
+          );
+        })}
+      </React.Fragment>
+    );
+  };
+
+  const sigPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setSigCurrentStroke([{ x: locationX, y: locationY }]);
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setSigCurrentStroke((prev) => [...prev, { x: locationX, y: locationY }]);
+      },
+      onPanResponderRelease: () => {
+        setSigCurrentStroke((current) => {
+          if (current.length > 0) {
+            setSigStrokes((prev) => [...prev, current]);
+          }
+          return [];
+        });
+      },
+    })
+  ).current;
+
+  const renderSigning = () => {
+    return (
+      <View style={[styles.flex1, {backgroundColor: '#000'}]} onTouchStart={() => { setActiveSigId(null); setActiveSigColorPicker(null); }}>
+        <View style={styles.eraseHeader}>
+          <TouchableOpacity onPress={() => setCurrentScreen('home')}>
+            <Text style={{color: '#fff', fontSize: 22}}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.eraseTitle}>واژۆکردنی بەڵگە ✍️</Text>
+          <TouchableOpacity onPress={finishSigning} style={styles.saveEraseBtn}>
+            <Text style={{color: '#fff', fontWeight: 'bold'}}>پاشەکەوتکردن</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={{flex: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden'}}
+          onLayout={(e) => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            setSigningLayout({ width: w, height: h });
+          }}
+        >
+          <Image
+            source={{ uri: signingDoc?.pages[0] }}
+            style={{ width: signingLayout.width, height: signingLayout.height }}
+            resizeMode="contain"
+          />
+
+          {signatures.map((sig) => {
+            const isSelected = activeSigId === sig.id;
+            const panResponderSig = PanResponder.create({
+              onStartShouldSetPanResponder: () => true,
+              onMoveShouldSetPanResponder: () => true,
+              onPanResponderGrant: () => {
+                setActiveSigId(sig.id);
+                setActiveSigColorPicker(null);
+              },
+              onPanResponderMove: (evt, gs) => {
+                setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, x: s.x + gs.dx, y: s.y + gs.dy } : s));
+              },
+              onPanResponderRelease: () => {},
+            });
+
+            return (
+              <View
+                key={sig.id}
+                style={[
+                  {
+                    position: 'absolute',
+                    left: sig.x,
+                    top: sig.y,
+                    width: sig.width,
+                    height: sig.height,
+                    borderWidth: isSelected ? 2 : 1,
+                    borderColor: isSelected ? '#007AFF' : 'rgba(0,122,255,0.4)',
+                    backgroundColor: isSelected ? 'rgba(0,122,255,0.05)' : 'transparent',
+                    transform: [{ rotate: `${sig.rotation || 0}deg` }]
+                  }
+                ]}
+                {...panResponderSig.panHandlers}
+              >
+                <Image source={{ uri: sig.uri }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
+
+                <TouchableOpacity
+                  style={{position: 'absolute', top: -16, right: -16, backgroundColor: '#ff3b30', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', zIndex: 15, elevation: 5}}
+                  onPress={() => setSignatures(prev => prev.filter(s => s.id !== sig.id))}
+                >
+                  <Text style={{color: '#fff', fontSize: 16, fontWeight: 'bold'}}>✕</Text>
+                </TouchableOpacity>
+
+                <View style={{position: 'absolute', bottom: -16, right: 0, flexDirection: 'row', zIndex: 15}}>
+                  <TouchableOpacity
+                    style={{backgroundColor: '#007AFF', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, elevation: 4}}
+                    onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: s.width + 25, height: s.height + 18 } : s))}
+                  >
+                    <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold'}}>+</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{backgroundColor: '#007AFF', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, elevation: 4}}
+                    onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: Math.max(60, s.width - 25), height: Math.max(40, s.height - 18) } : s))}
+                  >
+                    <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold'}}>-</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* ALWAYS SHOW "ADD SIGNATURE" FOOTER */}
+        <View style={styles.eraseFooter}>
+          <TouchableOpacity
+            style={{backgroundColor: '#007AFF', padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: signatures.length > 0 ? 10 : 0}}
+            onPress={() => setSignatureModalVisible(true)}
+          >
+            <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➕ زیادکردنی ئیمزا</Text>
+          </TouchableOpacity>
+
+          {/* BOTTOM TOOLBAR WHEN SIGNATURES EXIST */}
+          {signatures.length > 0 && (
+            <View style={{marginTop: 5}}>
+
+              {activePanel === 'color' && (
+                <View style={styles.panelContainer}>
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>ڕەنگی مەڕەکەب هەڵبژێرە:</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {SIGNATURE_COLORS.map(c => (
+                      <TouchableOpacity
+                        key={c.hex}
+                        style={{width: 35, height: 35, borderRadius: 17.5, backgroundColor: c.hex, margin: 4, borderWidth: 2, borderColor: '#fff'}}
+                        onPress={async () => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            setLastChosenColor(c.hex);
+                            const recoloredUri = await recolorSignature(targetSig.uri, c.hex);
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, uri: recoloredUri, color: c.hex } : s));
+                          }
+                        }}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {activePanel === 'rotate' && (
+                <View style={styles.panelContainer}>
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>سوڕاندنەوە (Rotation):</Text>
+                  <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: ((s.rotation || 0) - 90 + 360) % 360 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold'}}>⟲ ٩٠° چەپ</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: ((s.rotation || 0) + 90) % 360 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold'}}>⟳ ٩٠° ڕاست</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: 0 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#ff3b30', fontWeight: 'bold'}}>ڕێککردنەوە (0°)</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {activePanel === 'size' && (
+                <View style={styles.panelContainer}>
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>قەبارە (Size):</Text>
+                  <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: Math.max(60, s.width - 25), height: Math.max(40, s.height - 18) } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 18}}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={{color: '#fff'}}>بچووک / گەورە</Text>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: s.width + 25, height: s.height + 18 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 18}}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingTop: 5}}>
+                <TouchableOpacity style={styles.toolBarItem} onPress={() => {
+                  const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                  if (targetSig) openCropModal(targetSig);
+                  setActivePanel(null);
+                }}>
+                  <Text style={{fontSize: 20}}>✂️</Text>
+                  <Text style={styles.toolBarText}>بڕین</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBarItem} onPress={() => setActivePanel(activePanel === 'color' ? null : 'color')}>
+                  <Text style={{fontSize: 20}}>🎨</Text>
+                  <Text style={styles.toolBarText}>ڕەنگ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBarItem} onPress={() => setActivePanel(activePanel === 'rotate' ? null : 'rotate')}>
+                  <Text style={{fontSize: 20}}>🔄</Text>
+                  <Text style={styles.toolBarText}>سوڕانەوە</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBarItem} onPress={() => setActivePanel(activePanel === 'size' ? null : 'size')}>
+                  <Text style={{fontSize: 20}}>📏</Text>
+                  <Text style={styles.toolBarText}>قەبارە</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+    );
   };
 
   const handleLock = async () => {
@@ -984,6 +1511,7 @@ export default function App() {
       {currentScreen === 'files' && renderFiles()}
       {currentScreen === 'profile' && renderProfile()}
       {currentScreen === 'smart_erase' && renderSmartErase()}
+      {currentScreen === 'signing' && renderSigning()}
       {currentScreen === 'edit' && renderEdit()}
 
       {/* TOOLS MODAL */}
@@ -1009,6 +1537,146 @@ export default function App() {
       <Modal visible={idModalVisible} transparent animationType="fade"><View style={styles.overlay}><View style={styles.idBox}><View style={styles.idPreviewBox}><Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1042/1042340.png' }} style={styles.idIllustration} /><View style={styles.passportGuideBox}><Text style={styles.guideLine}>┌                                          ┐</Text><View style={{height: 60}} /><Text style={{color: '#fff', fontSize: 10, textAlign: 'center'}}>وێنەی {idCategory} لێرە ڕێکبخە</Text><View style={{height: 20}} /><Text style={styles.guideLine}>└                                          ┘</Text></View></View><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.idCats}>{['گشتی', 'ناسنامە', 'مۆڵەت', 'پاسپۆرت', 'کارتی بانکی', 'بڕوانامە'].map(cat => (<TouchableOpacity key={cat} style={[styles.catBtn, idCategory === cat && styles.catBtnActive]} onPress={() => setIdCategory(cat)}><Text style={[styles.catText, idCategory === cat && {color: '#fff'}]}>{cat}</Text></TouchableOpacity>))}</ScrollView><TouchableOpacity style={styles.makeBtn} onPress={startIDScan}><Text style={styles.makeBtnText}>ئێستا وێنەکە بگرە</Text></TouchableOpacity><TouchableOpacity onPress={() => setIdModalVisible(false)} style={{marginTop: 15}}><Text style={{color: '#888', textAlign: 'center'}}>پاشگەزبوونەوە</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={lockModalVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15, textAlign:'center'}}>کۆد بۆ فایل دابنێ</Text><TextInput style={styles.renameIn} placeholder="Pass..." value={docPassword} onChangeText={setDocPassword} keyboardType="numeric" /><TouchableOpacity onPress={() => { if(editingDoc) setEditingDoc({...editingDoc, password: docPassword}); setLockModalVisible(false); Alert.alert("سەرکەوتوو", "فایلەکە قفڵ کرا"); }}><Text style={{color: '#34C759', fontWeight: 'bold', textAlign: 'center'}}>تەواو</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={passInputVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15}}>قفڵ کراوە 🔒</Text><TextInput style={styles.renameIn} placeholder="کۆد..." value={enteredPass} onChangeText={setPassToCheck} secureTextEntry /><TouchableOpacity onPress={() => { if(enteredPass===targetDoc.password) { setEditingDoc(targetDoc); setCurrentScreen('edit'); setPassInputVisible(false); setPassToCheck(''); } else Alert.alert("هەڵە","کۆدەکە هەڵەیە"); }}><Text style={{color: '#007AFF', fontWeight: 'bold', textAlign: 'center'}}>بیکەرەوە</Text></TouchableOpacity></View></View></Modal>
+
+      {/* SIGNATURE PAD MODAL */}
+      <Modal visible={signatureModalVisible} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={{backgroundColor: '#1c1c1e', width: '92%', height: '85%', borderRadius: 30, padding: 20}}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+              <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold'}}>ئیمزای نوێ / پاشکەوتکراوەکان ✍️</Text>
+              <TouchableOpacity onPress={() => setSignatureModalVisible(false)}>
+                <Text style={{color: '#888', fontSize: 20}}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {savedSignatures.length > 0 && (
+              <View style={{marginBottom: 15}}>
+                <Text style={{color: '#ffd60a', fontSize: 14, fontWeight: 'bold', marginBottom: 8, textAlign: 'right'}}>ئیمزا پاشکەوتکراوەکان:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {savedSignatures.map((sUri, idx) => (
+                    <View key={idx} style={{backgroundColor: '#2c2c2e', borderRadius: 15, padding: 8, marginRight: 10, alignItems: 'center', justifyContent: 'center', width: 100, height: 70}}>
+                      <TouchableOpacity onPress={() => saveAndUseSignature(sUri)} style={{flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center'}}>
+                        <Image source={{ uri: sUri }} style={{width: 80, height: 45, resizeMode: 'contain'}} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{position: 'absolute', top: 2, right: 2}}
+                        onPress={async () => {
+                          const updated = savedSignatures.filter((_, i) => i !== idx);
+                          setSavedSignatures(updated);
+                          await AsyncStorage.setItem('saved_signatures', JSON.stringify(updated));
+                        }}
+                      >
+                        <Text style={{color: '#ff3b30', fontSize: 12}}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <Text style={{color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 8, textAlign: 'right'}}>ئیمزای نوێ بکێشە:</Text>
+
+            <View style={{flex: 1, backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', marginBottom: 15}}>
+              <ViewShot ref={sigViewShotRef} options={{ format: 'png', quality: 0.9, result: 'tmpfile' }} style={{flex: 1, backgroundColor: 'transparent'}}>
+                <View style={StyleSheet.absoluteFill} {...sigPanResponder.panHandlers}>
+                  {sigStrokes.map((pts, i) => renderSigStroke(pts, `sig-${i}`, sigColor, sigThickness))}
+                  {renderSigStroke(sigCurrentStroke, 'sig-curr', sigColor, sigThickness)}
+                </View>
+              </ViewShot>
+            </View>
+
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15}}>
+              <View style={{flexDirection: 'row'}}>
+                {['#000000', '#0000FF', '#FF0000'].map(c => (
+                  <TouchableOpacity key={c} onPress={() => setSigColor(c)} style={{width: 30, height: 30, borderRadius: 15, backgroundColor: c, marginRight: 8, borderWidth: sigColor === c ? 3 : 0, borderColor: '#fff'}} />
+                ))}
+              </View>
+              <View style={{flexDirection: 'row'}}>
+                {[
+                  { label: 'باریک', val: 2 },
+                  { label: 'ناوەەند', val: 4 },
+                  { label: 'ئەستوور', val: 7 }
+                ].map(t => (
+                  <TouchableOpacity key={t.val} onPress={() => setSigThickness(t.val)} style={{paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: sigThickness === t.val ? '#007AFF' : '#2c2c2e', marginLeft: 6}}>
+                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>{t.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+              <TouchableOpacity
+                style={{backgroundColor: '#2c2c2e', padding: 12, borderRadius: 15, flex: 1, marginRight: 5, alignItems: 'center'}}
+                onPress={() => setSigStrokes([])}
+              >
+                <Text style={{color: '#ff3b30', fontWeight: 'bold'}}>پاککردنەوە</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{backgroundColor: '#2c2c2e', padding: 12, borderRadius: 15, flex: 1, marginHorizontal: 5, alignItems: 'center'}}
+                onPress={() => {
+                  if (sigStrokes.length > 0) {
+                    setSigStrokes(prev => prev.slice(0, -1));
+                  }
+                }}
+              >
+                <Text style={{color: '#007AFF', fontWeight: 'bold'}}>گەڕانەوە</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{backgroundColor: '#2c2c2e', padding: 12, borderRadius: 15, flex: 1, marginHorizontal: 5, alignItems: 'center'}}
+                onPress={handleImportSignatureImage}
+              >
+                <Text style={{color: '#34C759', fontWeight: 'bold'}}>لە وێنەوە</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 12}}>
+              <TouchableOpacity
+                style={{backgroundColor: '#555', padding: 15, borderRadius: 15, flex: 1, marginRight: 8, alignItems: 'center'}}
+                onPress={() => setSignatureModalVisible(false)}
+              >
+                <Text style={{color: '#fff', fontWeight: 'bold'}}>پاشگەزبوونەوە</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{backgroundColor: '#34C759', padding: 15, borderRadius: 15, flex: 1, marginLeft: 8, alignItems: 'center'}}
+                onPress={handleFinishDrawingSignature}
+              >
+                <Text style={{color: '#fff', fontWeight: 'bold'}}>تەواو</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* SIGNATURE CROPPER FULLSCREEN MODAL COMPONENT */}
+      <Modal visible={cropModalVisible && !!croppingSig} animationType="slide" statusBarTranslucent>
+        {croppingSig && (
+          <SignatureCropper
+            uri={croppingSig.uri}
+            onDone={(newUri, size) => {
+              if (croppingSig && newUri) {
+                setSignatures(prev => prev.map(s => {
+                  if (s.id === croppingSig.id) {
+                    const aspect = (size && size.width && size.height) ? (size.width / size.height) : (s.width / s.height);
+                    const newHeight = Math.round(s.width / aspect);
+                    return {
+                      ...s,
+                      uri: newUri,
+                      height: newHeight
+                    };
+                  }
+                  return s;
+                }));
+              }
+              setCropModalVisible(false);
+              setCroppingSig(null);
+            }}
+            onCancel={() => {
+              setCropModalVisible(false);
+              setCroppingSig(null);
+            }}
+          />
+        )}
+      </Modal>
 
       {loading && <View style={styles.loader}><ActivityIndicator size="large" color="#007AFF" /></View>}
     </SafeAreaView></View></SafeAreaProvider>
@@ -1093,5 +1761,45 @@ const styles = StyleSheet.create({
   brushSizeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#f1f3f5', marginHorizontal: 4 },
   brushSizeBtnActive: { backgroundColor: '#3DBB8F' },
   brushSizeText: { fontSize: 12, fontWeight: 'bold', color: '#333' },
-  viewAllBtn: { alignItems: 'center', marginTop: 15, padding: 10 }
+  viewAllBtn: { alignItems: 'center', marginTop: 15, padding: 10 },
+  fixedSigToolbar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1c1c1e',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    paddingHorizontal: 15,
+    paddingBottom: 25,
+    paddingTop: 10,
+    zIndex: 999,
+    elevation: 20,
+    borderTopWidth: 1,
+    borderColor: '#333'
+  },
+  panelContainer: {
+    backgroundColor: '#2c2c2e',
+    borderRadius: 15,
+    padding: 12,
+    marginBottom: 10
+  },
+  toolBarItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8
+  },
+  toolBarText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 3
+  },
+  panelBtn: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: 'center'
+  }
 });
