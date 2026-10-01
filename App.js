@@ -15,7 +15,8 @@ import {
   ScrollView,
   Linking,
   Clipboard,
-  PanResponder
+  PanResponder,
+  Platform
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,9 +27,13 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import ViewShot from 'react-native-view-shot';
 import { inpaintImage } from './inpaint';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
 import { processAndSaveSignatureImage, mergeSignatures, recolorSignature } from './signatureHelper';
 import SignatureCropper from './SignatureCropper';
 import { performOnDeviceOCR } from './ocrHelper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { PptEditorModal } from './ppt';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
@@ -67,7 +72,11 @@ const SIGNATURE_COLORS = [
 const ToolIcon = ({ icon, label, color, onPress }) => (
   <TouchableOpacity style={styles.toolItem} onPress={onPress}>
     <View style={[styles.iconCircle, { backgroundColor: color }]}>
-      <Text style={{fontSize: 24}}>{icon}</Text>
+      {typeof icon === 'string' ? (
+        <Text style={{fontSize: 24}}>{icon}</Text>
+      ) : (
+        icon
+      )}
     </View>
     <Text style={styles.toolLabel}>{label}</Text>
   </TouchableOpacity>
@@ -107,6 +116,9 @@ export default function App() {
   const [ocrModalVisible, setOcrModalVisible] = useState(false);
   const [lockModalVisible, setLockModalVisible] = useState(false);
   const [passInputVisible, setPassInputVisible] = useState(false);
+
+  const [selectedHomeDoc, setSelectedHomeDoc] = useState(null);
+  const [homeDocMenuVisible, setHomeDocMenuVisible] = useState(false);
 
   const [secretCode, setSecretCode] = useState('');
   const [idCategory, setIdCategory] = useState('ناسنامە');
@@ -177,6 +189,9 @@ export default function App() {
   const [ocrProgressText, setOcrProgressText] = useState('');
   const [ocrProcessing, setOcrProcessing] = useState(false);
 
+  // PPT Tool State
+  const [pptEditorVisible, setPptEditorVisible] = useState(false);
+
   useEffect(() => { eraseImageRef.current = eraseImage; }, [eraseImage]);
   useEffect(() => { imageLayoutRef.current = imageLayout; }, [imageLayout]);
   useEffect(() => { imageNatSizeRef.current = imageNatSize; }, [imageNatSize]);
@@ -220,6 +235,146 @@ export default function App() {
     }
     setVipModalVisible(true);
     return false;
+  };
+
+  // --- Document Export Helpers ---
+  const getDocumentRealFile = async (doc) => {
+    if (!doc) throw new Error("بەڵگەنامە نەدۆزرایەوە.");
+
+    const isPpt = doc.type === 'ppt' || doc.name?.toLowerCase().includes('ppt');
+    const isTextDoc = doc.type === 'text' || (doc.pages && doc.pages.length > 0 && typeof doc.pages[0] === 'object' && doc.pages[0]?.type === 'text');
+
+    const cleanName = (doc.name || 'document').replace(/[/\\?%*:|"<>]/g, '_');
+
+    if (isTextDoc) {
+      const fullText = doc.pages
+        .map(p => (typeof p === 'object' && p?.text ? p.text : String(p)))
+        .join('\n\n');
+      const filename = cleanName.endsWith('.txt') ? cleanName : `${cleanName}.txt`;
+      const cacheUri = `${FileSystem.cacheDirectory}${Date.now()}_${filename}`;
+      await FileSystem.writeAsStringAsync(cacheUri, fullText, { encoding: FileSystem.EncodingType.UTF8 });
+      return {
+        fileUri: cacheUri,
+        filename: filename,
+        mimeType: 'text/plain',
+        extension: 'txt'
+      };
+    }
+
+    if (isPpt) {
+      const mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      let fileUri = doc.fileUri || doc.uri;
+      if (!fileUri && doc.pages && doc.pages.length > 0) {
+        fileUri = typeof doc.pages[0] === 'string' ? doc.pages[0] : doc.pages[0]?.uri;
+      }
+      const ext = fileUri?.toLowerCase().endsWith('.ppt') ? 'ppt' : 'pptx';
+      const filename = cleanName.endsWith(`.${ext}`) ? cleanName : `${cleanName}.${ext}`;
+      return {
+        fileUri,
+        filename,
+        mimeType: mime,
+        extension: ext
+      };
+    }
+
+    if (doc.fileUri || doc.pdfUri) {
+      const fileUri = doc.fileUri || doc.pdfUri;
+      const isPdf = fileUri.toLowerCase().endsWith('.pdf');
+      const ext = isPdf ? 'pdf' : (fileUri.toLowerCase().endsWith('.png') ? 'png' : 'jpg');
+      const mime = isPdf ? 'application/pdf' : (ext === 'png' ? 'image/png' : 'image/jpeg');
+      const filename = cleanName.endsWith(`.${ext}`) ? cleanName : `${cleanName}.${ext}`;
+      return { fileUri, filename, mimeType: mime, extension: ext };
+    }
+
+    if (doc.pages && doc.pages.length === 1 && typeof doc.pages[0] === 'string') {
+      const imgUri = doc.pages[0];
+      const isPng = imgUri.toLowerCase().endsWith('.png');
+      const ext = isPng ? 'png' : 'jpg';
+      const mime = isPng ? 'image/png' : 'image/jpeg';
+      const filename = cleanName.endsWith(`.${ext}`) ? cleanName : `${cleanName}.${ext}`;
+      return { fileUri: imgUri, filename, mimeType: mime, extension: ext };
+    }
+
+    if (doc.pages && doc.pages.length > 0) {
+      const htmlPages = doc.pages.map(p => {
+        const imgUri = typeof p === 'string' ? p : p?.uri;
+        return `<div style="page-break-after:always; height:100vh; display:flex; justify-content:center; align-items:center;"><img src="${imgUri}" style="max-width:100%; max-height:100%; object-fit:contain;" /></div>`;
+      }).join('');
+      const htmlContent = `<!DOCTYPE html><html><head><style>body{margin:0;padding:0;background:#fff;}</style></head><body>${htmlPages}</body></html>`;
+      const { uri: pdfUri } = await Print.printToFileAsync({ html: htmlContent });
+      const filename = cleanName.endsWith('.pdf') ? cleanName : `${cleanName}.pdf`;
+      return {
+        fileUri: pdfUri,
+        filename,
+        mimeType: 'application/pdf',
+        extension: 'pdf'
+      };
+    }
+
+    throw new Error("فایلەکە نەدۆزرایەوە یان هیچ پەڕەیەکی تێدا نییە.");
+  };
+
+  const handleShareDoc = async (doc) => {
+    try {
+      const { fileUri, mimeType } = await getDocumentRealFile(doc);
+      if (!fileUri) {
+        Alert.alert("هەڵە", "فایلەکە نەدۆزرایەوە.");
+        return;
+      }
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert("ئاگاداری", "سیستەمی هاوبەشکردن لەسەر ئەم ئامێرە ئامادە نییە.");
+        return;
+      }
+      await Sharing.shareAsync(fileUri, { mimeType });
+    } catch (err) {
+      console.log('[Home Export] Share error:', err);
+      Alert.alert("هەڵە", "کێشەیەک ڕوویدا لە کاتی هاوبەشکردنی فایلەکە.");
+    }
+  };
+
+  const handleSaveToPhoneDoc = async (doc) => {
+    try {
+      const { fileUri, filename, mimeType } = await getDocumentRealFile(doc);
+      if (!fileUri) {
+        Alert.alert("هەڵە", "فایلەکە نەدۆزرایەوە.");
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permissions.granted) {
+          return;
+        }
+
+        const fileData = await FileSystem.readAsStringAsync(fileUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        const createdUri = await FileSystem.StorageAccessFramework.createFileAsync(
+          permissions.directoryUri,
+          filename,
+          mimeType
+        );
+
+        await FileSystem.StorageAccessFramework.writeAsStringAsync(createdUri, fileData, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        Alert.alert("سەرکەوتوو", "فایلەکە بە سەرکەوتوویی لە مۆبایلەکەدا پاشەکەوت کرا ✅");
+      } else {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (!isAvailable) {
+          Alert.alert("ئاگاداری", "سیستەمی هاوبەشکردن لەسەر ئەم ئامێرە ئامادە نییە.");
+          return;
+        }
+        await Sharing.shareAsync(fileUri, { mimeType, UTI: mimeType });
+        Alert.alert("سەرکەوتوو", "فایلەکە بە سەرکەوتوویی بۆ فایلەکانی مۆبایل ڕەوانە کرا ✅");
+      }
+    } catch (err) {
+      console.log('[Home Export] Save to Phone error:', err);
+      Alert.alert("هەڵە", "کێشەیەک ڕوویدا لە کاتی پاشەکەوتکردنی فایلەکە لەسەر مۆبایل.");
+    }
   };
 
   // --- Handlers ---
@@ -272,11 +427,11 @@ export default function App() {
       [
         {
           text: "کامێرا 📷",
-          onPress: () => askOCRCropChoice(true),
+          onPress: () => pickImageForOCR(true),
         },
         {
           text: "گالێری 🖼️",
-          onPress: () => askOCRCropChoice(false),
+          onPress: () => pickImageForOCR(false),
         },
         {
           text: "پاشگەزبوونەوە",
@@ -286,53 +441,99 @@ export default function App() {
     );
   };
 
-  const askOCRCropChoice = (useCamera) => {
-    Alert.alert(
-      "بڕینی وێنە ✂️",
-      "ئایا دەتەوێت ناوچەی دەقەکە ببڕیت یان تەواوی وێنەکە بەکاربهێنیت؟",
-      [
-        {
-          text: "بڕینی دەقەکە ✂️",
-          onPress: () => pickImageForOCR(useCamera, true),
-        },
-        {
-          text: "تەواوی وێنەکە 📄",
-          onPress: () => pickImageForOCR(useCamera, false),
-        },
-        {
-          text: "پاشگەزبوونەوە",
-          style: "cancel",
-        },
-      ]
-    );
-  };
-
-  const pickImageForOCR = async (useCamera, shouldCrop) => {
+  const pickImageForOCR = async (useCamera) => {
     try {
-      const options = shouldCrop
-        ? {
-            cropping: true,
-            freeStyleCropEnabled: true,
-            enableRotationGesture: true,
-            compressImageQuality: 1,
+      let imageUri = null;
+
+      try {
+        if (useCamera) {
+          const permission = await ExpoImagePicker.requestCameraPermissionsAsync();
+          if (permission.granted) {
+            const res = await ExpoImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              quality: 1,
+            });
+            if (!res.canceled && res.assets && res.assets.length > 0) {
+              imageUri = res.assets[0].uri;
+            }
           }
-        : {
-            cropping: false,
-            compressImageQuality: 1,
-          };
+        } else {
+          const permission = await ExpoImagePicker.requestMediaLibraryPermissionsAsync();
+          if (permission.granted) {
+            const res = await ExpoImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              allowsEditing: true,
+              quality: 1,
+            });
+            if (!res.canceled && res.assets && res.assets.length > 0) {
+              imageUri = res.assets[0].uri;
+            }
+          }
+        }
+      } catch (expoErr) {
+        console.log("ExpoImagePicker error/fallback:", expoErr);
+      }
 
-      const image = useCamera
-        ? await ImagePicker.openCamera(options)
-        : await ImagePicker.openPicker(options);
+      if (!imageUri) {
+        const options = {
+          cropping: true,
+          freeStyleCropEnabled: true,
+          enableRotationGesture: true,
+          compressImageQuality: 1,
+        };
 
-      if (image && image.path) {
-        setOcrImageUri(image.path);
+        const image = useCamera
+          ? await ImagePicker.openCamera(options)
+          : await ImagePicker.openPicker(options);
+
+        if (image && image.path) {
+          imageUri = image.path;
+        }
+      }
+
+      if (!imageUri) return;
+
+      // Crop screen to allow user to crop out faces, logos, and background noise
+      try {
+        const cropped = await ImagePicker.openCropper({
+          path: imageUri.startsWith('file://') ? imageUri : 'file://' + imageUri,
+          freeStyleCropEnabled: true,
+          enableRotationGesture: true,
+          compressImageQuality: 1,
+        });
+        if (cropped && cropped.path) {
+          imageUri = cropped.path;
+        }
+      } catch (cropCancel) {
+        console.log("Crop screen cancelled or bypassed, using initial image.");
+      }
+
+      setOcrImageUri(imageUri);
+      setOcrText('');
+      setOcrModalVisible(true);
+      startOCRRecognition(imageUri, ocrLang);
+    } catch (e) {
+      console.log("OCR Image Picker cancelled or error:", e);
+    }
+  };
+
+  const recropImageForOCR = async () => {
+    if (!ocrImageUri) return;
+    try {
+      const cropped = await ImagePicker.openCropper({
+        path: ocrImageUri.startsWith('file://') ? ocrImageUri : 'file://' + ocrImageUri,
+        freeStyleCropEnabled: true,
+        enableRotationGesture: true,
+        compressImageQuality: 1,
+      });
+
+      if (cropped && cropped.path) {
+        setOcrImageUri(cropped.path);
         setOcrText('');
-        setOcrModalVisible(true);
-        startOCRRecognition(image.path, ocrLang);
+        startOCRRecognition(cropped.path, ocrLang);
       }
     } catch (e) {
-      // User cancelled
+      console.log("Recrop cancelled:", e);
     }
   };
 
@@ -865,18 +1066,9 @@ export default function App() {
     setLockModalVisible(true);
   };
 
-  const handlePPT = async () => {
+  const handlePPT = () => {
     setToolsModalVisible(false);
-    try {
-      const res = await DocumentScanner.scanDocument({ maxNumDocuments: 50, responseType: 'imageFilePath', letUserAdjustCrop: true });
-      if (res.scannedImages?.length > 0) {
-        const newPpt = { id: Date.now().toString(), name: "PPT_" + Date.now(), date: new Date().toLocaleDateString(), pages: res.scannedImages, thumbnail: res.scannedImages[0], password: '', type: 'ppt' };
-        const updatedDocs = [newPpt, ...documents];
-        setDocuments(updatedDocs);
-        await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
-        Alert.alert("سەرکەوتوو", "پاوەرپۆینت دروست کرا ✅");
-      }
-    } catch (e) {}
+    setPptEditorVisible(true);
   };
 
   const handleSmartEraseInit = async () => {
@@ -1279,12 +1471,25 @@ export default function App() {
       </View>
       <ScrollView contentContainerStyle={{padding: 20, paddingBottom: 120}}>
         <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 15}}>نوێترین سکانەکان</Text>
-        {documents.slice(0, 3).map(doc => (
-          <TouchableOpacity key={doc.id} style={styles.docCard} onPress={() => { if(doc.password) { setTargetDoc(doc); setPassInputVisible(true); } else { setEditingDoc(doc); setCurrentScreen('edit'); }}}>
-            <Image source={{ uri: doc.thumbnail || doc.pages[0] }} style={styles.docThumb} />
-            <View style={{flex: 1, marginLeft: 15}}><Text style={styles.docName}>{doc.name}</Text></View>
-          </TouchableOpacity>
-        ))}
+        {documents.slice(0, 3).map(doc => {
+          const thumbUri = (typeof doc.thumbnail === 'string' && doc.thumbnail) ? doc.thumbnail : ((typeof doc.pages?.[0] === 'string' ? doc.pages[0] : doc.pages?.[0]?.uri) || 'https://cdn-icons-png.flaticon.com/512/337/337946.png');
+          return (
+            <TouchableOpacity key={doc.id} style={styles.docCard} onPress={() => { if(doc.password) { setTargetDoc(doc); setPassInputVisible(true); } else { setEditingDoc(doc); setCurrentScreen('edit'); }}}>
+              <Image source={{ uri: thumbUri }} style={styles.docThumb} />
+              <View style={{flex: 1, marginLeft: 15}}><Text style={styles.docName}>{doc.name}</Text></View>
+              <TouchableOpacity
+                style={{paddingHorizontal: 10, paddingVertical: 5}}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  setSelectedHomeDoc(doc);
+                  setHomeDocMenuVisible(true);
+                }}
+              >
+                <Text style={{color: '#fff', fontSize: 22, fontWeight: 'bold'}}>⋮</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          );
+        })}
         {documents.length > 3 && <TouchableOpacity style={{alignItems: 'center', marginTop: 10}} onPress={() => setCurrentScreen('files')}><Text style={{color: '#007AFF'}}>بینینی هەمووی 〉</Text></TouchableOpacity>}
       </ScrollView>
       {renderBottomTab()}
@@ -1296,13 +1501,16 @@ export default function App() {
       <View style={styles.header}><Text style={styles.logo}>هەموو <Text style={{color: '#ffd60a'}}>فایلەکان</Text></Text></View>
       <View style={styles.searchContainer}><TextInput style={styles.searchInput} placeholder="گەڕان..." placeholderTextColor="#888" value={searchQuery} onChangeText={setSearchQuery}/></View>
       <ScrollView contentContainerStyle={{padding: 20, paddingBottom: 120}}>
-        {documents.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase())).map(doc => (
-          <TouchableOpacity key={doc.id} style={styles.docCard} onPress={() => { if(doc.password) { setTargetDoc(doc); setPassInputVisible(true); } else { setEditingDoc(doc); setCurrentScreen('edit'); }}}>
-            <Image source={{ uri: doc.thumbnail || doc.pages[0] }} style={styles.docThumb} />
-            <View style={{flex: 1, marginLeft: 15}}><Text style={styles.docName}>{doc.name}</Text><Text style={{color: '#8e8e93', fontSize: 11}}>{doc.date}</Text></View>
-            <TouchableOpacity onPress={() => { const f = documents.filter(d => d.id !== doc.id); setDocuments(f); AsyncStorage.setItem('saved_documents', JSON.stringify(f)); }}><Text style={{fontSize: 20}}>🗑️</Text></TouchableOpacity>
-          </TouchableOpacity>
-        ))}
+        {documents.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase())).map(doc => {
+          const thumbUri = (typeof doc.thumbnail === 'string' && doc.thumbnail) ? doc.thumbnail : ((typeof doc.pages?.[0] === 'string' ? doc.pages[0] : doc.pages?.[0]?.uri) || 'https://cdn-icons-png.flaticon.com/512/337/337946.png');
+          return (
+            <TouchableOpacity key={doc.id} style={styles.docCard} onPress={() => { if(doc.password) { setTargetDoc(doc); setPassInputVisible(true); } else { setEditingDoc(doc); setCurrentScreen('edit'); }}}>
+              <Image source={{ uri: thumbUri }} style={styles.docThumb} />
+              <View style={{flex: 1, marginLeft: 15}}><Text style={styles.docName}>{doc.name}</Text><Text style={{color: '#8e8e93', fontSize: 11}}>{doc.date}</Text></View>
+              <TouchableOpacity onPress={() => { const f = documents.filter(d => d.id !== doc.id); setDocuments(f); AsyncStorage.setItem('saved_documents', JSON.stringify(f)); }}><Text style={{fontSize: 20}}>🗑️</Text></TouchableOpacity>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
       {renderBottomTab()}
     </View>
@@ -1572,11 +1780,360 @@ export default function App() {
         <Text style={styles.navTitle}>{editingDoc?.name || "بەڵگە"}</Text>
         <TouchableOpacity onPress={() => { const idx = documents.findIndex(d => d.id === editingDoc.id); let newDocs = [...documents]; if (idx > -1) newDocs[idx] = editingDoc; else newDocs = [editingDoc, ...newDocs]; setDocuments(newDocs); AsyncStorage.setItem('saved_documents', JSON.stringify(newDocs)); setCurrentScreen('home'); }}><Text style={{color: '#34C759', fontWeight: 'bold'}}>Save</Text></TouchableOpacity>
       </View>
-      <FlatList data={editingDoc?.pages || []} keyExtractor={(_, i) => i.toString()} renderItem={({ item }) => (
-          <View style={styles.pageCard}><Image source={{ uri: item }} style={styles.editImg} /></View>
-        )}
+      <FlatList data={editingDoc?.pages || []} keyExtractor={(_, i) => i.toString()} renderItem={({ item }) => {
+          if (typeof item === 'object' && item?.type === 'text') {
+            return (
+              <View style={[styles.pageCard, { backgroundColor: '#fff', padding: 20, minHeight: 200, justifyContent: 'flex-start' }]}>
+                <Text style={{ color: '#000', fontSize: 16, lineHeight: 26, textAlign: 'right', writingDirection: 'rtl' }}>
+                  {item.text}
+                </Text>
+              </View>
+            );
+          }
+          const imgUri = typeof item === 'string' ? item : item?.uri;
+          return (
+            <View style={styles.pageCard}><Image source={{ uri: imgUri }} style={styles.editImg} /></View>
+          );
+        }}
       />
     </View>
+  );
+
+  const renderPptModal = () => (
+    <>
+      <Modal visible={pptModalVisible} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={{ backgroundColor: '#1c1c1e', width: '95%', height: '90%', borderRadius: 24, padding: 18 }}>
+
+            {/* Modal Header */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#007AFF', fontSize: 18, fontWeight: 'bold' }}>دروستکەری پاوەرپۆینت (PPT) 📊</Text>
+              <TouchableOpacity onPress={() => setPptModalVisible(false)} style={{ padding: 4 }}>
+                <Text style={{ color: '#888', fontSize: 22, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Loading Indicator during PPT generation */}
+            {pptGenerating ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 16, padding: 20 }}>
+                <ActivityIndicator size="large" color="#D24726" />
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', marginTop: 16, textAlign: 'center' }}>
+                  خەریکی دروستکردنی فایلی پاوەرپۆینتە... ⏳
+                </Text>
+              </View>
+            ) : pptCreatedDoc ? (
+              /* Post-Creation Card: Share & Save */
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 16, padding: 20 }}>
+                <Text style={{ fontSize: 48, marginBottom: 10 }}>🎉</Text>
+                <Text style={{ color: '#30d158', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 }}>
+                  پاوەرپۆینت بە سەرکەوتوویی دروست کرا!
+                </Text>
+                <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
+                  📄 {pptCreatedDoc.name}.pptx
+                </Text>
+
+                {/* Action Buttons */}
+                <TouchableOpacity
+                  style={{ backgroundColor: '#007AFF', width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 10 }}
+                  onPress={() => handleShareDoc(pptCreatedDoc)}
+                >
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>📤 هاوبەشکردن (Share)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ backgroundColor: '#34c759', width: '100%', padding: 14, borderRadius: 12, alignItems: 'center', marginBottom: 15 }}
+                  onPress={() => handleSaveToPhoneDoc(pptCreatedDoc)}
+                >
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>💾 پاشەکەوتکردن لە مۆبایل</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ backgroundColor: '#3a3a3c', width: '100%', padding: 12, borderRadius: 12, alignItems: 'center', marginBottom: 10 }}
+                  onPress={() => setPptCreatedDoc(null)}
+                >
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>➕ دروستکردنی پاوەرپۆینتێکی تر</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ padding: 10 }}
+                  onPress={() => setPptModalVisible(false)}
+                >
+                  <Text style={{ color: '#ff453a', fontSize: 15, fontWeight: 'bold' }}>داخستن</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* Main Form / Slide List View */
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+
+                {/* Aspect Ratio Options */}
+                <View style={{ backgroundColor: '#2c2c2e', padding: 12, borderRadius: 14, marginBottom: 12 }}>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 8, textAlign: 'right' }}>
+                    قەبارەی پەڕە (Aspect Ratio):
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        backgroundColor: pptLayout === '16:9' ? '#D24726' : '#3a3a3c',
+                      }}
+                      onPress={() => setPptLayout('16:9')}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>16:9 (پان / Widescreen)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        backgroundColor: pptLayout === '4:3' ? '#D24726' : '#3a3a3c',
+                      }}
+                      onPress={() => setPptLayout('4:3')}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>4:3 (ئاسایی / Standard)</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Title Slide Option */}
+                <View style={{ backgroundColor: '#2c2c2e', padding: 12, borderRadius: 14, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => setPptIncludeTitle(!pptIncludeTitle)}
+                  >
+                    <Text style={{ color: pptIncludeTitle ? '#30d158' : '#aaa', fontSize: 18 }}>
+                      {pptIncludeTitle ? '☑️' : '⏹️'}
+                    </Text>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>
+                      پەڕەی سەردێڕی سەرەکی (Title Slide)
+                    </Text>
+                  </TouchableOpacity>
+
+                  {pptIncludeTitle && (
+                    <View style={{ marginTop: 10, gap: 8 }}>
+                      <TextInput
+                        style={{ backgroundColor: '#1c1c1e', color: '#fff', borderRadius: 8, padding: 10, fontSize: 14, textAlign: 'right' }}
+                        placeholder="سەردێڕی سەرەکی (Kurdish/Arabic)..."
+                        placeholderTextColor="#777"
+                        value={pptTitleText}
+                        onChangeText={setPptTitleText}
+                      />
+                      <TextInput
+                        style={{ backgroundColor: '#1c1c1e', color: '#fff', borderRadius: 8, padding: 10, fontSize: 14, textAlign: 'right' }}
+                        placeholder="ژێرنووس / ناوی ئامادەکار..."
+                        placeholderTextColor="#777"
+                        value={pptSubtitleText}
+                        onChangeText={setPptSubtitleText}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                {/* Add Slides Action Grid */}
+                <Text style={{ color: '#aaa', fontSize: 13, fontWeight: 'bold', marginBottom: 8, textAlign: 'right' }}>
+                  زێدەکردنی سڵاید لە:
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, minWidth: '45%', backgroundColor: '#007AFF22', borderColor: '#007AFF', borderWidth: 1, padding: 10, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                    onPress={addPptImagesFromGallery}
+                  >
+                    <Text style={{ fontSize: 16 }}>🖼️</Text>
+                    <Text style={{ color: '#007AFF', fontWeight: 'bold', fontSize: 13 }}>گەلەری</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flex: 1, minWidth: '45%', backgroundColor: '#34c75922', borderColor: '#34c759', borderWidth: 1, padding: 10, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                    onPress={addPptImagesFromCamera}
+                  >
+                    <Text style={{ fontSize: 16 }}>📷</Text>
+                    <Text style={{ color: '#34c759', fontWeight: 'bold', fontSize: 13 }}>کامێرا</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flex: 1, minWidth: '45%', backgroundColor: '#af52de22', borderColor: '#af52de', borderWidth: 1, padding: 10, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                    onPress={() => setPptDocPickerVisible(true)}
+                  >
+                    <Text style={{ fontSize: 16 }}>📁</Text>
+                    <Text style={{ color: '#af52de', fontWeight: 'bold', fontSize: 13 }}>بەڵگەنامەکان</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flex: 1, minWidth: '45%', backgroundColor: '#ff950022', borderColor: '#ff9500', borderWidth: 1, padding: 10, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                    onPress={() => setPptTextModalVisible(true)}
+                  >
+                    <Text style={{ fontSize: 16 }}>📝</Text>
+                    <Text style={{ color: '#ff9500', fontWeight: 'bold', fontSize: 13 }}>پەڕەی دەق (OCR)</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Selected Slides List Header */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={{ color: '#888', fontSize: 12 }}>{pptSlides.length} سڵاید</Text>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>لیستی سڵایدەکان</Text>
+                </View>
+
+                {/* Empty state */}
+                {pptSlides.length === 0 ? (
+                  <View style={{ backgroundColor: '#2c2c2e', padding: 20, borderRadius: 14, alignItems: 'center', marginVertical: 10 }}>
+                    <Text style={{ color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 20 }}>
+                      هیچ سڵایدێک زێدە نەکراوە. دوگمەکانی سەرەوە بەکاربێنە بۆ زێدەکردنی وێنە یان دەق.
+                    </Text>
+                  </View>
+                ) : (
+                  pptSlides.map((slide, idx) => (
+                    <View
+                      key={slide.id || idx}
+                      style={{ backgroundColor: '#2c2c2e', padding: 10, borderRadius: 12, marginBottom: 8 }}
+                    >
+                      {/* Slide Top Info */}
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <TouchableOpacity
+                            disabled={idx === 0}
+                            onPress={() => movePptSlideUp(idx)}
+                            style={{ backgroundColor: '#3a3a3c', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, opacity: idx === 0 ? 0.3 : 1 }}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 12 }}>▲ سەرەوە</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            disabled={idx === pptSlides.length - 1}
+                            onPress={() => movePptSlideDown(idx)}
+                            style={{ backgroundColor: '#3a3a3c', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, opacity: idx === pptSlides.length - 1 ? 0.3 : 1 }}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 12 }}>▼ خوارەوە</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => deletePptSlide(slide.id)}
+                            style={{ backgroundColor: '#ff453a22', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                          >
+                            <Text style={{ color: '#ff453a', fontSize: 12, fontWeight: 'bold' }}>🗑️ سڕینەوە</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={{ color: '#D24726', fontWeight: 'bold', fontSize: 13 }}>
+                          {slide.type === 'image' ? '📸 وێنە' : '📝 دەق'} #{idx + 1}
+                        </Text>
+                      </View>
+
+                      {/* Content Thumbnail */}
+                      {slide.type === 'image' && slide.uri ? (
+                        <Image
+                          source={{ uri: slide.uri }}
+                          style={{ width: '100%', height: 110, borderRadius: 8, backgroundColor: '#1c1c1e' }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View style={{ backgroundColor: '#1c1c1e', padding: 10, borderRadius: 8 }}>
+                          {slide.title ? (
+                            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, textAlign: 'right', marginBottom: 4 }}>
+                              {slide.title}
+                            </Text>
+                          ) : null}
+                          {slide.text ? (
+                            <Text style={{ color: '#ccc', fontSize: 12, textAlign: 'right' }} numberOfLines={3}>
+                              {slide.text}
+                            </Text>
+                          ) : null}
+                        </View>
+                      )}
+                    </View>
+                  ))
+                )}
+
+                {/* Bottom Generate Button */}
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#D24726',
+                    paddingVertical: 14,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    marginTop: 15,
+                    marginBottom: 30,
+                  }}
+                  onPress={handleCreatePPT}
+                >
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>دروستکردنی PPT 🚀</Text>
+                </TouchableOpacity>
+
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Document Picker Modal for PPT */}
+      <Modal visible={pptDocPickerVisible} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={{ backgroundColor: '#1c1c1e', width: '90%', maxHeight: '80%', borderRadius: 20, padding: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>هەڵبژاردنی بەڵگەنامە</Text>
+              <TouchableOpacity onPress={() => setPptDocPickerVisible(false)}>
+                <Text style={{ color: '#888', fontSize: 20 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 350 }}>
+              {documents.length === 0 ? (
+                <Text style={{ color: '#888', textAlign: 'center', padding: 20 }}>هیچ بەڵگەنامەیەک نەدۆزرایەوە.</Text>
+              ) : (
+                documents.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    style={{ backgroundColor: '#2c2c2e', padding: 12, borderRadius: 10, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    onPress={() => importPptFromDoc(doc)}
+                  >
+                    <Text style={{ color: '#888', fontSize: 12 }}>{doc.pages?.length || 1} پەڕە</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>{doc.name}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Text Slide Modal for PPT */}
+      <Modal visible={pptTextModalVisible} transparent animationType="slide">
+        <View style={styles.overlay}>
+          <View style={{ backgroundColor: '#1c1c1e', width: '92%', borderRadius: 20, padding: 18 }}>
+            <Text style={{ color: '#007AFF', fontSize: 16, fontWeight: 'bold', textAlign: 'right', marginBottom: 12 }}>
+              زێدەکردنی سڵایدی دەق 📝
+            </Text>
+            <TextInput
+              style={{ backgroundColor: '#2c2c2e', color: '#fff', borderRadius: 10, padding: 12, fontSize: 14, textAlign: 'right', marginBottom: 10 }}
+              placeholder="سەردێڕی سڵاید (دڵخواز)..."
+              placeholderTextColor="#777"
+              value={pptTextTitle}
+              onChangeText={setPptTextTitle}
+            />
+            <TextInput
+              style={{ backgroundColor: '#2c2c2e', color: '#fff', borderRadius: 10, padding: 12, fontSize: 14, textAlign: 'right', height: 120, textAlignVertical: 'top', marginBottom: 15 }}
+              placeholder="دەقی سڵاید (دەتوانی دەقی کۆپیکراوی OCR لێرە بنووسی یان پەیست بکەی)..."
+              placeholderTextColor="#777"
+              multiline
+              value={pptTextBody}
+              onChangeText={setPptTextBody}
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#3a3a3c', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => setPptTextModalVisible(false)}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>پاشگەزبوونەوە</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#D24726', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                onPress={addPptTextSlide}
+              >
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>زێدەکردن</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 
   const renderBottomTab = () => (
@@ -1609,7 +2166,7 @@ export default function App() {
           <ToolIcon icon="✍️" label="ئیمزا" color="#FFF3E0" onPress={handleSignature} />
           <ToolIcon icon="🪄" label="سڕینەوە" color="#F3E5F5" onPress={handleSmartEraseInit} />
           <ToolIcon icon="🔐" label="قفڵ" color="#E3F2FD" onPress={handleLock} />
-          <ToolIcon icon="📊" label="PPT" color="#E3F2FD" onPress={handlePPT} />
+          <ToolIcon icon={<MaterialCommunityIcons name="file-powerpoint-box" size={28} color="#D24726" />} label="PPT" color="#FFEBE6" onPress={handlePPT} />
           <ToolIcon icon="🌐" label="وەرگێڕان" color="#E1F5FE" onPress={() => { setToolsModalVisible(false); setTransModalVisible(true); }} />
         </View>
         <Text style={styles.sectionTitle}>سکانی زیرەک</Text>
@@ -1625,10 +2182,18 @@ export default function App() {
         <View style={styles.overlay}>
           <View style={{backgroundColor: '#1c1c1e', width: '94%', height: '88%', borderRadius: 30, padding: 20, justifyContent: 'space-between'}}>
             <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
-              <Text style={{color: '#007AFF', fontSize: 20, fontWeight: 'bold'}}>خوێنەرەوەی دەق (OCR) 🔎</Text>
-              <TouchableOpacity onPress={() => setOcrModalVisible(false)}>
-                <Text style={{color: '#888', fontSize: 22}}>✕</Text>
-              </TouchableOpacity>
+              <Text style={{color: '#007AFF', fontSize: 18, fontWeight: 'bold'}}>خوێنەرەوەی دەق (OCR) 🔎</Text>
+              <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+                <TouchableOpacity
+                  style={{backgroundColor: '#007AFF22', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8}}
+                  onPress={recropImageForOCR}
+                >
+                  <Text style={{color: '#007AFF', fontSize: 13, fontWeight: 'bold'}}>✂️ بڕینەوە</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setOcrModalVisible(false)}>
+                  <Text style={{color: '#888', fontSize: 22}}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Language Selector Row */}
@@ -1702,12 +2267,19 @@ export default function App() {
               <TouchableOpacity
                 style={{backgroundColor: '#34C759', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, flex: 1, alignItems: 'center'}}
                 onPress={async () => {
-                  if (!ocrText) return;
                   try {
-                    const txtUri = `${FileSystem.documentDirectory}ocr_text_${Date.now()}.txt`;
+                    if (!ocrText || !ocrText.trim()) {
+                      Alert.alert("ئاگاداری", "تکایە سەرەتا دەقێک بنووسە یان سکان بکە.");
+                      return;
+                    }
+                    const filename = `scan-text-${Date.now()}.txt`;
+                    const txtUri = `${FileSystem.cacheDirectory}${filename}`;
                     await FileSystem.writeAsStringAsync(txtUri, ocrText, { encoding: FileSystem.EncodingType.UTF8 });
-                    await Sharing.shareAsync(txtUri);
-                  } catch (e) {}
+                    await Sharing.shareAsync(txtUri, { mimeType: 'text/plain' });
+                  } catch (err) {
+                    console.log('[OCR Buttons] TXT Share Error:', err);
+                    Alert.alert("هەڵە", "کێشەیەک ڕوویدا لە کاتی هاوبەشکردنی دەقەکە.");
+                  }
                 }}
               >
                 <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>📤 هاوبەشکردن / TXT</Text>
@@ -1715,16 +2287,45 @@ export default function App() {
 
               <TouchableOpacity
                 style={{backgroundColor: '#AF52DE', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, flex: 1, alignItems: 'center'}}
-                onPress={() => {
-                  if (!ocrText) return;
-                  if (editingDoc) {
-                    setEditingDoc({
-                      ...editingDoc,
-                      ocrText: (editingDoc.ocrText ? editingDoc.ocrText + '\n\n' : '') + ocrText
-                    });
-                    Alert.alert("سەرکەوتوو", "دەقەکە بۆ بەڵگەنامەکە زیاد کرا ✅");
-                  } else {
-                    Alert.alert("زانیاری", "سەرەتا بەڵگەنامەیەک بکەرەوە بۆ زیادکردنی دەقەکە");
+                onPress={async () => {
+                  try {
+                    if (!ocrText || !ocrText.trim()) {
+                      Alert.alert("ئاگاداری", "تکایە سەرەتا دەقێک بنووسە یان سکان بکە.");
+                      return;
+                    }
+                    const textPage = { type: 'text', text: ocrText };
+                    let updatedDocs = [];
+
+                    if (editingDoc) {
+                      const updatedDoc = {
+                        ...editingDoc,
+                        pages: [...(editingDoc.pages || []), textPage]
+                      };
+                      setEditingDoc(updatedDoc);
+                      const otherDocs = documents.filter(d => d.id !== updatedDoc.id);
+                      updatedDocs = [updatedDoc, ...otherDocs];
+                      setDocuments(updatedDocs);
+                      await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
+                      Alert.alert("سەرکەوتوو", "دەقەکە وەکو پەڕەیەکی نوێ بۆ بەڵگەنامەکە زیاد کرا ✅");
+                    } else {
+                      const todayDate = new Date().toLocaleDateString();
+                      const newDoc = {
+                        id: Date.now().toString(),
+                        name: "بەڵگە_" + todayDate,
+                        date: todayDate,
+                        pages: [textPage],
+                        thumbnail: 'https://cdn-icons-png.flaticon.com/512/337/337946.png',
+                        password: ''
+                      };
+                      setEditingDoc(newDoc);
+                      updatedDocs = [newDoc, ...documents];
+                      setDocuments(updatedDocs);
+                      await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
+                      Alert.alert("سەرکەوتوو", "بەڵگەنامەیەکی نوێ دروستکرا و دەقەکەی بۆ زیاد کرا ✅");
+                    }
+                  } catch (err) {
+                    console.log('[OCR Buttons] Add to Doc Error:', err);
+                    Alert.alert("هەڵە", "کێشەیەک ڕوویدا لە کاتی زیادکردنی دەقەکە بۆ بەڵگەنامە.");
                   }
                 }}
               >
@@ -1737,6 +2338,56 @@ export default function App() {
       <Modal visible={idModalVisible} transparent animationType="fade"><View style={styles.overlay}><View style={styles.idBox}><View style={styles.idPreviewBox}><Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1042/1042340.png' }} style={styles.idIllustration} /><View style={styles.passportGuideBox}><Text style={styles.guideLine}>┌                                          ┐</Text><View style={{height: 60}} /><Text style={{color: '#fff', fontSize: 10, textAlign: 'center'}}>وێنەی {idCategory} لێرە ڕێکبخە</Text><View style={{height: 20}} /><Text style={styles.guideLine}>└                                          ┘</Text></View></View><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.idCats}>{['گشتی', 'ناسنامە', 'مۆڵەت', 'پاسپۆرت', 'کارتی بانکی', 'بڕوانامە'].map(cat => (<TouchableOpacity key={cat} style={[styles.catBtn, idCategory === cat && styles.catBtnActive]} onPress={() => setIdCategory(cat)}><Text style={[styles.catText, idCategory === cat && {color: '#fff'}]}>{cat}</Text></TouchableOpacity>))}</ScrollView><TouchableOpacity style={styles.makeBtn} onPress={startIDScan}><Text style={styles.makeBtnText}>ئێستا وێنەکە بگرە</Text></TouchableOpacity><TouchableOpacity onPress={() => setIdModalVisible(false)} style={{marginTop: 15}}><Text style={{color: '#888', textAlign: 'center'}}>پاشگەزبوونەوە</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={lockModalVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15, textAlign:'center'}}>کۆد بۆ فایل دابنێ</Text><TextInput style={styles.renameIn} placeholder="Pass..." value={docPassword} onChangeText={setDocPassword} keyboardType="numeric" /><TouchableOpacity onPress={() => { if(editingDoc) setEditingDoc({...editingDoc, password: docPassword}); setLockModalVisible(false); Alert.alert("سەرکەوتوو", "فایلەکە قفڵ کرا"); }}><Text style={{color: '#34C759', fontWeight: 'bold', textAlign: 'center'}}>تەواو</Text></TouchableOpacity></View></View></Modal>
       <Modal visible={passInputVisible} transparent><View style={styles.overlay}><View style={styles.renameBox}><Text style={{color: '#fff', marginBottom: 15}}>قفڵ کراوە 🔒</Text><TextInput style={styles.renameIn} placeholder="کۆد..." value={enteredPass} onChangeText={setPassToCheck} secureTextEntry /><TouchableOpacity onPress={() => { if(enteredPass===targetDoc.password) { setEditingDoc(targetDoc); setCurrentScreen('edit'); setPassInputVisible(false); setPassToCheck(''); } else Alert.alert("هەڵە","کۆدەکە هەڵەیە"); }}><Text style={{color: '#007AFF', fontWeight: 'bold', textAlign: 'center'}}>بیکەرەوە</Text></TouchableOpacity></View></View></Modal>
+
+      {/* HOME RECENT SCANS ACTION MENU MODAL */}
+      <Modal visible={homeDocMenuVisible} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setHomeDocMenuVisible(false)}
+        >
+          <View style={{backgroundColor: '#1c1c1e', width: '85%', borderRadius: 20, padding: 20}}>
+            <Text style={{color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'center'}}>
+              {selectedHomeDoc?.name || "کردارەکان"}
+            </Text>
+
+            <TouchableOpacity
+              style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#333'}}
+              onPress={async () => {
+                const target = selectedHomeDoc;
+                setHomeDocMenuVisible(false);
+                if (target) {
+                  await handleShareDoc(target);
+                }
+              }}
+            >
+              <Text style={{fontSize: 20, marginRight: 12}}>📤</Text>
+              <Text style={{color: '#fff', fontSize: 15, fontWeight: 'bold'}}>هاوبەشکردن</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{flexDirection: 'row', alignItems: 'center', paddingVertical: 14}}
+              onPress={async () => {
+                const target = selectedHomeDoc;
+                setHomeDocMenuVisible(false);
+                if (target) {
+                  await handleSaveToPhoneDoc(target);
+                }
+              }}
+            >
+              <Text style={{fontSize: 20, marginRight: 12}}>💾</Text>
+              <Text style={{color: '#fff', fontSize: 15, fontWeight: 'bold'}}>پاشەکەوتکردن لە مۆبایل</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{marginTop: 15, paddingTop: 10, alignItems: 'center'}}
+              onPress={() => setHomeDocMenuVisible(false)}
+            >
+              <Text style={{color: '#ff3b30', fontWeight: 'bold', fontSize: 15}}>داخستن</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* SIGNATURE PAD MODAL */}
       <Modal visible={signatureModalVisible} transparent animationType="slide">
@@ -1877,6 +2528,18 @@ export default function App() {
           />
         )}
       </Modal>
+
+      <PptEditorModal
+        visible={pptEditorVisible}
+        onClose={() => setPptEditorVisible(false)}
+        onSaveDocument={(newDoc) => {
+          const updatedDocs = [newDoc, ...documents];
+          setDocuments(updatedDocs);
+          AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
+        }}
+        handleShareDoc={handleShareDoc}
+        handleSaveToPhoneDoc={handleSaveToPhoneDoc}
+      />
 
       {loading && <View style={styles.loader}><ActivityIndicator size="large" color="#007AFF" /></View>}
     </SafeAreaView></View></SafeAreaProvider>
