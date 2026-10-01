@@ -10,7 +10,7 @@ class ExpoTesseractOcrModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ExpoTesseractOcr")
 
-    AsyncFunction("recognizeText") { tessDataPath: String, lang: String, imagePath: String ->
+    AsyncFunction("recognizeText") { tessDataPath: String, lang: String, imagePath: String, psm: Int? ->
       val cleanDataPath = tessDataPath.removePrefix("file://")
       val cleanImagePath = imagePath.removePrefix("file://")
 
@@ -40,6 +40,7 @@ class ExpoTesseractOcrModule : Module() {
       var languagesLoaded = ""
       var tessVersion = ""
       var errorMessage = ""
+      val linesList = mutableListOf<Map<String, Any>>()
 
       var tessApi: TessBaseAPI? = null
 
@@ -61,7 +62,9 @@ class ExpoTesseractOcrModule : Module() {
 
         if (initOk) {
           languagesLoaded = try { tessApi.initLanguagesAsString ?: "" } catch (e: Throwable) { "" }
-          tessApi.pageSegMode = TessBaseAPI.PageSegMode.PSM_AUTO
+
+          val psmMode = psm ?: TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+          tessApi.pageSegMode = psmMode
 
           val imgFile = File(imagePathUsed)
           println("[ExpoTesseractOcr Native] Checking image file: ${imgFile.absolutePath} -> exists: ${imgFile.exists()}")
@@ -78,7 +81,86 @@ class ExpoTesseractOcrModule : Module() {
             text = tessApi.utF8Text ?: ""
             confidence = tessApi.meanConfidence()
 
-            println("[ExpoTesseractOcr Native] Recognition complete! Text length: ${text.length}, Mean confidence: $confidence")
+            // Extract line-by-line and word-level bounding boxes and confidence using RIL_WORD and RIL_TEXTLINE
+            try {
+              val it = tessApi.resultIterator
+              if (it != null) {
+                it.begin()
+                var currentLineWords = mutableListOf<Map<String, Any>>()
+                var currentLineText = StringBuilder()
+                var currentLineConf = 0
+                var currentLineBox = mapOf("left" to 0, "top" to 0, "right" to 0, "bottom" to 0)
+
+                do {
+                  val isLineStart = try { it.isAtBeginningOf(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE) } catch (e: Throwable) { true }
+                  if (isLineStart && currentLineWords.isNotEmpty()) {
+                    linesList.add(mapOf(
+                      "text" to currentLineText.toString().trim(),
+                      "confidence" to currentLineConf,
+                      "box" to currentLineBox,
+                      "words" to currentLineWords
+                    ))
+                    currentLineWords = mutableListOf()
+                    currentLineText = StringBuilder()
+                  }
+
+                  if (isLineStart) {
+                    currentLineConf = try { it.confidence(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE).toInt() } catch (e: Throwable) { 0 }
+                    val rect = try { it.getBoundingRect(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE) } catch (e: Throwable) { null }
+                    currentLineBox = if (rect != null) {
+                      mapOf("left" to rect.left, "top" to rect.top, "right" to rect.right, "bottom" to rect.bottom)
+                    } else {
+                      val boxArr = try { it.getBoundingBox(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE) } catch (e: Throwable) { null }
+                      if (boxArr != null && boxArr.size >= 4) {
+                        mapOf("left" to boxArr[0], "top" to boxArr[1], "right" to boxArr[2], "bottom" to boxArr[3])
+                      } else {
+                        mapOf("left" to 0, "top" to 0, "right" to 0, "bottom" to 0)
+                      }
+                    }
+                  }
+
+                  val wordText = try { it.getUTF8Text(TessBaseAPI.PageIteratorLevel.RIL_WORD) } catch (e: Throwable) { null }
+                  if (!wordText.isNullOrBlank()) {
+                    val wordConf = try { it.confidence(TessBaseAPI.PageIteratorLevel.RIL_WORD).toInt() } catch (e: Throwable) { 0 }
+                    val wordRect = try { it.getBoundingRect(TessBaseAPI.PageIteratorLevel.RIL_WORD) } catch (e: Throwable) { null }
+                    val wordBox = if (wordRect != null) {
+                      mapOf("left" to wordRect.left, "top" to wordRect.top, "right" to wordRect.right, "bottom" to wordRect.bottom)
+                    } else {
+                      val boxArr = try { it.getBoundingBox(TessBaseAPI.PageIteratorLevel.RIL_WORD) } catch (e: Throwable) { null }
+                      if (boxArr != null && boxArr.size >= 4) {
+                        mapOf("left" to boxArr[0], "top" to boxArr[1], "right" to boxArr[2], "bottom" to boxArr[3])
+                      } else {
+                        mapOf("left" to 0, "top" to 0, "right" to 0, "bottom" to 0)
+                      }
+                    }
+
+                    currentLineWords.add(mapOf(
+                      "text" to wordText,
+                      "confidence" to wordConf,
+                      "box" to wordBox
+                    ))
+                    if (currentLineText.isNotEmpty()) currentLineText.append(" ")
+                    currentLineText.append(wordText)
+                  }
+
+                } while (try { it.next(TessBaseAPI.PageIteratorLevel.RIL_WORD) } catch (e: Throwable) { false })
+
+                if (currentLineWords.isNotEmpty()) {
+                  linesList.add(mapOf(
+                    "text" to currentLineText.toString().trim(),
+                    "confidence" to currentLineConf,
+                    "box" to currentLineBox,
+                    "words" to currentLineWords
+                  ))
+                }
+
+                try { it.delete() } catch (e: Throwable) {}
+              }
+            } catch (iterErr: Throwable) {
+              println("[ExpoTesseractOcr Native] Iterator error: ${iterErr.message}")
+            }
+
+            println("[ExpoTesseractOcr Native] Recognition complete! Text length: ${text.length}, Mean confidence: $confidence, Lines count: ${linesList.size}")
 
             bitmap.recycle()
           } else {
@@ -110,6 +192,7 @@ class ExpoTesseractOcrModule : Module() {
       return@AsyncFunction mapOf(
         "text" to text,
         "confidence" to confidence,
+        "lines" to linesList,
         "initOk" to initOk,
         "dataPathUsed" to dataPathUsed,
         "imagePathUsed" to imagePathUsed,

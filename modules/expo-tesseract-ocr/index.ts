@@ -19,9 +19,30 @@ function getNativeModule() {
   }
 }
 
+export interface OcrBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface OcrWord {
+  text: string;
+  confidence: number;
+  box: OcrBox;
+}
+
+export interface OcrLine {
+  text: string;
+  confidence: number;
+  box: OcrBox;
+  words: OcrWord[];
+}
+
 export interface OcrResult {
   text: string;
   confidence: number;
+  lines: OcrLine[];
   success: boolean;
   initOk: boolean;
   dataPathUsed: string;
@@ -38,13 +59,19 @@ export interface OcrResult {
   error?: string;
 }
 
-export async function recognizeText(tessDataPath: string, lang: string, imagePath: string): Promise<OcrResult> {
+export async function recognizeText(
+  tessDataPath: string,
+  lang: string,
+  imagePath: string,
+  psm: number = 6
+): Promise<OcrResult> {
   const mod = getNativeModule();
   if (!mod) {
     console.error('[OCR JS] getNativeModule() is null!');
     return {
       text: '',
       confidence: 0,
+      lines: [],
       success: false,
       initOk: false,
       dataPathUsed: '',
@@ -67,6 +94,7 @@ export async function recognizeText(tessDataPath: string, lang: string, imagePat
     return {
       text: '',
       confidence: 0,
+      lines: [],
       success: false,
       initOk: false,
       dataPathUsed: '',
@@ -88,14 +116,42 @@ export async function recognizeText(tessDataPath: string, lang: string, imagePat
   const cleanImagePath = imagePath.replace(/^file:\/\//, '');
 
   try {
-    console.log('[OCR JS] Calling mod.recognizeText with:', { cleanDataPath, lang, cleanImagePath });
-    const res = await mod.recognizeText(cleanDataPath, lang, cleanImagePath);
+    console.log('[OCR JS] Calling mod.recognizeText with:', { cleanDataPath, lang, cleanImagePath, psm });
+    const res = await mod.recognizeText(cleanDataPath, lang, cleanImagePath, psm);
     console.log('[OCR JS] Raw native res received:', JSON.stringify(res));
 
     if (res && typeof res === 'object') {
+      const rawLines = Array.isArray(res.lines) ? res.lines : [];
+      const lines: OcrLine[] = rawLines.map((l: any) => {
+        const rawWords = Array.isArray(l?.words) ? l.words : [];
+        const words: OcrWord[] = rawWords.map((w: any) => ({
+          text: w?.text || '',
+          confidence: typeof w?.confidence === 'number' ? w.confidence : 0,
+          box: {
+            left: typeof w?.box?.left === 'number' ? w.box.left : 0,
+            top: typeof w?.box?.top === 'number' ? w.box.top : 0,
+            right: typeof w?.box?.right === 'number' ? w.box.right : 0,
+            bottom: typeof w?.box?.bottom === 'number' ? w.box.bottom : 0,
+          },
+        }));
+
+        return {
+          text: l?.text || '',
+          confidence: typeof l?.confidence === 'number' ? l.confidence : 0,
+          box: {
+            left: typeof l?.box?.left === 'number' ? l.box.left : 0,
+            top: typeof l?.box?.top === 'number' ? l.box.top : 0,
+            right: typeof l?.box?.right === 'number' ? l.box.right : 0,
+            bottom: typeof l?.box?.bottom === 'number' ? l.box.bottom : 0,
+          },
+          words,
+        };
+      });
+
       return {
         text: res.text || '',
         confidence: typeof res.confidence === 'number' ? res.confidence : 0,
+        lines,
         success: !!res.initOk && !res.bitmapNull,
         initOk: !!res.initOk,
         dataPathUsed: res.dataPathUsed || cleanDataPath,
@@ -115,6 +171,7 @@ export async function recognizeText(tessDataPath: string, lang: string, imagePat
     return {
       text: '',
       confidence: 0,
+      lines: [],
       success: false,
       initOk: false,
       dataPathUsed: cleanDataPath,
@@ -141,6 +198,7 @@ export async function recognizeText(tessDataPath: string, lang: string, imagePat
     return {
       text: '',
       confidence: 0,
+      lines: [],
       success: false,
       initOk: false,
       dataPathUsed: cleanDataPath,

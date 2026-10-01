@@ -265,8 +265,66 @@ export default function App() {
   const handleOCR = async () => {
     if (!(await checkPremiumLimit())) return;
     setToolsModalVisible(false);
+
+    Alert.alert(
+      "خوێنەرەوەی دەق (OCR)",
+      "تکایە سەرچاوەی وێنەکە هەڵبژێرە:",
+      [
+        {
+          text: "کامێرا 📷",
+          onPress: () => askOCRCropChoice(true),
+        },
+        {
+          text: "گالێری 🖼️",
+          onPress: () => askOCRCropChoice(false),
+        },
+        {
+          text: "پاشگەزبوونەوە",
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
+  const askOCRCropChoice = (useCamera) => {
+    Alert.alert(
+      "بڕینی وێنە ✂️",
+      "ئایا دەتەوێت ناوچەی دەقەکە ببڕیت یان تەواوی وێنەکە بەکاربهێنیت؟",
+      [
+        {
+          text: "بڕینی دەقەکە ✂️",
+          onPress: () => pickImageForOCR(useCamera, true),
+        },
+        {
+          text: "تەواوی وێنەکە 📄",
+          onPress: () => pickImageForOCR(useCamera, false),
+        },
+        {
+          text: "پاشگەزبوونەوە",
+          style: "cancel",
+        },
+      ]
+    );
+  };
+
+  const pickImageForOCR = async (useCamera, shouldCrop) => {
     try {
-      const image = await ImagePicker.openPicker({ width: 1000, height: 1400, cropping: true });
+      const options = shouldCrop
+        ? {
+            cropping: true,
+            freeStyleCropEnabled: true,
+            enableRotationGesture: true,
+            compressImageQuality: 1,
+          }
+        : {
+            cropping: false,
+            compressImageQuality: 1,
+          };
+
+      const image = useCamera
+        ? await ImagePicker.openCamera(options)
+        : await ImagePicker.openPicker(options);
+
       if (image && image.path) {
         setOcrImageUri(image.path);
         setOcrText('');
