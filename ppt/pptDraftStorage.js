@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LAYOUTS } from './layouts';
 
 const DRAFT_KEY = 'ppt_editor_draft_v1';
 
@@ -32,57 +33,21 @@ export const clearPptDraft = async () => {
   }
 };
 
-export const createDefaultPresentation = () => ({
-  id: `ppt_${Date.now()}`,
-  title: 'پێشاندانی نوێ',
-  aspectRatio: '16:9',
-  slides: [
-    {
-      id: `slide_${Date.now()}_1`,
-      layout: 'title',
-      background: '#ffffff',
-      elements: [
-        {
-          id: `elem_${Date.now()}_1`,
-          type: 'text',
-          x: 5,
-          y: 25,
-          width: 90,
-          height: 25,
-          zIndex: 1,
-          text: 'سەردێڕی سەرەکی پاوەرپۆینت',
-          fontSize: 28,
-          fontWeight: 'bold',
-          fontStyle: 'normal',
-          textDecorationLine: 'none',
-          color: '#1c1c1e',
-          highlightColor: 'transparent',
-          textAlign: 'center',
-          writingDirection: 'rtl',
-          lineSpacing: 1.2,
-          listType: 'none',
-        },
-        {
-          id: `elem_${Date.now()}_2`,
-          type: 'text',
-          x: 10,
-          y: 52,
-          width: 80,
-          height: 20,
-          zIndex: 1,
-          text: 'ژێرنووس / ناوی ئامادەکار یان بابەته‌کە',
-          fontSize: 18,
-          fontWeight: 'normal',
-          fontStyle: 'italic',
-          textDecorationLine: 'none',
-          color: '#555555',
-          highlightColor: 'transparent',
-          textAlign: 'center',
-          writingDirection: 'rtl',
-          lineSpacing: 1.2,
-          listType: 'none',
-        },
-      ],
-    },
-  ],
-});
+export const createDefaultPresentation = () => {
+  const titleLayout = LAYOUTS.find((l) => l.key === 'title') || LAYOUTS[0];
+  const initialElements = titleLayout ? titleLayout.createElements() : [];
+
+  return {
+    id: `ppt_${Date.now()}`,
+    title: 'پێشاندانی نوێ',
+    aspectRatio: '16:9',
+    slides: [
+      {
+        id: `slide_${Date.now()}_1`,
+        layout: 'title',
+        background: '#ffffff',
+        elements: initialElements,
+      },
+    ],
+  };
+};

@@ -86,7 +86,6 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily }) 
                   <View
                     style={{
                       flex: 1,
-                      backgroundColor: elem.highlightColor || 'transparent',
                       justifyContent: 'center',
                     }}
                   >
@@ -97,6 +96,10 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily }) 
                         fontStyle: elem.fontStyle || 'normal',
                         textDecorationLine: elem.textDecorationLine || 'none',
                         color: elem.color || '#1c1c1e',
+                        backgroundColor:
+                          elem.highlightColor && elem.highlightColor !== 'transparent'
+                            ? elem.highlightColor
+                            : undefined,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: ((elem.fontSize || 18) * (canvasWidth / 360)) * (elem.lineSpacing || 1.2),

@@ -1,10 +1,31 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
+import { planPage, reverseTableLineColumns, isTableElement } from './pptFit';
 
 if (typeof window === 'undefined') {
   global.window = global;
 }
 
-export const exportPresentationToPptx = async (presentation) => {
+/**
+ * Normalizes any color string to a 6-character uppercase HEX string for pptxgenjs
+ */
+const normalizeHex = (colorStr, defaultHex = null) => {
+  if (!colorStr || colorStr === 'transparent' || colorStr === 'none') {
+    return defaultHex;
+  }
+  let hex = colorStr.replace('#', '').trim();
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  if (hex.length === 8) {
+    hex = hex.slice(0, 6);
+  }
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    return defaultHex;
+  }
+  return hex.toUpperCase();
+};
+
+export const exportPresentationToPptx = async (presentation, selectedSlideIds = null) => {
   try {
     let PptxGenJS;
     try {
@@ -24,83 +45,118 @@ export const exportPresentationToPptx = async (presentation) => {
       pptx.layout = 'LAYOUT_16x9';
     }
 
-    const slideW = is43 ? 10 : 10;
+    const slideW = 10;
     const slideH = is43 ? 7.5 : 5.625;
 
-    for (let i = 0; i < presentation.slides.length; i++) {
-      const slideData = presentation.slides[i];
-      const slide = pptx.addSlide();
+    // Filter pages if selectedSlideIds is provided
+    const targetPages = Array.isArray(selectedSlideIds) && selectedSlideIds.length > 0
+      ? presentation.slides.filter((s) => selectedSlideIds.includes(s.id))
+      : presentation.slides;
 
-      // Set slide background color if custom
-      if (slideData.background && slideData.background !== '#ffffff') {
-        const hexBg = slideData.background.replace('#', '');
-        slide.background = { color: hexBg };
-      }
+    for (const pageData of targetPages) {
+      // Use planPage to get computed font sizes & split slides if text overflows
+      const planned = planPage(pageData);
+      const generatedSlides = planned.slides || [pageData];
 
-      // Sort elements by zIndex
-      const sortedElements = [...(slideData.elements || [])].sort(
-        (a, b) => (a.zIndex || 1) - (b.zIndex || 1)
-      );
+      for (const slideData of generatedSlides) {
+        const slide = pptx.addSlide();
 
-      for (const elem of sortedElements) {
-        const xIn = ((elem.x || 0) / 100) * slideW;
-        const yIn = ((elem.y || 0) / 100) * slideH;
-        const wIn = ((elem.width || 50) / 100) * slideW;
-        const hIn = ((elem.height || 20) / 100) * slideH;
-
-        if (elem.type === 'text') {
-          const hexColor = (elem.color || '#1c1c1e').replace('#', '');
-          const isBold = elem.fontWeight === 'bold';
-          const isItalic = elem.fontStyle === 'italic';
-          const isUnderline = elem.textDecorationLine === 'underline';
-          const align = elem.textAlign || 'right';
-          const isRtl = elem.writingDirection !== 'ltr';
-          const fontSize = elem.fontSize || 18;
-
-          const textOptions = {
-            x: xIn,
-            y: yIn,
-            w: wIn,
-            h: hIn,
-            fontSize: fontSize,
-            bold: isBold,
-            italic: isItalic,
-            underline: isUnderline ? { style: 'single' } : false,
-            color: hexColor,
-            align: align,
-            rtl: isRtl,
-            valign: 'top',
-          };
-
-          if (elem.highlightColor && elem.highlightColor !== 'transparent') {
-            textOptions.fill = { color: elem.highlightColor.replace('#', '') };
+        // Set slide background color
+        if (slideData.background && slideData.background !== '#ffffff') {
+          const hexBg = normalizeHex(slideData.background, 'FFFFFF');
+          if (hexBg) {
+            slide.background = { color: hexBg };
           }
+        }
 
-          slide.addText(elem.text || '', textOptions);
-        } else if (elem.type === 'image' && elem.uri) {
-          let base64Img = '';
-          if (elem.uri.startsWith('data:image')) {
-            base64Img = elem.uri;
-          } else {
-            const rawBase64 = await FileSystem.readAsStringAsync(elem.uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            const mime = elem.uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-            base64Img = `data:${mime};base64,${rawBase64}`;
-          }
+        // Sort elements by zIndex
+        const sortedElements = [...(slideData.elements || [])].sort(
+          (a, b) => (a.zIndex || 1) - (b.zIndex || 1)
+        );
 
-          slide.addImage({
-            data: base64Img,
-            x: xIn,
-            y: yIn,
-            w: wIn,
-            h: hIn,
-            sizing: {
-              type: 'contain',
+        for (const elem of sortedElements) {
+          const xIn = ((elem.x || 0) / 100) * slideW;
+          const yIn = ((elem.y || 0) / 100) * slideH;
+          const wIn = ((elem.width || 50) / 100) * slideW;
+          const hIn = ((elem.height || 20) / 100) * slideH;
+
+          if (elem.type === 'text') {
+            if (!elem.text || !elem.text.trim()) continue;
+
+            let textContent = elem.text;
+
+            // For tables: reverse column order so the first column is on the right
+            if (isTableElement(elem)) {
+              const lines = textContent.split('\n');
+              textContent = lines.map((l) => reverseTableLineColumns(l)).join('\n');
+            }
+
+            const textColor = normalizeHex(elem.color, '1C1C1E');
+            const highlightColor = normalizeHex(elem.highlightColor, null);
+
+            const isBold = elem.fontWeight === 'bold';
+            const isItalic = elem.fontStyle === 'italic';
+            const isUnderline = elem.textDecorationLine === 'underline';
+            const align = elem.textAlign || 'right';
+
+            // Computed fontSize from planPage
+            const fontSize = elem.computedFontSize || elem.fontSize || 18;
+
+            const textOptions = {
+              x: xIn,
+              y: yIn,
               w: wIn,
               h: hIn,
-            },
-          });
+              fontSize: fontSize,
+              bold: isBold,
+              italic: isItalic,
+              underline: isUnderline ? { style: 'single' } : false,
+              color: textColor,
+              align: align,
+              rtl: true,
+              lineSpacingMultiple: 1.35,
+              margin: 0,
+              fontFace: 'Arial',
+              valign: 'top',
+            };
+
+            // Set highlight & solid fill for 100% cross-platform PowerPoint compatibility
+            if (highlightColor) {
+              textOptions.highlight = highlightColor;
+              textOptions.fill = { color: highlightColor };
+            }
+
+            slide.addText(textContent, textOptions);
+          } else if (elem.type === 'image') {
+            if (!elem.uri) continue;
+
+            try {
+              let base64Img = '';
+              if (elem.uri.startsWith('data:image')) {
+                base64Img = elem.uri;
+              } else {
+                const imgFile = new File(elem.uri);
+                const rawBase64 = await imgFile.base64();
+                const mime = elem.uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+                base64Img = `data:${mime};base64,${rawBase64}`;
+              }
+
+              slide.addImage({
+                data: base64Img,
+                x: xIn,
+                y: yIn,
+                w: wIn,
+                h: hIn,
+                sizing: {
+                  type: 'cover',
+                  w: wIn,
+                  h: hIn,
+                },
+              });
+            } catch (imgErr) {
+              console.log('[PPT Exporter] Failed to add image:', imgErr);
+            }
+          }
         }
       }
     }
@@ -110,14 +166,14 @@ export const exportPresentationToPptx = async (presentation) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
     const filename = `PPT_${dateStr}.pptx`;
-    const targetPath = `${FileSystem.documentDirectory}${filename}`;
 
-    await FileSystem.writeAsStringAsync(targetPath, base64Output, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    // Modern expo-file-system API with File and Paths
+    const file = new File(Paths.document, filename);
+    file.create();
+    await file.write(base64Output, { encoding: 'base64' });
 
     return {
-      fileUri: targetPath,
+      fileUri: file.uri,
       filename: filename,
     };
   } catch (err) {

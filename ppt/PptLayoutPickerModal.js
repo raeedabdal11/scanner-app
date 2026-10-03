@@ -1,317 +1,356 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Modal,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
 } from 'react-native';
-
-export const LAYOUT_PRESETS = [
-  {
-    key: 'title',
-    title: 'سەردێڕی سەرەکی (Title)',
-    desc: 'سەردێڕی سەرەکی و ژێرنووس بۆ پەڕەی دەستپێک',
-    createElements: () => [
-      {
-        id: `elem_${Date.now()}_1`,
-        type: 'text',
-        x: 5,
-        y: 28,
-        width: 90,
-        height: 25,
-        zIndex: 1,
-        text: 'سەردێڕی سەرەکی پاوەرپۆینت',
-        fontSize: 28,
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#1c1c1e',
-        highlightColor: 'transparent',
-        textAlign: 'center',
-        writingDirection: 'rtl',
-        lineSpacing: 1.2,
-      },
-      {
-        id: `elem_${Date.now()}_2`,
-        type: 'text',
-        x: 10,
-        y: 55,
-        width: 80,
-        height: 20,
-        zIndex: 1,
-        text: 'ژێرنووس یان کورتەی بابەتەکەت لێرە بنووسە',
-        fontSize: 18,
-        fontWeight: 'normal',
-        fontStyle: 'italic',
-        textDecorationLine: 'none',
-        color: '#555555',
-        highlightColor: 'transparent',
-        textAlign: 'center',
-        writingDirection: 'rtl',
-        lineSpacing: 1.2,
-      },
-    ],
-  },
-  {
-    key: 'title_text',
-    title: 'سەردێڕ و دەق (Title + Text)',
-    desc: 'سەردێڕ لە سەرەوە و دەقی سەرەکی لە خوارەوە',
-    createElements: () => [
-      {
-        id: `elem_${Date.now()}_1`,
-        type: 'text',
-        x: 5,
-        y: 8,
-        width: 90,
-        height: 18,
-        zIndex: 1,
-        text: 'سەردێڕی بابەتەکە',
-        fontSize: 22,
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#1c1c1e',
-        highlightColor: 'transparent',
-        textAlign: 'right',
-        writingDirection: 'rtl',
-        lineSpacing: 1.2,
-      },
-      {
-        id: `elem_${Date.now()}_2`,
-        type: 'text',
-        x: 5,
-        y: 28,
-        width: 90,
-        height: 65,
-        zIndex: 1,
-        text: '• خاڵی یەکەمی ڕوونکردنەوەی بابەتەکە\n• خاڵی دووەمی زانیارییەکان\n• لێرە دەتوانی دەقی تێروتەسەل یان زانیارییەکان بنووسی.',
-        fontSize: 16,
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#333333',
-        highlightColor: 'transparent',
-        textAlign: 'right',
-        writingDirection: 'rtl',
-        lineSpacing: 1.3,
-      },
-    ],
-  },
-  {
-    key: 'image_text',
-    title: 'وێنە و دەق (Image + Text)',
-    desc: 'وێنە لەلایەک و دەق لەلایەکی تر',
-    createElements: () => [
-      {
-        id: `elem_${Date.now()}_1`,
-        type: 'text',
-        x: 5,
-        y: 8,
-        width: 90,
-        height: 15,
-        zIndex: 1,
-        text: 'سەردێڕی بابەتەکە',
-        fontSize: 22,
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#1c1c1e',
-        highlightColor: 'transparent',
-        textAlign: 'right',
-        writingDirection: 'rtl',
-      },
-      {
-        id: `elem_${Date.now()}_2`,
-        type: 'text',
-        x: 50,
-        y: 26,
-        width: 45,
-        height: 68,
-        zIndex: 1,
-        text: '• وەسف و شیکردنەوەی پەیوەندیدار بە وێنەکەوە\n• نووسینی شیکاری و خاڵە گرنگەکان.',
-        fontSize: 15,
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#333333',
-        highlightColor: 'transparent',
-        textAlign: 'right',
-        writingDirection: 'rtl',
-      },
-      {
-        id: `elem_${Date.now()}_3`,
-        type: 'image',
-        x: 5,
-        y: 26,
-        width: 42,
-        height: 68,
-        zIndex: 1,
-        uri: null,
-      },
-    ],
-  },
-  {
-    key: 'full_image',
-    title: 'تەواوی وێنە (Full Image)',
-    desc: 'وێنەیەکی گەورە بە شێوەی سەرانسەری لەسەر سڵاید',
-    createElements: () => [
-      {
-        id: `elem_${Date.now()}_1`,
-        type: 'image',
-        x: 5,
-        y: 5,
-        width: 90,
-        height: 90,
-        zIndex: 1,
-        uri: null,
-      },
-    ],
-  },
-  {
-    key: 'two_images',
-    title: 'دوو وێنە (Two Images)',
-    desc: 'دوو وێنە تەنیشت یەک بۆ بەراوردکردن',
-    createElements: () => [
-      {
-        id: `elem_${Date.now()}_1`,
-        type: 'text',
-        x: 5,
-        y: 5,
-        width: 90,
-        height: 12,
-        zIndex: 1,
-        text: 'بەراوردکردنی دوو وێنە',
-        fontSize: 20,
-        fontWeight: 'bold',
-        fontStyle: 'normal',
-        textDecorationLine: 'none',
-        color: '#1c1c1e',
-        highlightColor: 'transparent',
-        textAlign: 'center',
-        writingDirection: 'rtl',
-      },
-      {
-        id: `elem_${Date.now()}_2`,
-        type: 'image',
-        x: 5,
-        y: 22,
-        width: 43,
-        height: 70,
-        zIndex: 1,
-        uri: null,
-      },
-      {
-        id: `elem_${Date.now()}_3`,
-        type: 'image',
-        x: 52,
-        y: 22,
-        width: 43,
-        height: 70,
-        zIndex: 1,
-        uri: null,
-      },
-    ],
-  },
-  {
-    key: 'blank',
-    title: 'بەتاڵ (Blank)',
-    desc: 'سڵایدێکی سپی و بەتاڵ بەبێ هیچ بەشێک',
-    createElements: () => [],
-  },
-];
+import { CATEGORIES, LAYOUTS } from './layouts';
 
 export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
-  return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.title}>هەڵبژاردنی نه‌خشەی سڵایدی نوێ 🎨</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
+  const [selectedCategory, setSelectedCategory] = useState('هەموو');
+
+  const isAllCategory = (cat) =>
+    cat === 'هەموو' || cat === 'هەمووی' || cat === 'All';
+
+  const handleSelectCategory = (cat) => {
+    setSelectedCategory(cat);
+    const count = LAYOUTS.filter((item) => {
+      if (isAllCategory(cat)) return true;
+      return item.category === cat;
+    }).length;
+    console.log(`[PPT Layouts] category: ${cat}, count: ${count}`);
+  };
+
+  useEffect(() => {
+    if (visible) {
+      const count = LAYOUTS.filter((item) => {
+        if (isAllCategory(selectedCategory)) return true;
+        return item.category === selectedCategory;
+      }).length;
+      console.log(`[PPT Layouts] category: ${selectedCategory}, count: ${count}`);
+    }
+  }, [visible, selectedCategory]);
+
+  if (!visible) return null;
+
+  const filteredLayouts = LAYOUTS.filter((item) => {
+    if (isAllCategory(selectedCategory)) return true;
+    return item.category === selectedCategory;
+  });
+
+  const renderMiniPreview = (key) => {
+    switch (key) {
+      case 'title':
+        return (
+          <View style={styles.miniTitleBox}>
+            <View style={[styles.miniBar, { width: '75%', height: 7, backgroundColor: '#D24726' }]} />
+            <View style={[styles.miniBar, { width: '55%', height: 4, backgroundColor: '#888', marginTop: 6 }]} />
           </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.grid}>
-              {LAYOUT_PRESETS.map((item) => (
-                <TouchableOpacity
-                  key={item.key}
-                  style={styles.card}
-                  onPress={() => onSelectLayout(item)}
-                >
-                  {/* Visual Layout Miniature */}
-                  <View style={styles.miniCanvas}>
-                    {item.key === 'title' && (
-                      <View style={styles.miniTitleBox}>
-                        <View style={[styles.miniBar, { width: '70%', height: 6, backgroundColor: '#D24726' }]} />
-                        <View style={[styles.miniBar, { width: '50%', height: 4, backgroundColor: '#888', marginTop: 6 }]} />
-                      </View>
-                    )}
-                    {item.key === 'title_text' && (
-                      <View style={styles.miniTitleTextBox}>
-                        <View style={[styles.miniBar, { width: '80%', height: 5, backgroundColor: '#D24726' }]} />
-                        <View style={[styles.miniBar, { width: '90%', height: 3, backgroundColor: '#aaa', marginTop: 5 }]} />
-                        <View style={[styles.miniBar, { width: '85%', height: 3, backgroundColor: '#aaa', marginTop: 3 }]} />
-                        <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#aaa', marginTop: 3 }]} />
-                      </View>
-                    )}
-                    {item.key === 'image_text' && (
-                      <View style={styles.miniRow}>
-                        <View style={styles.miniImgBlock} />
-                        <View style={{ flex: 1, gap: 3 }}>
-                          <View style={[styles.miniBar, { width: '90%', height: 4, backgroundColor: '#D24726' }]} />
-                          <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#aaa' }]} />
-                          <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#aaa' }]} />
-                        </View>
-                      </View>
-                    )}
-                    {item.key === 'full_image' && (
-                      <View style={styles.miniFullImgBlock} />
-                    )}
-                    {item.key === 'two_images' && (
-                      <View style={styles.miniRow}>
-                        <View style={styles.miniImgBlock} />
-                        <View style={styles.miniImgBlock} />
-                      </View>
-                    )}
-                    {item.key === 'blank' && (
-                      <View style={styles.miniBlankBlock} />
-                    )}
-                  </View>
-
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardDesc}>{item.desc}</Text>
-                </TouchableOpacity>
-              ))}
+        );
+      case 'section_header':
+        return (
+          <View style={styles.miniTitleBox}>
+            <View style={[styles.miniBar, { width: '80%', height: 8, backgroundColor: '#1c1c1e' }]} />
+            <View style={[styles.miniBar, { width: '60%', height: 4, backgroundColor: '#888', marginTop: 6 }]} />
+          </View>
+        );
+      case 'agenda':
+        return (
+          <View style={styles.miniColBox}>
+            <View style={[styles.miniBar, { width: '60%', height: 6, backgroundColor: '#D24726', alignSelf: 'flex-end' }]} />
+            <View style={[styles.miniBar, { width: '90%', height: 3, backgroundColor: '#888', marginTop: 5, alignSelf: 'flex-end' }]} />
+            <View style={[styles.miniBar, { width: '85%', height: 3, backgroundColor: '#888', marginTop: 3, alignSelf: 'flex-end' }]} />
+            <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#888', marginTop: 3, alignSelf: 'flex-end' }]} />
+          </View>
+        );
+      case 'title_bullets':
+        return (
+          <View style={styles.miniColBox}>
+            <View style={[styles.miniBar, { width: '70%', height: 6, backgroundColor: '#1c1c1e', alignSelf: 'flex-end' }]} />
+            <View style={[styles.miniBar, { width: '90%', height: 3, backgroundColor: '#888', marginTop: 5, alignSelf: 'flex-end' }]} />
+            <View style={[styles.miniBar, { width: '85%', height: 3, backgroundColor: '#888', marginTop: 3, alignSelf: 'flex-end' }]} />
+          </View>
+        );
+      case 'two_columns':
+        return (
+          <View style={{ flex: 1, width: '100%' }}>
+            <View style={[styles.miniBar, { width: '60%', height: 5, backgroundColor: '#1c1c1e', alignSelf: 'center', marginBottom: 6 }]} />
+            <View style={styles.miniRow}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <View style={[styles.miniBar, { width: '90%', height: 3, backgroundColor: '#888' }]} />
+                <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#aaa' }]} />
+              </View>
+              <View style={{ flex: 1, gap: 3 }}>
+                <View style={[styles.miniBar, { width: '90%', height: 3, backgroundColor: '#888' }]} />
+                <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#aaa' }]} />
+              </View>
             </View>
+          </View>
+        );
+      case 'comparison':
+        return (
+          <View style={{ flex: 1, width: '100%' }}>
+            <View style={[styles.miniBar, { width: '50%', height: 5, backgroundColor: '#D24726', alignSelf: 'center', marginBottom: 5 }]} />
+            <View style={styles.miniRow}>
+              <View style={{ flex: 1, gap: 3, backgroundColor: '#eef9ef', padding: 3, borderRadius: 4 }}>
+                <View style={[styles.miniBar, { width: '80%', height: 4, backgroundColor: '#30d158' }]} />
+                <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#888' }]} />
+              </View>
+              <View style={{ flex: 1, gap: 3, backgroundColor: '#fdeeeed', padding: 3, borderRadius: 4 }}>
+                <View style={[styles.miniBar, { width: '80%', height: 4, backgroundColor: '#ff453a' }]} />
+                <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#888' }]} />
+              </View>
+            </View>
+          </View>
+        );
+      case 'quote':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 16, color: '#D24726', fontWeight: 'bold' }}>“ ”</Text>
+            <View style={[styles.miniBar, { width: '80%', height: 4, backgroundColor: '#1c1c1e', marginTop: 2 }]} />
+            <View style={[styles.miniBar, { width: '50%', height: 3, backgroundColor: '#D24726', marginTop: 4 }]} />
+          </View>
+        );
+      case 'big_statement':
+        return (
+          <View style={styles.miniTitleBox}>
+            <View style={[styles.miniBar, { width: '90%', height: 8, backgroundColor: '#D24726' }]} />
+            <View style={[styles.miniBar, { width: '70%', height: 8, backgroundColor: '#D24726', marginTop: 4 }]} />
+          </View>
+        );
+      case 'image_right_text':
+        return (
+          <View style={styles.miniRow}>
+            <View style={{ flex: 1, gap: 3 }}>
+              <View style={[styles.miniBar, { width: '90%', height: 4, backgroundColor: '#1c1c1e' }]} />
+              <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#aaa' }]} />
+            </View>
+            <View style={styles.miniImgBlock} />
+          </View>
+        );
+      case 'image_left_text':
+        return (
+          <View style={styles.miniRow}>
+            <View style={styles.miniImgBlock} />
+            <View style={{ flex: 1, gap: 3 }}>
+              <View style={[styles.miniBar, { width: '90%', height: 4, backgroundColor: '#1c1c1e' }]} />
+              <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#aaa' }]} />
+            </View>
+          </View>
+        );
+      case 'full_image_caption':
+        return (
+          <View style={{ flex: 1, width: '100%', gap: 4 }}>
+            <View style={[styles.miniImgBlock, { flex: 3 }]} />
+            <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#888', alignSelf: 'center' }]} />
+          </View>
+        );
+      case 'image_grid_2':
+        return (
+          <View style={styles.miniRow}>
+            <View style={styles.miniImgBlock} />
+            <View style={styles.miniImgBlock} />
+          </View>
+        );
+      case 'image_grid_3':
+        return (
+          <View style={styles.miniRow}>
+            <View style={styles.miniImgBlock} />
+            <View style={styles.miniImgBlock} />
+            <View style={styles.miniImgBlock} />
+          </View>
+        );
+      case 'image_grid_4':
+        return (
+          <View style={{ flex: 1, width: '100%', gap: 4 }}>
+            <View style={styles.miniRow}>
+              <View style={styles.miniImgBlock} />
+              <View style={styles.miniImgBlock} />
+            </View>
+            <View style={styles.miniRow}>
+              <View style={styles.miniImgBlock} />
+              <View style={styles.miniImgBlock} />
+            </View>
+          </View>
+        );
+      case 'image_caption_below':
+        return (
+          <View style={{ flex: 1, width: '100%', gap: 4 }}>
+            <View style={[styles.miniBar, { width: '60%', height: 4, backgroundColor: '#1c1c1e', alignSelf: 'center' }]} />
+            <View style={[styles.miniImgBlock, { flex: 1 }]} />
+            <View style={[styles.miniBar, { width: '80%', height: 3, backgroundColor: '#888', alignSelf: 'center' }]} />
+          </View>
+        );
+      case 'big_numbers':
+        return (
+          <View style={styles.miniRow}>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#30d158' }}>85%</Text>
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#007AFF' }}>+50</Text>
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#af52de' }}>100K</Text>
+            </View>
+          </View>
+        );
+      case 'timeline':
+        return (
+          <View style={{ flex: 1, width: '100%', justifyContent: 'center' }}>
+            <View style={[styles.miniBar, { width: '100%', height: 2, backgroundColor: '#007AFF', position: 'absolute', top: '50%' }]} />
+            <View style={styles.miniRow}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#D24726' }} />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#007AFF' }} />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#ff9500' }} />
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#30d158' }} />
+            </View>
+          </View>
+        );
+      case 'process':
+        return (
+          <View style={styles.miniRow}>
+            <View style={{ flex: 1, height: '100%', backgroundColor: '#D24726', borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>١</Text>
+            </View>
+            <View style={{ flex: 1, height: '100%', backgroundColor: '#007AFF', borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>٢</Text>
+            </View>
+            <View style={{ flex: 1, height: '100%', backgroundColor: '#30d158', borderRadius: 4, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 8 }}>٣</Text>
+            </View>
+          </View>
+        );
+      case 'table':
+        return (
+          <View style={{ flex: 1, width: '100%', gap: 3 }}>
+            <View style={[styles.miniBar, { width: '100%', height: 6, backgroundColor: '#D24726' }]} />
+            <View style={[styles.miniBar, { width: '100%', height: 3, backgroundColor: '#ccc' }]} />
+            <View style={[styles.miniBar, { width: '100%', height: 3, backgroundColor: '#ccc' }]} />
+            <View style={[styles.miniBar, { width: '100%', height: 3, backgroundColor: '#ccc' }]} />
+          </View>
+        );
+      case 'thank_you':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 12 }}>🙏</Text>
+            <View style={[styles.miniBar, { width: '70%', height: 6, backgroundColor: '#D24726', marginTop: 2 }]} />
+            <View style={[styles.miniBar, { width: '50%', height: 3, backgroundColor: '#888', marginTop: 4 }]} />
+          </View>
+        );
+      case 'blank':
+      default:
+        return <View style={styles.miniBlankBlock} />;
+    }
+  };
+
+  return (
+    <View style={styles.sheetOverlay}>
+      <TouchableOpacity
+        style={styles.backdrop}
+        activeOpacity={1}
+        onPress={onClose}
+      />
+      <View style={styles.bottomSheetContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>هەڵبژاردنی نەخشەی سڵایدی نوێ 🎨</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Category Tabs */}
+        <View style={styles.tabsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContent}
+          >
+            {CATEGORIES.map((cat) => {
+              const isActive = cat === selectedCategory;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+                  onPress={() => handleSelectCategory(cat)}
+                >
+                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
+
+        {/* Layouts Grid */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.gridScroll}
+          contentContainerStyle={styles.gridContent}
+        >
+          <View style={styles.grid}>
+            {filteredLayouts.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.card}
+                activeOpacity={0.7}
+                onPress={() => onSelectLayout(item)}
+              >
+                <View style={styles.miniCanvas}>
+                  {renderMiniPreview(item.key)}
+                </View>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardDesc}>{item.desc}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
       </View>
-    </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+  sheetOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
     justifyContent: 'flex-end',
   },
-  container: {
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  bottomSheetContainer: {
+    height: '70%',
     backgroundColor: '#1c1c1e',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 18,
-    maxHeight: '85%',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
   header: {
     flexDirection: 'row',
     justify: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
   title: {
     color: '#fff',
@@ -326,25 +365,59 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  tabsWrapper: {
+    height: 38,
+    marginBottom: 12,
+  },
+  tabsContent: {
+    gap: 8,
+    alignItems: 'center',
+  },
+  tabBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#2c2c2e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  tabBtnActive: {
+    backgroundColor: '#D24726',
+    borderColor: '#D24726',
+  },
+  tabText: {
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  tabTextActive: {
+    color: '#ffffff',
+  },
+  gridScroll: {
+    flex: 1,
+  },
+  gridContent: {
+    paddingBottom: 20,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
     justifyContent: 'space-between',
-    paddingBottom: 20,
   },
   card: {
     width: '48%',
     backgroundColor: '#2c2c2e',
     borderRadius: 14,
-    padding: 12,
+    padding: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#3a3a3c',
+    marginBottom: 10,
   },
   miniCanvas: {
     width: '100%',
-    height: 75,
+    height: 70,
     backgroundColor: '#ffffff',
     borderRadius: 8,
     padding: 6,
@@ -357,7 +430,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
-  miniTitleTextBox: {
+  miniColBox: {
     width: '100%',
     justifyContent: 'flex-start',
   },
@@ -367,24 +440,22 @@ const styles = StyleSheet.create({
     height: '100%',
     gap: 6,
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   miniImgBlock: {
     flex: 1,
     height: '100%',
-    backgroundColor: '#3a3a3c',
+    backgroundColor: '#e5e5ea',
     borderRadius: 4,
-  },
-  miniFullImgBlock: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#3a3a3c',
-    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderStyle: 'dashed',
   },
   miniBlankBlock: {
     width: '100%',
     height: '100%',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#ccc',
     borderStyle: 'dashed',
     borderRadius: 4,
   },
@@ -394,14 +465,14 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   cardDesc: {
     color: '#888',
     fontSize: 10,
     textAlign: 'center',
-    lineHeight: 14,
+    lineHeight: 13,
   },
 });

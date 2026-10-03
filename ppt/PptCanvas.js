@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,20 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { planPage, SLIDE } from './pptFit';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const RESIZE_HANDLES = [
+  { key: 'tl', style: { left: -16, top: -16 } },
+  { key: 'tc', style: { left: '50%', marginLeft: -16, top: -16 } },
+  { key: 'tr', style: { right: -16, top: -16 } },
+  { key: 'ml', style: { left: -16, top: '50%', marginTop: -16 } },
+  { key: 'mr', style: { right: -16, top: '50%', marginTop: -16 } },
+  { key: 'bl', style: { left: -16, bottom: -16 } },
+  { key: 'bc', style: { left: '50%', marginLeft: -16, bottom: -16 } },
+  { key: 'br', style: { right: -16, bottom: -16 } },
+];
 
 export const PptCanvas = ({
   slide,
@@ -26,12 +38,14 @@ export const PptCanvas = ({
   onChangeImageElement,
   fontFamily,
 }) => {
+  const [resizingElement, setResizingElement] = useState(null);
+
   const is43 = aspectRatio === '4:3';
   const canvasWidth = SCREEN_WIDTH - 24;
   const canvasHeight = is43 ? (canvasWidth * 3) / 4 : (canvasWidth * 9) / 16;
 
   // Move Element Drag & Tap Handler
-  const createPanResponder = (element) => {
+  const createMovePanResponder = (element) => {
     let initialX = element.x;
     let initialY = element.y;
     let isDragging = false;
@@ -54,8 +68,18 @@ export const PptCanvas = ({
           const deltaXPercent = (gestureState.dx / canvasWidth) * 100;
           const deltaYPercent = (gestureState.dy / canvasHeight) * 100;
 
+          let minY = 0;
+          if (element.type === 'text') {
+            const titleElem = (slide.elements || []).find(
+              (e) => e.id !== element.id && e.type === 'text' && e.y < element.y && e.fontSize >= 20
+            );
+            if (titleElem) {
+              minY = Math.min(90, titleElem.y + titleElem.height + 2);
+            }
+          }
+
           const newX = Math.max(0, Math.min(100 - element.width, initialX + deltaXPercent));
-          const newY = Math.max(0, Math.min(100 - element.height, initialY + deltaYPercent));
+          const newY = Math.max(minY, Math.min(100 - element.height, initialY + deltaYPercent));
 
           onChangeElement({
             ...element,
@@ -67,36 +91,90 @@ export const PptCanvas = ({
       onPanResponderRelease: (evt, gestureState) => {
         const dist = Math.hypot(gestureState.dx, gestureState.dy);
         if (!isDragging && dist <= 8) {
-          // Finger moved <= 8px -> TAP! Start inline editing
           onSelectElement(element.id);
           if (element.type === 'text') {
             onStartInlineEditing(element.id);
+          } else if (element.type === 'image' && !element.uri) {
+            onChangeImageElement(element);
           }
         }
       },
     });
   };
 
-  // Resize Element Drag Handler
-  const createResizePanResponder = (element) => {
+  // 8-Way Resize Drag Handler
+  const create8WayResizePanResponder = (element, handleKey) => {
+    let initialX = element.x;
+    let initialY = element.y;
     let initialW = element.width;
     let initialH = element.height;
 
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        initialX = element.x;
+        initialY = element.y;
+        initialW = element.width;
+        initialH = element.height;
+        setResizingElement({ id: element.id, width: element.width, height: element.height });
+      },
       onPanResponderMove: (evt, gestureState) => {
-        const deltaWPercent = (gestureState.dx / canvasWidth) * 100;
-        const deltaHPercent = (gestureState.dy / canvasHeight) * 100;
+        const deltaXPercent = (gestureState.dx / canvasWidth) * 100;
+        const deltaYPercent = (gestureState.dy / canvasHeight) * 100;
 
-        const newW = Math.max(10, Math.min(100 - element.x, initialW + deltaWPercent));
-        const newH = Math.max(10, Math.min(100 - element.y, initialH + deltaHPercent));
+        let newX = initialX;
+        let newY = initialY;
+        let newW = initialW;
+        let newH = initialH;
 
-        onChangeElement({
+        const MIN_W = 10;
+        const MIN_H = 5;
+
+        let minAllowedY = 0;
+        if (element.type === 'text') {
+          const titleElem = (slide.elements || []).find(
+            (e) => e.id !== element.id && e.type === 'text' && e.y < element.y && e.fontSize >= 20
+          );
+          if (titleElem) {
+            minAllowedY = Math.min(90, titleElem.y + titleElem.height + 2);
+          }
+        }
+
+        if (handleKey.includes('r')) {
+          newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
+        }
+        if (handleKey.includes('l')) {
+          const maxLeft = initialX + initialW - MIN_W;
+          newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
+          newW = initialW + (initialX - newX);
+        }
+        if (handleKey.includes('b')) {
+          newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
+        }
+        if (handleKey.includes('t')) {
+          const maxTop = initialY + initialH - MIN_H;
+          let targetY = initialY + deltaYPercent;
+          if (minAllowedY > 0 && targetY < minAllowedY) {
+            targetY = minAllowedY;
+          }
+          newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
+          newH = initialH + (initialY - newY);
+        }
+
+        const updated = {
           ...element,
+          x: Math.round(newX * 10) / 10,
+          y: Math.round(newY * 10) / 10,
           width: Math.round(newW * 10) / 10,
           height: Math.round(newH * 10) / 10,
-        });
+        };
+
+        setResizingElement({ id: element.id, width: updated.width, height: updated.height });
+        onChangeElement(updated);
+      },
+      onPanResponderRelease: () => {
+        setResizingElement(null);
       },
     });
   };
@@ -109,7 +187,10 @@ export const PptCanvas = ({
     );
   }
 
-  const elements = slide.elements || [];
+  // Calculate layout plan using single source of truth
+  const planned = planPage(slide);
+  const elements = (planned.computedPage && planned.computedPage.elements) || slide.elements || [];
+  const splitCount = planned.splitCount || 0;
 
   return (
     <View style={styles.container}>
@@ -127,15 +208,51 @@ export const PptCanvas = ({
         {elements.map((elem) => {
           const isSelected = selectedElementId === elem.id;
           const isEditing = editingElementId === elem.id;
+
+          let effectiveY = elem.y;
+          if (elem.type === 'text') {
+            const titleElem = elements.find(
+              (e) => e.id !== elem.id && e.type === 'text' && e.y < elem.y && (e.fontSize >= 20 || e.fontWeight === 'bold')
+            );
+            if (titleElem) {
+              const minTitleBottom = Math.min(90, titleElem.y + titleElem.height + 2);
+              if (effectiveY < minTitleBottom) {
+                effectiveY = minTitleBottom;
+              }
+            }
+          }
+
           const left = (elem.x / 100) * canvasWidth;
-          const top = (elem.y / 100) * canvasHeight;
+          const top = (effectiveY / 100) * canvasHeight;
           const elemWidth = (elem.width / 100) * canvasWidth;
-          const elemHeight = (elem.height / 100) * canvasHeight;
 
-          const dragResponder = createPanResponder(elem);
-          const resizeResponder = createResizePanResponder(elem);
+          // Dynamically adjust height in auto mode so long text expands and fits on screen
+          let effectiveHeight = elem.height;
+          if (elem.type === 'text' && elem.text && elem.text.trim()) {
+            const computedPt = elem.computedFontSize || elem.fontSize || 18;
+            const lineSpacing = elem.lineSpacing || 1.35;
+            const boxWidthPt = (elem.width / 100) * SLIDE.widthPt;
+            const charWidthPt = computedPt * 0.52;
+            const charsPerLine = Math.max(1, Math.floor(boxWidthPt / charWidthPt));
+            const paragraphs = elem.text.split('\n');
+            let totalWrappedLines = 0;
+            for (const p of paragraphs) {
+              totalWrappedLines += p.length ? Math.max(1, Math.ceil(p.length / charsPerLine)) : 1;
+            }
+            const totalHeightPt = totalWrappedLines * computedPt * lineSpacing;
+            const neededPercent = Math.ceil((totalHeightPt / SLIDE.heightPt) * 100);
+            if (neededPercent > elem.height) {
+              effectiveHeight = Math.min(96 - effectiveY, neededPercent + 2);
+            }
+          }
 
-          const scaledFontSize = (elem.fontSize || 18) * (canvasWidth / 360);
+          const elemHeight = (effectiveHeight / 100) * canvasHeight;
+
+          const dragResponder = createMovePanResponder(elem);
+
+          // Scaled font size in pixels based on (boxWidthPx / boxWidthPt) = (canvasWidth / SLIDE.widthPt)
+          const computedPt = elem.computedFontSize || elem.fontSize || 18;
+          const scaledFontSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
           return (
             <View
@@ -146,23 +263,15 @@ export const PptCanvas = ({
                   left,
                   top,
                   width: elemWidth,
-                  minHeight: elemHeight,
+                  height: elemHeight,
                   zIndex: elem.zIndex || 1,
                 },
                 isSelected && styles.selectedWrapper,
               ]}
               {...(isEditing ? {} : dragResponder.panHandlers)}
             >
-              {/* Element Content */}
               {elem.type === 'text' ? (
-                <View
-                  style={[
-                    styles.textContainer,
-                    {
-                      backgroundColor: elem.highlightColor || 'transparent',
-                    },
-                  ]}
-                >
+                <View style={styles.textContainer}>
                   {isEditing ? (
                     <TextInput
                       style={{
@@ -172,11 +281,17 @@ export const PptCanvas = ({
                         fontStyle: elem.fontStyle || 'normal',
                         textDecorationLine: elem.textDecorationLine || 'none',
                         color: elem.color || '#1c1c1e',
+                        backgroundColor:
+                          elem.highlightColor && elem.highlightColor !== 'transparent'
+                            ? elem.highlightColor
+                            : undefined,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
-                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.2),
+                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
                         fontFamily: fontFamily || undefined,
-                        padding: 0,
+                        paddingHorizontal: 2,
+                        paddingVertical: 2,
+                        borderRadius: 4,
                         margin: 0,
                         textAlignVertical: 'top',
                       }}
@@ -189,13 +304,6 @@ export const PptCanvas = ({
                       onBlur={() => {
                         if (onEndInlineEditing) onEndInlineEditing();
                       }}
-                      onContentSizeChange={(e) => {
-                        const contentHeight = e.nativeEvent.contentSize.height;
-                        const neededPercent = Math.ceil(((contentHeight + 12) / canvasHeight) * 100);
-                        if (neededPercent > elem.height) {
-                          onChangeElement({ ...elem, height: Math.min(95, neededPercent) });
-                        }
-                      }}
                     />
                   ) : (
                     <Text
@@ -205,10 +313,17 @@ export const PptCanvas = ({
                         fontStyle: elem.fontStyle || 'normal',
                         textDecorationLine: elem.textDecorationLine || 'none',
                         color: elem.color || '#1c1c1e',
+                        backgroundColor:
+                          elem.highlightColor && elem.highlightColor !== 'transparent'
+                            ? elem.highlightColor
+                            : undefined,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
-                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.2),
+                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
                         fontFamily: fontFamily || undefined,
+                        paddingHorizontal: 2,
+                        paddingVertical: 2,
+                        borderRadius: 4,
                       }}
                     >
                       {elem.text || '...'}
@@ -221,15 +336,15 @@ export const PptCanvas = ({
                     <Image
                       source={{ uri: elem.uri }}
                       style={styles.image}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   ) : (
                     <TouchableOpacity
                       style={styles.imagePlaceholder}
                       onPress={() => onChangeImageElement(elem)}
                     >
-                      <Text style={{ fontSize: 24, marginBottom: 4 }}>🖼️</Text>
-                      <Text style={{ color: '#007AFF', fontSize: 12, fontWeight: 'bold' }}>
+                      <Text style={{ fontSize: 22, marginBottom: 2 }}>🖼️</Text>
+                      <Text style={{ color: '#007AFF', fontSize: 11, fontWeight: 'bold', textAlign: 'center' }}>
                         داگرتنی وێنە
                       </Text>
                     </TouchableOpacity>
@@ -237,18 +352,39 @@ export const PptCanvas = ({
                 </View>
               )}
 
-              {/* Resize Handle for Selected Element */}
-              {isSelected && (
-                <View
-                  style={styles.resizeHandle}
-                  {...resizeResponder.panHandlers}
-                >
-                  <View style={styles.resizeHandleInner} />
+              {/* Dimension Tooltip Badge when dragging resize */}
+              {resizingElement && resizingElement.id === elem.id && (
+                <View style={styles.sizeTooltip}>
+                  <Text style={styles.sizeTooltipText}>
+                    {`W: ${elem.width}% | H: ${elem.height}%`}
+                  </Text>
                 </View>
+              )}
+
+              {/* 8-Way Touch Handles for Selected Element */}
+              {isSelected && (
+                <>
+                  {RESIZE_HANDLES.map((handle) => (
+                    <View
+                      key={handle.key}
+                      style={[styles.handleTouchTarget, handle.style]}
+                      {...create8WayResizePanResponder(elem, handle.key).panHandlers}
+                    >
+                      <View style={styles.handleDot} />
+                    </View>
+                  ))}
+                </>
               )}
             </View>
           );
         })}
+
+        {/* Small badge showing extra slides when text splits */}
+        {splitCount > 0 && (
+          <View style={styles.splitBadge}>
+            <Text style={styles.splitBadgeText}>{`+${splitCount} سلاید`}</Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Selected Element Floating Action Bar */}
@@ -322,16 +458,18 @@ const styles = StyleSheet.create({
   },
   selectedWrapper: {
     borderWidth: 1.5,
-    borderColor: '#D24726',
+    borderColor: '#8B3A2B',
     borderStyle: 'dashed',
   },
   textContainer: {
     flex: 1,
     justifyContent: 'center',
-    padding: 4,
+    padding: 2,
   },
   imageContainer: {
     flex: 1,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
@@ -339,31 +477,60 @@ const styles = StyleSheet.create({
   },
   imagePlaceholder: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 6,
     borderWidth: 1.5,
     borderColor: '#007AFF',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 4,
   },
-  resizeHandle: {
+  handleTouchTarget: {
     position: 'absolute',
-    bottom: -8,
-    right: -8,
-    width: 24,
-    height: 24,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 99,
+    zIndex: 999,
   },
-  resizeHandleInner: {
+  handleDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#D24726',
+    backgroundColor: '#8B3A2B',
     borderWidth: 2,
     borderColor: '#ffffff',
+  },
+  sizeTooltip: {
+    position: 'absolute',
+    top: -24,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 1000,
+  },
+  sizeTooltipText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  splitBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: '#8B3A2B',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    zIndex: 100,
+  },
+  splitBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   actionBar: {
     flexDirection: 'row',
