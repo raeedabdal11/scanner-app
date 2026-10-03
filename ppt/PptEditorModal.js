@@ -29,6 +29,7 @@ import {
   clearPptDraft,
   createDefaultPresentation,
 } from './pptDraftStorage';
+import { getElementRuns } from './formattedText';
 
 // Professional PowerPoint Slide Background Color Matrices
 const PPT_THEME_BG_COLORS = [
@@ -92,6 +93,10 @@ const PageCard = ({
   onMovePageDown,
   onDeletePage,
   onToggleBgPicker,
+  selRef,
+  pressingRef,
+  selState,
+  setSelState,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -222,6 +227,10 @@ const PageCard = ({
         onDeleteElement={onDeleteElement}
         onChangeImageElement={onChangeImageElement}
         fontFamily={vazirmatnFont}
+        selRef={selRef}
+        pressingRef={pressingRef}
+        selState={selState}
+        setSelState={setSelState}
       />
     </View>
   );
@@ -238,6 +247,11 @@ export const PptEditorModal = ({
   const [selectedPageId, setSelectedPageId] = useState(null);
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [editingElementId, setEditingElementId] = useState(null);
+
+  const selRef = useRef(null);
+  const pendingSelRef = useRef(null);
+  const pressingRef = useRef(false);
+  const [selState, setSelState] = useState(undefined);
 
   // Saved state per page e.g. { [pageId]: boolean }
   const [savedPages, setSavedPages] = useState({});
@@ -589,10 +603,15 @@ export const PptEditorModal = ({
 
   // Update Element in specific page
   const handleUpdateElement = (pageId, updatedElem) => {
+    let elemToSave = updatedElem;
+    if (elemToSave.type === 'text' && elemToSave.color) {
+      const { color: _c, ...rest } = elemToSave;
+      elemToSave = rest;
+    }
     const newSlides = presentation.slides.map((s) => {
       if (s.id !== pageId) return s;
       const newElements = (s.elements || []).map((e) =>
-        e.id === updatedElem.id ? updatedElem : e
+        e.id === elemToSave.id ? elemToSave : e
       );
       return { ...s, elements: newElements };
     });
@@ -1058,6 +1077,10 @@ export const PptEditorModal = ({
                             onToggleBgPicker={(pId) =>
                               setBgPickerPageId(bgPickerPageId === pId ? null : pId)
                             }
+                            selRef={selRef}
+                            pressingRef={pressingRef}
+                            selState={selState}
+                            setSelState={setSelState}
                           />
 
                           {/* Page Divider between pages */}
@@ -1095,6 +1118,11 @@ export const PptEditorModal = ({
                     setSelectedElementId(null);
                     setEditingElementId(null);
                   }}
+                  selRef={selRef}
+                  pendingSelRef={pendingSelRef}
+                  pressingRef={pressingRef}
+                  selState={selState}
+                  setSelState={setSelState}
                 />
               )}
 

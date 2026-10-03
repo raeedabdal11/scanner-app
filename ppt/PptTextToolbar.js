@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,17 @@ import {
   TextInput,
   Modal,
   StyleSheet,
+  ToastAndroid,
+  Platform,
 } from 'react-native';
 import { KURDISH_FONTS, ENGLISH_FONTS } from './fonts';
 import {
-  applyStyleToElement,
+  getElementRuns,
   updateElementText,
   getSelectionStyle,
+  isWordChar,
 } from './formattedText';
+import { applyStyle, wordRangeAt } from './richText';
 
 // 1. PowerPoint Theme Colors Matrix (10 columns x 5 rows = 50 shades)
 const THEME_COLORS_GRID = [
@@ -59,13 +63,32 @@ const SPECTRUM_COLORS_GRID = [
   ['#b02a1e', '#d97706', '#b45309', '#15803d', '#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6b21a8', '#831843'],
 ];
 
-export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
+export const PptTextToolbar = ({
+  element,
+  onChangeElement,
+  onClose,
+  selRef: externalSelRef,
+  pendingSelRef: externalPendingSelRef,
+  pressingRef: externalPressingRef,
+  selState: externalSelState,
+  setSelState: externalSetSelState,
+}) => {
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
   const [editTextModal, setEditTextModal] = useState(false);
   const [tempText, setTempText] = useState(element?.text || '');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const [forceWhole, setForceWhole] = useState(false);
+
+  const localSelRef = useRef(null);
+  const localPendingSelRef = useRef(null);
+  const localPressingRef = useRef(false);
+  const [localSelState, setLocalSelState] = useState(undefined);
+
+  const selRef = externalSelRef || localSelRef;
+  const pendingSelRef = externalPendingSelRef || localPendingSelRef;
+  const pressingRef = externalPressingRef || localPressingRef;
+  const selState = externalSelState !== undefined ? externalSelState : localSelState;
+  const setSelState = externalSetSelState || setLocalSelState;
 
   // Font Sheet Modal State
   const [fontModalVisible, setFontModalVisible] = useState(false);
@@ -74,62 +97,138 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
 
   if (!element || element.type !== 'text') return null;
 
+  const runs = getElementRuns(element);
+
+  const setRuns = (newRuns) => {
+    const plain = newRuns.map((r) => r.text).join('');
+    const { color: _c, ...elemWithoutColor } = element;
+    onChangeElement({
+      ...elemWithoutColor,
+      runs: newRuns,
+      formattedRuns: newRuns,
+      text: plain,
+    });
+  };
+
+  const showNoSelectionToast = () => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('سەرەتا وشەیەک دیاری بکە', ToastAndroid.SHORT);
+    }
+  };
+
+  const handlePressIn = () => {
+    pressingRef.current = true;
+    if (selRef.current) {
+      pendingSelRef.current = { ...selRef.current };
+    }
+  };
+
+  // ONE function for ALL formatting
+  function applyRunStyle(patch) {
+    const plain = runs.map((r) => r.text).join('');
+    if (!plain) {
+      showNoSelectionToast();
+      pressingRef.current = false;
+      pendingSelRef.current = null;
+      return;
+    }
+
+    const currentSel = pendingSelRef.current || selRef.current;
+    if (!currentSel || currentSel.start === undefined || currentSel.start === null) {
+      showNoSelectionToast();
+      pressingRef.current = false;
+      pendingSelRef.current = null;
+      return;
+    }
+
+    let start = Math.max(0, Math.min(plain.length, currentSel.start));
+    let end = Math.max(0, Math.min(plain.length, currentSel.end));
+
+    if (start > end) {
+      [start, end] = [end, start];
+    }
+
+    // Range rules:
+    // a) Real selection (start !== end): apply ONLY to start..end.
+    // b) No selection, cursor inside a word: apply ONLY to that word (wordRangeAt).
+    // c) Otherwise (cursor on a space, or input never focused): do NOTHING and show small toast.
+    if (start === end) {
+      let isWord = false;
+      if (start < plain.length && isWordChar(plain[start])) {
+        isWord = true;
+      } else if (start > 0 && start === plain.length && isWordChar(plain[start - 1])) {
+        isWord = true;
+      }
+
+      if (isWord) {
+        const idxToSearch = start < plain.length ? start : start - 1;
+        const wRange = wordRangeAt(plain, idxToSearch);
+        if (wRange.start !== wRange.end) {
+          start = wRange.start;
+          end = wRange.end;
+        }
+      }
+    }
+
+    if (start === end) {
+      showNoSelectionToast();
+      pressingRef.current = false;
+      pendingSelRef.current = null;
+      return;
+    }
+
+    console.log('[STYLE]', patch, start, end);
+
+    const newRuns = applyStyle(runs, start, end, patch);
+
+    const targetSel = { start, end };
+    selRef.current = targetSel;
+    if (setSelState) setSelState(targetSel);
+
+    setRuns(newRuns);
+
+    setTimeout(() => {
+      pressingRef.current = false;
+      pendingSelRef.current = null;
+    }, 100);
+  }
+
   // Active selection/word style query
-  const currentStyle = getSelectionStyle(element, selection);
-
-  // Applies property change to selected range, word under cursor, or whole box
-  const updateProp = (key, value) => {
-    const updated = applyStyleToElement(element, key, value, selection, forceWhole);
-    onChangeElement(updated);
-  };
-
-  const toggleBold = () => {
-    updateProp('bold', !currentStyle.bold);
-  };
-
-  const toggleItalic = () => {
-    updateProp('italic', !currentStyle.italic);
-  };
-
-  const toggleUnderline = () => {
-    updateProp('underline', !currentStyle.underline);
-  };
+  const currentSel = pendingSelRef.current || selRef.current || selection;
+  const currentStyle = getSelectionStyle(element, currentSel);
 
   const setAlignRight = () => {
+    const { color: _c, ...elemWithoutColor } = element;
     onChangeElement({
-      ...element,
+      ...elemWithoutColor,
       textAlign: 'right',
       writingDirection: 'rtl',
     });
   };
 
   const setAlignCenter = () => {
+    const { color: _c, ...elemWithoutColor } = element;
     onChangeElement({
-      ...element,
+      ...elemWithoutColor,
       textAlign: 'center',
     });
   };
 
   const setAlignLeft = () => {
+    const { color: _c, ...elemWithoutColor } = element;
     onChangeElement({
-      ...element,
+      ...elemWithoutColor,
       textAlign: 'left',
       writingDirection: 'ltr',
     });
   };
 
   const isAutoMode = !element.fontMode || element.fontMode === 'auto';
-  const baseFontSize = element.fontSize || element.computedFontSize || 18;
-
-  // Manual step +/- 2pt relative scale delta on selection
-  const changeFontSizeStep = (delta) => {
-    const scaleDelta = delta / baseFontSize;
-    updateProp('sizeScaleDelta', scaleDelta);
-  };
 
   const setAutoMode = () => {
+    const { color: _c, ...elemWithoutColor } = element;
     onChangeElement({
-      ...element,
+      ...elemWithoutColor,
       fontMode: 'auto',
       autoFit: 'grow',
     });
@@ -165,13 +264,12 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
   };
 
   const align = element.textAlign || 'right';
-  const currentColor = currentStyle.color || element.color || '#1c1c1e';
-  const currentShadow = currentStyle.shadow || element.shadowColor || 'transparent';
-  const currentHighlight = currentStyle.highlight || element.highlightColor || 'transparent';
+  const currentColor = currentStyle.color || '#1c1c1e';
+  const currentShadow = currentStyle.shadowColor || 'transparent';
+  const currentHighlight = currentStyle.highlight || 'transparent';
   const currentKurdishFont = currentStyle.kuFont || element.kurdishFont || 'Tahoma';
   const currentEnglishFont = currentStyle.enFont || element.englishFont || 'Calibri';
 
-  // Determine active selected color depending on colorTarget
   const activeSelectedColor =
     colorTarget === 'text'
       ? currentColor
@@ -181,15 +279,14 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
 
   const handleColorSelect = (hexColor) => {
     if (colorTarget === 'text') {
-      updateProp('color', hexColor);
+      applyRunStyle({ color: hexColor });
     } else if (colorTarget === 'shadow') {
-      updateProp('shadowColor', hexColor);
+      applyRunStyle({ shadowColor: hexColor === 'transparent' ? null : hexColor });
     } else if (colorTarget === 'highlight') {
-      updateProp('highlightColor', hexColor);
+      applyRunStyle({ highlight: hexColor === 'transparent' ? null : hexColor });
     }
   };
 
-  // Filter font list for Bottom Sheet based on active category & search query
   const rawFontList = fontModalCategory === 'kurdish' ? KURDISH_FONTS : ENGLISH_FONTS;
   const filteredFontList = rawFontList.filter((f) => {
     if (!fontSearchQuery.trim()) return true;
@@ -201,41 +298,11 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
     );
   });
 
-  // Find active font labels for display
   const activeKurdishObj = KURDISH_FONTS.find((f) => f.name === currentKurdishFont) || KURDISH_FONTS[0];
   const activeEnglishObj = ENGLISH_FONTS.find((f) => f.name === currentEnglishFont) || ENGLISH_FONTS[0];
 
-  const hasRangeSelection = selection.start !== selection.end;
-
   return (
     <View style={styles.toolbarContainer}>
-
-      {/* Selection / Whole Text Box Status Banner */}
-      <View style={styles.selectionBanner}>
-        {forceWhole ? (
-          <Text style={styles.selectionBannerText}>
-            🔲 گۆڕانکاری بەسەر تەواوی دەقەکەدا جێبەجێ دەبێت
-          </Text>
-        ) : hasRangeSelection ? (
-          <Text style={styles.selectionBannerText}>
-            {`تەحدیدکراوە (${selection.end - selection.start} پیت) - گۆڕانکاری تەنها بەسەر ئەم شوێنەدا دێت`}
-          </Text>
-        ) : (
-          <Text style={styles.selectionBannerText}>
-            💡 وشەیەک تەحدید بکە یان دوگمەی هەمووی داگرە بۆ گۆڕینی هەموو دەقەکە
-          </Text>
-        )}
-
-        <TouchableOpacity
-          style={[styles.wholeBoxBtn, forceWhole && styles.wholeBoxBtnActive]}
-          onPress={() => setForceWhole(!forceWhole)}
-        >
-          <Text style={[styles.wholeBoxBtnText, forceWhole && styles.wholeBoxBtnTextActive]}>
-            {forceWhole ? '✓ هەمووی' : '🔲 هەمووی'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* 3 Top Tabs: "نووسین", "فۆنت", "ڕەنگ" */}
       <View style={styles.tabHeaderRow}>
         <TouchableOpacity
@@ -266,11 +333,10 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
         </TouchableOpacity>
       </View>
 
-      {/* TAB 1: "نووسین" (Size A-/A+/خۆکار, B/I/U, Alignment, Lists) */}
+      {/* TAB 1: "نووسین" */}
       {activeTab === 'text' && (
         <View style={styles.tabContentBox}>
           <View style={styles.wrappedRow}>
-            {/* Edit Text Button */}
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => {
@@ -281,9 +347,12 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               <Text style={styles.actionBtnText}>✏️ دەستکاری دەق</Text>
             </TouchableOpacity>
 
-            {/* Size Controls displaying selection size */}
             <View style={styles.fontControlsRow}>
-              <TouchableOpacity style={styles.sizeBtn} onPress={() => changeFontSizeStep(-2)}>
+              <TouchableOpacity
+                style={styles.sizeBtn}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ sizeScaleDelta: -0.1 })}
+              >
                 <Text style={styles.sizeBtnText}>A-</Text>
               </TouchableOpacity>
 
@@ -291,7 +360,11 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                 {isAutoMode ? `خۆکار (${currentStyle.sizePt}pt)` : `${currentStyle.sizePt}pt`}
               </Text>
 
-              <TouchableOpacity style={styles.sizeBtn} onPress={() => changeFontSizeStep(2)}>
+              <TouchableOpacity
+                style={styles.sizeBtn}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ sizeScaleDelta: 0.1 })}
+              >
                 <Text style={styles.sizeBtnText}>A+</Text>
               </TouchableOpacity>
 
@@ -305,7 +378,6 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Alignment Controls (RTL order: ڕاست | ناوەڕاست | چەپ) */}
             <View style={styles.alignGroup}>
               <TouchableOpacity
                 style={[styles.alignBtn, align === 'right' && styles.alignBtnActive]}
@@ -335,31 +407,32 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Style Toggles (B, I, U) showing current selection style */}
             <View style={styles.styleGroup}>
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.bold && styles.styleBtnActive]}
-                onPress={toggleBold}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ bold: !currentStyle.bold })}
               >
                 <Text style={[styles.styleBtnText, { fontWeight: 'bold' }]}>B</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.italic && styles.styleBtnActive]}
-                onPress={toggleItalic}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ italic: !currentStyle.italic })}
               >
                 <Text style={[styles.styleBtnText, { fontStyle: 'italic' }]}>I</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.underline && styles.styleBtnActive]}
-                onPress={toggleUnderline}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ underline: !currentStyle.underline })}
               >
                 <Text style={[styles.styleBtnText, { textDecorationLine: 'underline' }]}>U</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Lists */}
             <TouchableOpacity style={styles.iconBtn} onPress={applyBulletList}>
               <Text style={styles.iconBtnText}>• خاڵبەندی</Text>
             </TouchableOpacity>
@@ -371,10 +444,9 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
         </View>
       )}
 
-      {/* TAB 2: "فۆنت" (PowerPoint-style Font Picker Controls) */}
+      {/* TAB 2: "فۆنت" */}
       {activeTab === 'font' && (
         <View style={styles.tabContentBox}>
-          {/* Main Selected Font Selector Cards */}
           <View style={styles.fontSelectorCardsRow}>
             <TouchableOpacity
               style={styles.fontSelectCard}
@@ -407,16 +479,21 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Quick Fonts Scroll Strip */}
           <Text style={[styles.sectionTitle, { marginTop: 6 }]}>فۆنتە خێرا و باوەکان (Quick Pick):</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 6 }}
+          >
             {KURDISH_FONTS.slice(0, 10).map((font) => {
               const isSelected = currentKurdishFont === font.name;
               return (
                 <TouchableOpacity
                   key={`quick_ku_${font.name}`}
                   style={[styles.fontChip, isSelected && styles.fontChipActive]}
-                  onPress={() => updateProp('kuFont', font.name)}
+                  onPressIn={handlePressIn}
+                  onPress={() => applyRunStyle({ kuFont: font.name })}
                 >
                   <Text style={[styles.fontChipText, { fontFamily: font.name }, isSelected && styles.fontChipTextActive]}>
                     {isSelected ? `✓ ${font.name}` : font.name}
@@ -428,10 +505,9 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
         </View>
       )}
 
-      {/* TAB 3: "ڕەنگ" (Text Color / Shadow / Box Background Matrix) */}
+      {/* TAB 3: "ڕەنگ" */}
       {activeTab === 'color' && (
         <View style={styles.tabContentBox}>
-          {/* Sub-selector for Target: Text Color | Text Shadow | Box Highlight */}
           <View style={styles.colorTargetRow}>
             <TouchableOpacity
               style={[
@@ -506,17 +582,21 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
-            {/* Clear option if target is Shadow or Highlight */}
+          <ScrollView
+            style={{ maxHeight: 220 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {colorTarget === 'shadow' && (
               <TouchableOpacity
                 style={styles.noHighlightBtn}
+                onPressIn={handlePressIn}
                 onPress={() => handleColorSelect('transparent')}
               >
                 <Text style={styles.noHighlightText}>
                   {currentShadow === 'transparent'
                     ? '✓ بێ سێبەر (No Shadow / Transparent)'
-                    : '✕ لابردنی سێبەر (Clear Shadow)'}
+                    : '⊗ لابردنی سێبەر (Clear Shadow)'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -524,12 +604,13 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
             {colorTarget === 'highlight' && (
               <TouchableOpacity
                 style={styles.noHighlightBtn}
+                onPressIn={handlePressIn}
                 onPress={() => handleColorSelect('transparent')}
               >
                 <Text style={styles.noHighlightText}>
                   {currentHighlight === 'transparent'
                     ? '✓ بێ هاینایت (No Highlight / Transparent)'
-                    : '✕ لابردنی هاینایت (Clear Highlight)'}
+                    : '⊗ لابردنی هاینایت (Clear Highlight)'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -547,6 +628,7 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                         { backgroundColor: hex },
                         activeSelectedColor === hex && styles.colorSquareSelected,
                       ]}
+                      onPressIn={handlePressIn}
                       onPress={() => handleColorSelect(hex)}
                     >
                       {activeSelectedColor === hex && (
@@ -577,6 +659,7 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                     { backgroundColor: hex },
                     activeSelectedColor === hex && styles.colorSquareSelected,
                   ]}
+                  onPressIn={handlePressIn}
                   onPress={() => handleColorSelect(hex)}
                 >
                   {activeSelectedColor === hex && (
@@ -597,6 +680,7 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                     { backgroundColor: hex },
                     activeSelectedColor === hex && styles.colorSquareSelected,
                   ]}
+                  onPressIn={handlePressIn}
                   onPress={() => handleColorSelect(hex)}
                 >
                   {activeSelectedColor === hex && (
@@ -619,6 +703,7 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                         { backgroundColor: hex },
                         activeSelectedColor === hex && styles.colorSquareSelected,
                       ]}
+                      onPressIn={handlePressIn}
                       onPress={() => handleColorSelect(hex)}
                     >
                       {activeSelectedColor === hex && (
@@ -633,79 +718,96 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
         </View>
       )}
 
-      {/* Edit Text & Selection Formatting Modal */}
+      {/* Edit Text Modal */}
       <Modal visible={editTextModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>نوسینی دەق و تەحدیدکردن ✍️</Text>
 
-            {/* Selection Format Toolbar for Highlighted Word/Text inside Modal */}
             <View style={styles.modalFormatBar}>
               <TouchableOpacity
-                style={[styles.modalFormatBtn, forceWhole && styles.modalFormatBtnActive]}
-                onPress={() => setForceWhole(!forceWhole)}
-              >
-                <Text style={styles.modalFormatBtnText}>{forceWhole ? '✓ هەمووی' : '🔲 هەمووی'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.modalFormatBtn}
-                onPress={() => toggleBold()}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ bold: !currentStyle.bold })}
               >
                 <Text style={[styles.modalFormatBtnText, currentStyle.bold && { color: '#30d158' }]}>B</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
-                onPress={() => toggleItalic()}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ italic: !currentStyle.italic })}
               >
                 <Text style={[styles.modalFormatBtnText, { fontStyle: 'italic' }, currentStyle.italic && { color: '#30d158' }]}>I</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
-                onPress={() => toggleUnderline()}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ underline: !currentStyle.underline })}
               >
                 <Text style={[styles.modalFormatBtnText, { textDecorationLine: 'underline' }, currentStyle.underline && { color: '#30d158' }]}>U</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
-                onPress={() => changeFontSizeStep(2)}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ sizeScaleDelta: 0.1 })}
               >
                 <Text style={styles.modalFormatBtnText}>A+</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
-                onPress={() => changeFontSizeStep(-2)}
+                onPressIn={handlePressIn}
+                onPress={() => applyRunStyle({ sizeScaleDelta: -0.1 })}
               >
                 <Text style={styles.modalFormatBtnText}>A-</Text>
               </TouchableOpacity>
             </View>
 
             {/* Quick Color Palette for Highlighted Word */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: 10 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 6, marginBottom: 10 }}
+            >
               {['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#5856d6', '#af52de', '#ffffff', '#000000'].map((hex) => (
                 <TouchableOpacity
                   key={`modal_color_${hex}`}
                   style={[styles.colorSquare, { backgroundColor: hex, width: 22, height: 22 }]}
-                  onPress={() => updateProp('color', hex)}
+                  onPressIn={handlePressIn}
+                  onPress={() => applyRunStyle({ color: hex })}
                 />
               ))}
             </ScrollView>
 
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { color: undefined }]}
               multiline
-              value={tempText}
+              selection={selState}
+              onSelectionChange={(e) => {
+                const sel = e.nativeEvent.selection;
+                console.log('[SEL]', sel);
+                if (!pressingRef.current) {
+                  setSelection(sel);
+                  if (selRef) selRef.current = sel;
+                  if (setSelState) setSelState(sel);
+                }
+              }}
               onChangeText={(text) => {
+                if (text === tempText) return;
                 setTempText(text);
                 const updated = updateElementText(element, text, selection);
                 onChangeElement(updated);
               }}
-              onSelectionChange={(e) => {
-                setSelection(e.nativeEvent.selection);
-              }}
               placeholder="دەقەکەت لێرە بنووسە..."
               placeholderTextColor="#777"
               textAlign={element.writingDirection === 'ltr' ? 'left' : 'right'}
-            />
+            >
+              {runs.map((r, i) => (
+                <Text key={i} style={{ color: r.color || '#1c1c1e' }}>
+                  {r.text}
+                </Text>
+              ))}
+            </TextInput>
 
             <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 10, textAlign: 'right' }}>
               💡 وشەیەک یان بەشێک لە دەقەکە تحدید بکە و دوگمەکانی سەرەوە لێبدە تا تەنها ئەو شوێنە ڕەنگ یان فۆنتەکەی بگوڕێت.
@@ -733,7 +835,7 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
         </View>
       </Modal>
 
-      {/* POWERPOINT-STYLE FONT SELECTOR BOTTOM SHEET MODAL WITH LIVE PREVIEW */}
+      {/* Font Selector Bottom Sheet */}
       <Modal visible={fontModalVisible} transparent animationType="slide">
         <TouchableOpacity
           style={styles.bottomSheetOverlay}
@@ -741,10 +843,8 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
           onPress={() => setFontModalVisible(false)}
         >
           <TouchableOpacity style={styles.bottomSheetBox} activeOpacity={1}>
-            {/* Drag Handle */}
             <View style={styles.bottomSheetHandle} />
 
-            {/* Header */}
             <View style={styles.fontModalHeader}>
               <TouchableOpacity
                 style={styles.doneBtn}
@@ -760,7 +860,6 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Live Text Preview Box displaying actual element.text */}
             <View style={styles.livePreviewBox}>
               <Text style={styles.livePreviewLabel}>پێشاندانی ڕاستەوخۆی دەقەکەت (Live Canvas Text):</Text>
               <Text
@@ -784,7 +883,6 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               </Text>
             </View>
 
-            {/* Search Box */}
             <View style={styles.fontSearchBox}>
               <TextInput
                 style={styles.fontSearchInput}
@@ -800,7 +898,6 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               )}
             </View>
 
-            {/* Language Category Switcher */}
             <View style={styles.fontTabRow}>
               <TouchableOpacity
                 style={[
@@ -837,8 +934,11 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Vertical Font List */}
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={true}>
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
               {filteredFontList.map((font) => {
                 const isKurdishTab = fontModalCategory === 'kurdish';
                 const currentSelected = isKurdishTab ? currentKurdishFont : currentEnglishFont;
@@ -848,54 +948,30 @@ export const PptTextToolbar = ({ element, onChangeElement, onClose }) => {
                 return (
                   <TouchableOpacity
                     key={font.name}
-                    style={[
-                      styles.fontRowItem,
-                      isSelected && styles.fontRowItemActive,
-                    ]}
+                    style={[styles.fontRowItem, isSelected && styles.fontRowItemActive]}
+                    onPressIn={handlePressIn}
                     onPress={() => {
                       if (isKurdishTab) {
-                        updateProp('kuFont', font.name);
+                        applyRunStyle({ kuFont: font.name });
                       } else {
-                        updateProp('enFont', font.name);
+                        applyRunStyle({ enFont: font.name });
                       }
-                      // Keep sheet open so user can preview and compare multiple fonts live on canvas!
                     }}
                   >
-                    {/* Checkmark Column */}
-                    <View style={styles.fontCheckCol}>
-                      {isSelected && <Text style={styles.checkmarkText}>✓</Text>}
-                    </View>
-
-                    {/* Font Details & Sample Column */}
-                    <View style={styles.fontInfoCol}>
-                      <View style={styles.fontNameRow}>
-                        <Text style={styles.fontLabelText}>{font.label}</Text>
-                        {font.pptOnly && (
-                          <View style={styles.pptOnlyBadge}>
-                            <Text style={styles.pptOnlyText}>PowerPoint only</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Sample rendered in that specific font */}
-                      <Text
-                        style={[
-                          styles.fontSampleText,
-                          { fontFamily: font.name },
-                        ]}
-                      >
-                        {sampleText}
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fontRowLabel, { fontFamily: font.name }, isSelected && styles.fontRowLabelActive]}>
+                        {font.label}
                       </Text>
+                      <Text style={styles.fontRowSample}>{sampleText}</Text>
                     </View>
+                    {isSelected && <Text style={styles.checkIcon}>✓</Text>}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
     </View>
   );
 };
@@ -905,96 +981,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1c1e',
     borderTopWidth: 1,
     borderTopColor: '#2c2c2e',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  selectionBanner: {
-    backgroundColor: '#2c2c2e',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginBottom: 6,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
-  },
-  selectionBannerText: {
-    color: '#aaaaaa',
-    fontSize: 11,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  wholeBoxBtn: {
-    backgroundColor: '#3a3a3c',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  wholeBoxBtnActive: {
-    backgroundColor: '#8B3A2B',
-  },
-  wholeBoxBtnText: {
-    color: '#aaaaaa',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  wholeBoxBtnTextActive: {
-    color: '#ffffff',
+    paddingBottom: 10,
   },
   tabHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 8,
+    backgroundColor: '#1c1c1e',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2c2c2e',
   },
   tabHeaderBtn: {
     flex: 1,
-    backgroundColor: '#2c2c2e',
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 8,
+    paddingVertical: 10,
     alignItems: 'center',
-    marginHorizontal: 3,
-    minHeight: 40,
-    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   tabHeaderBtnActive: {
-    backgroundColor: '#8B3A2B',
+    borderBottomColor: '#8B3A2B',
   },
   tabHeaderBtnText: {
-    color: '#aaaaaa',
+    color: '#aaa',
     fontSize: 12,
     fontWeight: 'bold',
   },
   tabHeaderBtnTextActive: {
-    color: '#ffffff',
+    color: '#fff',
   },
   tabContentBox: {
-    paddingVertical: 4,
+    padding: 10,
   },
   wrappedRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 6,
+    gap: 8,
   },
   actionBtn: {
-    backgroundColor: '#8B3A2B',
+    backgroundColor: '#2c2c2e',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    minWidth: 40,
-    minHeight: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   actionBtnText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
+    color: '#fff',
     fontSize: 12,
+    fontWeight: 'bold',
   },
   fontControlsRow: {
     flexDirection: 'row',
@@ -1002,185 +1033,141 @@ const styles = StyleSheet.create({
     backgroundColor: '#2c2c2e',
     borderRadius: 8,
     paddingHorizontal: 4,
-    minHeight: 40,
-    gap: 4,
+    paddingVertical: 4,
   },
   sizeBtn: {
-    minWidth: 40,
-    minHeight: 32,
-    backgroundColor: '#3a3a3c',
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   sizeBtnText: {
-    color: '#007AFF',
-    fontSize: 13,
+    color: '#fff',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   fontSizeText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    paddingHorizontal: 4,
+    color: '#aaa',
+    fontSize: 12,
+    marginHorizontal: 4,
   },
   autoModeBtn: {
-    minWidth: 40,
-    minHeight: 32,
     paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#3a3a3c',
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginLeft: 4,
   },
   autoModeBtnActive: {
     backgroundColor: '#8B3A2B',
   },
   autoModeText: {
-    color: '#aaaaaa',
+    color: '#888',
     fontSize: 11,
-    fontWeight: 'bold',
   },
   autoModeTextActive: {
-    color: '#ffffff',
+    color: '#fff',
+    fontWeight: 'bold',
   },
   alignGroup: {
     flexDirection: 'row',
     backgroundColor: '#2c2c2e',
     borderRadius: 8,
     padding: 2,
-    gap: 4,
-    minHeight: 40,
-    alignItems: 'center',
   },
   alignBtn: {
-    minWidth: 40,
-    minHeight: 34,
     paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#3a3a3c',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   alignBtnActive: {
-    backgroundColor: '#8B3A2B',
+    backgroundColor: '#3a3a3c',
   },
   alignBtnText: {
-    color: '#aaaaaa',
+    color: '#aaa',
     fontSize: 11,
-    fontWeight: 'bold',
   },
   alignBtnTextActive: {
-    color: '#ffffff',
+    color: '#fff',
+    fontWeight: 'bold',
   },
   styleGroup: {
     flexDirection: 'row',
     backgroundColor: '#2c2c2e',
     borderRadius: 8,
     padding: 2,
-    gap: 4,
-    minHeight: 40,
-    alignItems: 'center',
   },
   styleBtn: {
-    minWidth: 40,
-    minHeight: 34,
-    backgroundColor: '#3a3a3c',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   styleBtnActive: {
     backgroundColor: '#8B3A2B',
   },
   styleBtnText: {
-    color: '#ffffff',
+    color: '#fff',
     fontSize: 13,
   },
   iconBtn: {
     backgroundColor: '#2c2c2e',
     paddingHorizontal: 10,
-    minWidth: 40,
-    minHeight: 40,
+    paddingVertical: 8,
     borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   iconBtnText: {
-    color: '#007AFF',
-    fontWeight: 'bold',
-    fontSize: 11,
-  },
-  sectionTitle: {
-    color: '#8B3A2B',
+    color: '#fff',
     fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 6,
-    textAlign: 'right',
   },
   fontSelectorCardsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   fontSelectCard: {
     flex: 1,
     backgroundColor: '#2c2c2e',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
+    padding: 10,
+    borderRadius: 8,
   },
   fontCardSub: {
-    color: '#8B3A2B',
+    color: '#888',
     fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 2,
   },
   fontCardTitle: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    color: '#fff',
+    fontSize: 14,
+    marginVertical: 4,
   },
   fontCardAction: {
-    color: '#007AFF',
+    color: '#8B3A2B',
     fontSize: 11,
     fontWeight: 'bold',
   },
-  fontChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  sectionTitle: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 6,
   },
   fontChip: {
     backgroundColor: '#2c2c2e',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
-    minHeight: 38,
-    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   fontChipActive: {
     backgroundColor: '#8B3A2B',
-    borderColor: '#8B3A2B',
   },
   fontChipText: {
-    color: '#aaaaaa',
+    color: '#ccc',
     fontSize: 12,
-    fontWeight: 'bold',
   },
   fontChipTextActive: {
-    color: '#ffffff',
+    color: '#fff',
+    fontWeight: 'bold',
   },
   colorTargetRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    gap: 4,
+    gap: 8,
+    marginBottom: 10,
   },
   colorTargetBtn: {
     flex: 1,
@@ -1188,37 +1175,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2c2c2e',
-    paddingVertical: 7,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
     borderRadius: 8,
-    gap: 4,
-    minHeight: 36,
+    gap: 6,
   },
   colorTargetBtnActive: {
-    backgroundColor: '#8B3A2B',
+    backgroundColor: '#3a3a3c',
+    borderWidth: 1,
+    borderColor: '#8B3A2B',
   },
   colorTargetText: {
-    color: '#aaaaaa',
+    color: '#aaa',
     fontSize: 11,
-    fontWeight: 'bold',
   },
   colorTargetTextActive: {
-    color: '#ffffff',
+    color: '#fff',
+    fontWeight: 'bold',
   },
   miniDot: {
     width: 12,
     height: 12,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: '#ffffff',
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  gridBox: {
+  noHighlightBtn: {
     backgroundColor: '#2c2c2e',
-    borderRadius: 12,
     padding: 8,
-    gap: 6,
+    borderRadius: 8,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  noHighlightText: {
+    color: '#ff453a',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  gridBox: {
+    gap: 4,
   },
   gridRow: {
     flexDirection: 'row',
@@ -1227,51 +1221,31 @@ const styles = StyleSheet.create({
   standardRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#2c2c2e',
-    borderRadius: 12,
-    padding: 8,
   },
   colorSquare: {
-    width: 25,
-    height: 25,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    width: 28,
+    height: 28,
+    borderRadius: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   colorSquareSelected: {
-    borderWidth: 2.5,
-    borderColor: '#30d158',
-  },
-  noHighlightBtn: {
-    backgroundColor: '#2c2c2e',
-    padding: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
-  },
-  noHighlightText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: 20,
   },
   modalBox: {
     backgroundColor: '#1c1c1e',
-    width: '90%',
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 12,
+    padding: 16,
   },
   modalTitle: {
-    color: '#007AFF',
+    color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 12,
@@ -1279,231 +1253,177 @@ const styles = StyleSheet.create({
   },
   modalFormatBar: {
     flexDirection: 'row',
-    backgroundColor: '#2c2c2e',
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 8,
-    gap: 6,
-    justifyContent: 'space-around',
-    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
   },
   modalFormatBtn: {
-    backgroundColor: '#3a3a3c',
-    paddingHorizontal: 10,
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    minWidth: 36,
-    alignItems: 'center',
-  },
-  modalFormatBtnActive: {
-    backgroundColor: '#8B3A2B',
   },
   modalFormatBtnText: {
-    color: '#ffffff',
+    color: '#fff',
+    fontSize: 13,
     fontWeight: 'bold',
-    fontSize: 12,
   },
   modalInput: {
     backgroundColor: '#2c2c2e',
     color: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    height: 140,
+    borderRadius: 8,
+    padding: 10,
+    minHeight: 80,
+    maxHeight: 150,
     textAlignVertical: 'top',
+    fontSize: 14,
     marginBottom: 10,
   },
   modalActions: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: 10,
   },
   modalCancelBtn: {
-    flex: 1,
-    backgroundColor: '#3a3a3c',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   modalSaveBtn: {
-    flex: 1,
     backgroundColor: '#8B3A2B',
-    padding: 12,
-    borderRadius: 10,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   modalBtnText: {
     color: '#fff',
+    fontSize: 13,
     fontWeight: 'bold',
   },
-
-  /* Bottom Sheet Styles */
   bottomSheetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)', // Lightweight dim overlay so canvas & text above are clearly visible
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   bottomSheetBox: {
     backgroundColor: '#1c1c1e',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 20,
-    height: '52%', // 52% height so top 48% of screen (showing the slide canvas and text) is completely uncovered!
-    borderTopWidth: 2,
-    borderTopColor: '#8B3A2B',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    maxHeight: '80%',
   },
   bottomSheetHandle: {
-    width: 40,
+    width: 36,
     height: 4,
+    backgroundColor: '#3a3a3c',
     borderRadius: 2,
-    backgroundColor: '#555',
     alignSelf: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   fontModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  doneBtn: {
+    backgroundColor: '#8B3A2B',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  doneBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   fontModalTitle: {
-    color: '#8B3A2B',
+    color: '#fff',
     fontSize: 15,
     fontWeight: 'bold',
   },
   fontModalClose: {
-    color: '#aaaaaa',
+    color: '#aaa',
     fontSize: 18,
-    fontWeight: 'bold',
-    padding: 4,
-  },
-  doneBtn: {
-    backgroundColor: '#8B3A2B',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  doneBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   livePreviewBox: {
     backgroundColor: '#2c2c2e',
-    borderRadius: 10,
-    padding: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 10,
   },
   livePreviewLabel: {
-    color: '#8B3A2B',
+    color: '#888',
     fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 2,
-    textAlign: 'right',
+    marginBottom: 4,
   },
   livePreviewText: {
-    fontSize: 18,
-    textAlign: 'right',
-    color: '#ffffff',
+    fontSize: 16,
   },
   fontSearchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2c2c2e',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
   fontSearchInput: {
     flex: 1,
-    color: '#ffffff',
+    color: '#fff',
+    paddingVertical: 8,
     fontSize: 13,
-    padding: 0,
-    textAlign: 'right',
   },
   fontTabRow: {
     flexDirection: 'row',
+    marginBottom: 10,
     backgroundColor: '#2c2c2e',
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 8,
+    borderRadius: 8,
+    padding: 2,
   },
   fontTabBtn: {
     flex: 1,
     paddingVertical: 6,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 6,
   },
   fontTabBtnActive: {
-    backgroundColor: '#8B3A2B',
+    backgroundColor: '#3a3a3c',
   },
   fontTabText: {
-    color: '#aaaaaa',
-    fontSize: 11,
-    fontWeight: 'bold',
+    color: '#aaa',
+    fontSize: 12,
   },
   fontTabTextActive: {
-    color: '#ffffff',
+    color: '#fff',
+    fontWeight: 'bold',
   },
   fontRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2c2c2e',
     paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#3a3a3c',
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2c2c2e',
   },
   fontRowItemActive: {
-    borderColor: '#30d158',
-    backgroundColor: '#253528',
+    backgroundColor: '#2c2c2e',
+    borderRadius: 8,
   },
-  fontCheckCol: {
-    width: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+  fontRowLabel: {
+    color: '#fff',
+    fontSize: 15,
   },
-  checkmarkText: {
+  fontRowLabelActive: {
     color: '#30d158',
-    fontSize: 18,
     fontWeight: 'bold',
   },
-  fontInfoCol: {
-    flex: 1,
+  fontRowSample: {
+    color: '#777',
+    fontSize: 11,
+    marginTop: 2,
   },
-  fontNameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  fontLabelText: {
-    color: '#ffffff',
-    fontSize: 13,
+  checkIcon: {
+    color: '#30d158',
+    fontSize: 16,
     fontWeight: 'bold',
-  },
-  pptOnlyBadge: {
-    backgroundColor: '#3a3a3c',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  pptOnlyText: {
-    color: '#ff9500',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  fontSampleText: {
-    color: '#dddddd',
-    fontSize: 18,
-    textAlign: 'right',
   },
 });

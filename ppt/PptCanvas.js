@@ -38,6 +38,10 @@ export const PptCanvas = ({
   onDeleteElement,
   onChangeImageElement,
   fontFamily,
+  selRef,
+  pressingRef,
+  selState,
+  setSelState,
 }) => {
   const [resizingElement, setResizingElement] = useState(null);
 
@@ -227,7 +231,6 @@ export const PptCanvas = ({
           const top = (effectiveY / 100) * canvasHeight;
           const elemWidth = (elem.width / 100) * canvasWidth;
 
-          // Dynamically adjust height in auto mode so long text expands and fits on screen without clipping
           let effectiveHeight = elem.height;
           if (elem.type === 'text' && elem.text && elem.text.trim()) {
             const computedPt = elem.computedFontSize || elem.fontSize || 18;
@@ -251,7 +254,6 @@ export const PptCanvas = ({
 
           const dragResponder = createMovePanResponder(elem);
 
-          // Scaled font size in pixels based on (boxWidthPx / boxWidthPt) = (canvasWidth / SLIDE.widthPt)
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
           const scaledFontSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
@@ -283,21 +285,6 @@ export const PptCanvas = ({
                         fontWeight: elem.fontWeight || 'normal',
                         fontStyle: elem.fontStyle || 'normal',
                         textDecorationLine: elem.textDecorationLine || 'none',
-                        color: elem.color || '#1c1c1e',
-                        backgroundColor:
-                          elem.highlightColor && elem.highlightColor !== 'transparent'
-                            ? elem.highlightColor
-                            : undefined,
-                        textShadowColor:
-                          elem.shadowColor && elem.shadowColor !== 'transparent'
-                            ? elem.shadowColor
-                            : undefined,
-                        textShadowOffset:
-                          elem.shadowColor && elem.shadowColor !== 'transparent'
-                            ? { width: 1, height: 1 }
-                            : { width: 0, height: 0 },
-                        textShadowRadius:
-                          elem.shadowColor && elem.shadowColor !== 'transparent' ? 2 : 0,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
@@ -308,17 +295,61 @@ export const PptCanvas = ({
                         margin: 0,
                         textAlignVertical: 'top',
                       }}
-                      value={elem.text}
+                      multiline={true}
+                      autoFocus={true}
+                      selection={selState}
+                      onSelectionChange={(e) => {
+                        const sel = e.nativeEvent.selection;
+                        console.log('[SEL]', sel);
+                        if (!pressingRef || !pressingRef.current) {
+                          if (selRef) selRef.current = sel;
+                          if (setSelState) setSelState(sel);
+                        }
+                      }}
                       onChangeText={(text) => {
+                        if (text === elem.text) return;
                         const updated = updateTextWithRuns(elem, text);
                         onChangeElement(updated);
                       }}
-                      multiline={true}
-                      autoFocus={true}
                       onBlur={() => {
                         if (onEndInlineEditing) onEndInlineEditing();
                       }}
-                    />
+                    >
+                      {formattedRuns.map((run, rIdx) => {
+                        const runPt = run.fontSize || elem.computedFontSize || elem.fontSize || 18;
+                        const runScaledFontSize = runPt * (canvasWidth / SLIDE.widthPt);
+                        const scriptRuns = splitRuns(
+                          run.text || '',
+                          run.kurdishFont || elem.kurdishFont || 'Tahoma',
+                          run.englishFont || elem.englishFont || 'Calibri'
+                        );
+                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+                        const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
+
+                        return (
+                          <Text
+                            key={`trun_${rIdx}`}
+                            style={{
+                              fontSize: runScaledFontSize,
+                              fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
+                              fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
+                              textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
+                              color: run.color || '#1c1c1e',
+                              backgroundColor: runHighlight,
+                              textShadowColor: runShadow,
+                              textShadowOffset: runShadow ? { width: 1, height: 1 } : { width: 0, height: 0 },
+                              textShadowRadius: runShadow ? 2 : 0,
+                            }}
+                          >
+                            {scriptRuns.map((sRun, sIdx) => (
+                              <Text key={`tsrun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+                                {sRun.text}
+                              </Text>
+                            ))}
+                          </Text>
+                        );
+                      })}
+                    </TextInput>
                   ) : (
                     <Text
                       style={{
@@ -338,38 +369,22 @@ export const PptCanvas = ({
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
                           run.englishFont || elem.englishFont || 'Calibri'
                         );
+                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+                        const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
 
                         return (
                           <Text
                             key={`frun_${rIdx}`}
                             style={{
                               fontSize: runScaledFontSize,
-                              fontWeight: run.fontWeight || elem.fontWeight || 'normal',
-                              fontStyle: run.fontStyle || elem.fontStyle || 'normal',
-                              textDecorationLine: run.textDecorationLine || elem.textDecorationLine || 'none',
-                              color: run.color || elem.color || '#1c1c1e',
-                              backgroundColor:
-                                run.highlightColor && run.highlightColor !== 'transparent'
-                                  ? run.highlightColor
-                                  : elem.highlightColor && elem.highlightColor !== 'transparent'
-                                  ? elem.highlightColor
-                                  : undefined,
-                              textShadowColor:
-                                run.shadowColor && run.shadowColor !== 'transparent'
-                                  ? run.shadowColor
-                                  : elem.shadowColor && elem.shadowColor !== 'transparent'
-                                  ? elem.shadowColor
-                                  : undefined,
-                              textShadowOffset:
-                                (run.shadowColor && run.shadowColor !== 'transparent') ||
-                                (elem.shadowColor && elem.shadowColor !== 'transparent')
-                                  ? { width: 1, height: 1 }
-                                  : { width: 0, height: 0 },
-                              textShadowRadius:
-                                (run.shadowColor && run.shadowColor !== 'transparent') ||
-                                (elem.shadowColor && elem.shadowColor !== 'transparent')
-                                  ? 2
-                                  : 0,
+                              fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
+                              fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
+                              textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
+                              color: run.color || '#1c1c1e',
+                              backgroundColor: runHighlight,
+                              textShadowColor: runShadow,
+                              textShadowOffset: runShadow ? { width: 1, height: 1 } : { width: 0, height: 0 },
+                              textShadowRadius: runShadow ? 2 : 0,
                             }}
                           >
                             {scriptRuns.map((sRun, sIdx) => (

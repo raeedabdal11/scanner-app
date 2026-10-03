@@ -55,6 +55,9 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
       ? presentation.slides.filter((s) => selectedSlideIds.includes(s.id))
       : presentation.slides;
 
+    let slideCount = 0;
+    const slideShadowRuns = {}; // { 1: [ { text: "...", hex: "RRGGBB" }, ... ] }
+
     for (const pageData of targetPages) {
       // Use planPage to get computed font sizes & split slides if text overflows
       const planned = planPage(pageData);
@@ -62,6 +65,7 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
       for (const slideData of generatedSlides) {
         const slide = pptx.addSlide();
+        slideCount++;
 
         // Set slide background color
         if (slideData.background && slideData.background !== '#ffffff') {
@@ -93,9 +97,6 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               textContent = lines.map((l) => reverseTableLineColumns(l)).join('\n');
             }
 
-            const textColor = normalizeHex(elem.color, '1C1C1E');
-            const highlightColor = normalizeHex(elem.highlightColor, null);
-
             const isBold = elem.fontWeight === 'bold';
             const isItalic = elem.fontStyle === 'italic';
             const isUnderline = elem.textDecorationLine === 'underline';
@@ -113,22 +114,35 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               const scriptRuns = splitRuns(run.text || '', runKurdishFont, runEnglishFont);
 
               const runFontSize = run.fontSize || fontSize;
-              const runColor = normalizeHex(run.color || elem.color, '1C1C1E');
-              const runBold = run.fontWeight === 'bold';
-              const runItalic = run.fontStyle === 'italic';
-              const runUnderline = run.textDecorationLine === 'underline';
+              const runColor = normalizeHex(run.color, '1C1C1E');
+              const runHighlight = normalizeHex(run.highlight || run.highlightColor, null);
+              const runShadow = normalizeHex(run.shadowColor || run.shadow, null);
+              const runBold = !!run.bold || run.fontWeight === 'bold';
+              const runItalic = !!run.italic || run.fontStyle === 'italic';
+              const runUnderline = !!run.underline || run.textDecorationLine === 'underline';
 
               for (const sRun of scriptRuns) {
+                const runOpts = {
+                  fontSize: runFontSize,
+                  fontFace: sRun.fontFamily,
+                  bold: runBold,
+                  italic: runItalic,
+                  underline: runUnderline ? { style: 'single' } : false,
+                  color: runColor,
+                };
+
+                if (runHighlight) {
+                  runOpts.highlight = runHighlight;
+                }
+
+                if (runShadow) {
+                  slideShadowRuns[slideCount] = slideShadowRuns[slideCount] || [];
+                  slideShadowRuns[slideCount].push({ text: sRun.text, hex: runShadow });
+                }
+
                 pptxRuns.push({
                   text: sRun.text,
-                  options: {
-                    fontSize: runFontSize,
-                    fontFace: sRun.fontFamily,
-                    bold: runBold,
-                    italic: runItalic,
-                    underline: runUnderline ? { style: 'single' } : false,
-                    color: runColor,
-                  },
+                  options: runOpts,
                 });
               }
             }
@@ -144,7 +158,6 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               bold: isBold,
               italic: isItalic,
               underline: isUnderline ? { style: 'single' } : false,
-              color: textColor,
               align: align,
               rtl: true,
               lineSpacingMultiple: 1.35,
@@ -153,25 +166,7 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               valign: 'top',
             };
 
-            // Set highlight & solid fill for 100% cross-platform PowerPoint compatibility
-            if (highlightColor) {
-              textOptions.highlight = highlightColor;
-              textOptions.fill = { color: highlightColor };
-            }
-
-            // Set text shadow for PowerPoint export
-            if (elem.shadowColor && elem.shadowColor !== 'transparent') {
-              textOptions.shadow = {
-                type: 'outer',
-                color: elem.shadowColor.replace('#', ''),
-                blur: 3,
-                offset: 2,
-                angle: 45,
-                opacity: 0.6,
-              };
-            }
-
-            if (pptxRuns.length > 1) {
+            if (pptxRuns.length > 0) {
               slide.addText(pptxRuns, textOptions);
             } else {
               slide.addText(textContent, textOptions);
@@ -212,6 +207,63 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
     const base64Output = await pptx.write({ outputType: 'base64' });
 
+    let finalBase64 = base64Output;
+    const hasAnyShadow = Object.values(slideShadowRuns).some((arr) => arr && arr.length > 0);
+
+    if (hasAnyShadow) {
+      try {
+        const JSZip = require('jszip');
+        const zip = await JSZip.loadAsync(base64Output, { base64: true });
+
+        for (const [slideNum, shadowList] of Object.entries(slideShadowRuns)) {
+          if (!shadowList || shadowList.length === 0) continue;
+
+          const slideFileName = `ppt/slides/slide${slideNum}.xml`;
+          const slideFile = zip.file(slideFileName);
+          if (!slideFile) continue;
+
+          let xml = await slideFile.async('text');
+
+          xml = xml.replace(/<a:r\b[^>]*>([\s\S]*?)<\/a:r>/g, (fullRunTag, innerContent) => {
+            const textMatch = innerContent.match(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>/);
+            const runText = textMatch ? textMatch[1] : '';
+
+            const shadowItem = shadowList.find(
+              (s) => s.text === runText || (runText && s.text.includes(runText)) || (s.text && runText.includes(s.text))
+            );
+
+            if (shadowItem && shadowItem.hex) {
+              const shadowXml = `<a:effectLst><a:outerShdw blurRad="25400" dist="12700" dir="2700000" algn="tl"><a:srgbClr val="${shadowItem.hex}"/></a:outerShdw></a:effectLst>`;
+
+              if (/<a:rPr\b[^>]*\/>/.test(innerContent)) {
+                const updatedInner = innerContent.replace(
+                  /<a:rPr(\b[^>]*)\/>/,
+                  `<a:rPr$1>${shadowXml}</a:rPr>`
+                );
+                return `<a:r>${updatedInner}</a:r>`;
+              } else if (/<a:rPr\b[^>]*>/.test(innerContent)) {
+                const updatedInner = innerContent.replace(
+                  /<\/a:rPr>/,
+                  `${shadowXml}</a:rPr>`
+                );
+                return `<a:r>${updatedInner}</a:r>`;
+              } else {
+                return `<a:r><a:rPr>${shadowXml}</a:rPr>${innerContent}</a:r>`;
+              }
+            }
+
+            return fullRunTag;
+          });
+
+          zip.file(slideFileName, xml);
+        }
+
+        finalBase64 = await zip.generateAsync({ type: 'base64' });
+      } catch (zipErr) {
+        console.log('[PPT Exporter] JSZip post-processing error:', zipErr);
+      }
+    }
+
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
     const filename = `PPT_${dateStr}.pptx`;
@@ -219,7 +271,7 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
     // Modern expo-file-system API with File and Paths
     const file = new File(Paths.document, filename);
     file.create();
-    await file.write(base64Output, { encoding: 'base64' });
+    await file.write(finalBase64, { encoding: 'base64' });
 
     return {
       fileUri: file.uri,
