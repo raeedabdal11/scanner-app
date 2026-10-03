@@ -40,7 +40,35 @@
         }
       ],
       "expo-asset",
-      "expo-font"
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/font/Dtpkn0ms.ttf",
+            "./assets/font/Dtpkn0s.ttf",
+            "./assets/font/Dtpkn0sn.ttf",
+            "./assets/font/PgKnask.ttf",
+            "./assets/font/Pgdnaskh.ttf",
+            "./assets/font/ShBaibwnKurdish.ttf",
+            "./assets/font/ShBnaushKurdish.ttf",
+            "./assets/font/ShHalalaKurdish.ttf",
+            "./assets/font/ShHeroKurdish.ttf",
+            "./assets/font/ShKhaldarKurdish.ttf",
+            "./assets/font/ShKhunchaKurdish.ttf",
+            "./assets/font/ShKnerKurdish.ttf",
+            "./assets/font/ShNergzKurdish.ttf",
+            "./assets/font/ShReihanKurdish.ttf",
+            "./assets/font/ShSamikKurdish.ttf",
+            "./assets/font/ShSharifKurdish.ttf",
+            "./assets/font/ShShamamKurdish.ttf",
+            "./assets/font/ShShilanKurdish.ttf",
+            "./assets/font/ShShlerKurdish.ttf",
+            "./assets/font/ShSunbulKurdish.ttf",
+            "./assets/font/ShSusanKurdish.ttf",
+            "./assets/font/ShYasmeenKurdish.ttf"
+          ]
+        }
+      ]
     ]
   }
 }

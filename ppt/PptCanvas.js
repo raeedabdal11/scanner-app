@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { planPage, splitRuns, SLIDE } from './pptFit';
+import { getElementRuns, updateTextWithRuns } from './formattedText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -254,11 +255,7 @@ export const PptCanvas = ({
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
           const scaledFontSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
-          const runs = splitRuns(
-            elem.text || '',
-            elem.kurdishFont || 'Tahoma',
-            elem.englishFont || 'Calibri'
-          );
+          const formattedRuns = getElementRuns(elem);
 
           return (
             <View
@@ -313,7 +310,8 @@ export const PptCanvas = ({
                       }}
                       value={elem.text}
                       onChangeText={(text) => {
-                        onChangeElement({ ...elem, text });
+                        const updated = updateTextWithRuns(elem, text);
+                        onChangeElement(updated);
                       }}
                       multiline={true}
                       autoFocus={true}
@@ -324,25 +322,6 @@ export const PptCanvas = ({
                   ) : (
                     <Text
                       style={{
-                        fontSize: scaledFontSize,
-                        fontWeight: elem.fontWeight || 'normal',
-                        fontStyle: elem.fontStyle || 'normal',
-                        textDecorationLine: elem.textDecorationLine || 'none',
-                        color: elem.color || '#1c1c1e',
-                        backgroundColor:
-                          elem.highlightColor && elem.highlightColor !== 'transparent'
-                            ? elem.highlightColor
-                            : undefined,
-                        textShadowColor:
-                          elem.shadowColor && elem.shadowColor !== 'transparent'
-                            ? elem.shadowColor
-                            : undefined,
-                        textShadowOffset:
-                          elem.shadowColor && elem.shadowColor !== 'transparent'
-                            ? { width: 1, height: 1 }
-                            : { width: 0, height: 0 },
-                        textShadowRadius:
-                          elem.shadowColor && elem.shadowColor !== 'transparent' ? 2 : 0,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
@@ -351,11 +330,56 @@ export const PptCanvas = ({
                         borderRadius: 4,
                       }}
                     >
-                      {runs.map((run, rIdx) => (
-                        <Text key={rIdx} style={{ fontFamily: run.fontFamily }}>
-                          {run.text}
-                        </Text>
-                      ))}
+                      {formattedRuns.map((run, rIdx) => {
+                        const runPt = run.fontSize || elem.computedFontSize || elem.fontSize || 18;
+                        const runScaledFontSize = runPt * (canvasWidth / SLIDE.widthPt);
+                        const scriptRuns = splitRuns(
+                          run.text || '',
+                          run.kurdishFont || elem.kurdishFont || 'Tahoma',
+                          run.englishFont || elem.englishFont || 'Calibri'
+                        );
+
+                        return (
+                          <Text
+                            key={`frun_${rIdx}`}
+                            style={{
+                              fontSize: runScaledFontSize,
+                              fontWeight: run.fontWeight || elem.fontWeight || 'normal',
+                              fontStyle: run.fontStyle || elem.fontStyle || 'normal',
+                              textDecorationLine: run.textDecorationLine || elem.textDecorationLine || 'none',
+                              color: run.color || elem.color || '#1c1c1e',
+                              backgroundColor:
+                                run.highlightColor && run.highlightColor !== 'transparent'
+                                  ? run.highlightColor
+                                  : elem.highlightColor && elem.highlightColor !== 'transparent'
+                                  ? elem.highlightColor
+                                  : undefined,
+                              textShadowColor:
+                                run.shadowColor && run.shadowColor !== 'transparent'
+                                  ? run.shadowColor
+                                  : elem.shadowColor && elem.shadowColor !== 'transparent'
+                                  ? elem.shadowColor
+                                  : undefined,
+                              textShadowOffset:
+                                (run.shadowColor && run.shadowColor !== 'transparent') ||
+                                (elem.shadowColor && elem.shadowColor !== 'transparent')
+                                  ? { width: 1, height: 1 }
+                                  : { width: 0, height: 0 },
+                              textShadowRadius:
+                                (run.shadowColor && run.shadowColor !== 'transparent') ||
+                                (elem.shadowColor && elem.shadowColor !== 'transparent')
+                                  ? 2
+                                  : 0,
+                            }}
+                          >
+                            {scriptRuns.map((sRun, sIdx) => (
+                              <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+                                {sRun.text}
+                              </Text>
+                            ))}
+                          </Text>
+                        );
+                      })}
                     </Text>
                   )}
                 </View>

@@ -33,6 +33,7 @@ import { processAndSaveSignatureImage, mergeSignatures, recolorSignature } from 
 import SignatureCropper from './SignatureCropper';
 import { performOnDeviceOCR } from './ocrHelper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { PptEditorModal } from './ppt';
 
 // Firebase Setup
@@ -101,6 +102,31 @@ const SettingItem = ({ icon, label, onPress }) => (
 );
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Dtpkn0ms: require('./assets/font/Dtpkn0ms.ttf'),
+    Dtpkn0s: require('./assets/font/Dtpkn0s.ttf'),
+    Dtpkn0sn: require('./assets/font/Dtpkn0sn.ttf'),
+    PgKnask: require('./assets/font/PgKnask.ttf'),
+    Pgdnaskh: require('./assets/font/Pgdnaskh.ttf'),
+    ShBaibwnKurdish: require('./assets/font/ShBaibwnKurdish.ttf'),
+    ShBnaushKurdish: require('./assets/font/ShBnaushKurdish.ttf'),
+    ShHalalaKurdish: require('./assets/font/ShHalalaKurdish.ttf'),
+    ShHeroKurdish: require('./assets/font/ShHeroKurdish.ttf'),
+    ShKhaldarKurdish: require('./assets/font/ShKhaldarKurdish.ttf'),
+    ShKhunchaKurdish: require('./assets/font/ShKhunchaKurdish.ttf'),
+    ShKnerKurdish: require('./assets/font/ShKnerKurdish.ttf'),
+    ShNergzKurdish: require('./assets/font/ShNergzKurdish.ttf'),
+    ShReihanKurdish: require('./assets/font/ShReihanKurdish.ttf'),
+    ShSamikKurdish: require('./assets/font/ShSamikKurdish.ttf'),
+    ShSharifKurdish: require('./assets/font/ShSharifKurdish.ttf'),
+    ShShamamKurdish: require('./assets/font/ShShamamKurdish.ttf'),
+    ShShilanKurdish: require('./assets/font/ShShilanKurdish.ttf'),
+    ShShlerKurdish: require('./assets/font/ShShlerKurdish.ttf'),
+    ShSunbulKurdish: require('./assets/font/ShSunbulKurdish.ttf'),
+    ShSusanKurdish: require('./assets/font/ShSusanKurdish.ttf'),
+    ShYasmeenKurdish: require('./assets/font/ShYasmeenKurdish.ttf'),
+  });
+
   // --- States ---
   const [currentScreen, setCurrentScreen] = useState('home');
   const [documents, setDocuments] = useState([]);

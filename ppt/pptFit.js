@@ -1,3 +1,5 @@
+import { getElementRuns } from './formattedText';
+
 /**
  * pptFit.js - Shared font-fitting math for PowerPoint Editor & Exporter
  * Single source of truth for font sizing, layout planning, and slide splitting.
@@ -145,11 +147,15 @@ export const calculateFittingFontSize = (elem) => {
   const lineSpacingMultiple = elem.lineSpacing || 1.35;
   const textStr = elem.text || '';
 
+  const runs = getElementRuns(elem);
+  const maxScale = Math.max(1.0, ...runs.map((r) => (r.sizeScale !== undefined ? r.sizeScale : 1.0)));
+
   const checkFitsAtSize = (sizePt) => {
     if (!textStr.trim()) return { fits: true, totalHeightPt: 0, linesCount: 0 };
 
-    const lineHeightPt = sizePt * lineSpacingMultiple;
-    const charWidthPt = sizePt * 0.52;
+    const effectiveSizePt = sizePt * maxScale;
+    const lineHeightPt = effectiveSizePt * lineSpacingMultiple;
+    const charWidthPt = effectiveSizePt * 0.52;
     const charsPerLine = Math.max(1, Math.floor(boxWidthPt / charWidthPt));
 
     const paragraphs = textStr.split('\n');

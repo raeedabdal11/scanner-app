@@ -1,5 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { planPage, reverseTableLineColumns, isTableElement, splitRuns } from './pptFit';
+import { getExportFontFamily } from './fonts';
+import { getElementRuns } from './formattedText';
 
 if (typeof window === 'undefined') {
   global.window = global;
@@ -102,13 +104,36 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
             // Computed fontSize from planPage
             const fontSize = elem.computedFontSize || elem.fontSize || 18;
 
-            const runs = splitRuns(
-              textContent,
-              elem.kurdishFont || 'Tahoma',
-              elem.englishFont || 'Calibri'
-            );
+            const elemRuns = getElementRuns(elem);
+            const pptxRuns = [];
 
-            const primaryFont = runs[0]?.fontFamily || elem.kurdishFont || elem.englishFont || 'Arial';
+            for (const run of elemRuns) {
+              const runKurdishFont = getExportFontFamily(run.kurdishFont || elem.kurdishFont || 'Tahoma', true);
+              const runEnglishFont = getExportFontFamily(run.englishFont || elem.englishFont || 'Calibri', false);
+              const scriptRuns = splitRuns(run.text || '', runKurdishFont, runEnglishFont);
+
+              const runFontSize = run.fontSize || fontSize;
+              const runColor = normalizeHex(run.color || elem.color, '1C1C1E');
+              const runBold = run.fontWeight === 'bold';
+              const runItalic = run.fontStyle === 'italic';
+              const runUnderline = run.textDecorationLine === 'underline';
+
+              for (const sRun of scriptRuns) {
+                pptxRuns.push({
+                  text: sRun.text,
+                  options: {
+                    fontSize: runFontSize,
+                    fontFace: sRun.fontFamily,
+                    bold: runBold,
+                    italic: runItalic,
+                    underline: runUnderline ? { style: 'single' } : false,
+                    color: runColor,
+                  },
+                });
+              }
+            }
+
+            const primaryFont = pptxRuns[0]?.options?.fontFace || 'Arial';
 
             const textOptions = {
               x: xIn,
@@ -146,19 +171,8 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               };
             }
 
-            if (runs.length > 1) {
-              const formattedRuns = runs.map((run) => ({
-                text: run.text,
-                options: {
-                  fontSize: fontSize,
-                  fontFace: run.fontFamily,
-                  bold: isBold,
-                  italic: isItalic,
-                  underline: isUnderline ? { style: 'single' } : false,
-                  color: textColor,
-                },
-              }));
-              slide.addText(formattedRuns, textOptions);
+            if (pptxRuns.length > 1) {
+              slide.addText(pptxRuns, textOptions);
             } else {
               slide.addText(textContent, textOptions);
             }
