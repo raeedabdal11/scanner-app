@@ -19,6 +19,8 @@ import {
 } from './formattedText';
 import { applyStyle, wordRangeAt } from './richText';
 
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
 // 1. PowerPoint Theme Colors Matrix (10 columns x 5 rows = 50 shades)
 const THEME_COLORS_GRID = [
   ['#000000', '#ffffff', '#1f497d', '#eeece1', '#4f81bd', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646'],
@@ -98,6 +100,7 @@ export const PptTextToolbar = ({
   if (!element || element.type !== 'text') return null;
 
   const runs = getElementRuns(element);
+  const baseSize = Math.round(element.computedFontSize || element.fontSize || 18);
 
   const setRuns = (newRuns) => {
     const plain = newRuns.map((r) => r.text).join('');
@@ -148,10 +151,6 @@ export const PptTextToolbar = ({
       [start, end] = [end, start];
     }
 
-    // Range rules:
-    // a) Real selection (start !== end): apply ONLY to start..end.
-    // b) No selection, cursor inside a word: apply ONLY to that word (wordRangeAt).
-    // c) Otherwise (cursor on a space, or input never focused): do NOTHING and show small toast.
     if (start === end) {
       let isWord = false;
       if (start < plain.length && isWordChar(plain[start])) {
@@ -177,13 +176,19 @@ export const PptTextToolbar = ({
       return;
     }
 
-    console.log('[STYLE]', patch, start, end);
+    const oldStyle = getSelectionStyle(element, { start, end });
+    const oldScale = oldStyle.sizeScale ?? 1;
 
     const newRuns = applyStyle(runs, start, end, patch);
 
     const targetSel = { start, end };
     selRef.current = targetSel;
     if (setSelState) setSelState(targetSel);
+
+    const newStyle = getSelectionStyle({ ...element, runs: newRuns }, targetSel);
+    const newScale = newStyle.sizeScale ?? 1;
+
+    console.log('[SIZE]', start, end, 'before', oldScale, 'after', newScale, 'base', baseSize);
 
     setRuns(newRuns);
 
@@ -196,6 +201,7 @@ export const PptTextToolbar = ({
   // Active selection/word style query
   const currentSel = pendingSelRef.current || selRef.current || selection;
   const currentStyle = getSelectionStyle(element, currentSel);
+  const effectiveWordSize = Math.round(baseSize * (currentStyle.sizeScale ?? 1));
 
   const setAlignRight = () => {
     const { color: _c, ...elemWithoutColor } = element;
@@ -230,7 +236,17 @@ export const PptTextToolbar = ({
     onChangeElement({
       ...elemWithoutColor,
       fontMode: 'auto',
-      autoFit: 'grow',
+    });
+  };
+
+  const changeBaseSize = (delta) => {
+    const currentBase = Math.round(element.computedFontSize || element.fontSize || 18);
+    const newBase = clamp(currentBase + delta, 14, 40);
+    const { color: _c, ...elemWithoutColor } = element;
+    onChangeElement({
+      ...elemWithoutColor,
+      fontSize: newBase,
+      fontMode: 'manual',
     });
   };
 
@@ -347,23 +363,28 @@ export const PptTextToolbar = ({
               <Text style={styles.actionBtnText}>✏️ دەستکاری دەق</Text>
             </TouchableOpacity>
 
+            {/* Word Size Controls (A- / A+) */}
             <View style={styles.fontControlsRow}>
               <TouchableOpacity
                 style={styles.sizeBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ sizeScaleDelta: -0.1 })}
+                onPress={() =>
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }))
+                }
               >
                 <Text style={styles.sizeBtnText}>A-</Text>
               </TouchableOpacity>
 
               <Text style={styles.fontSizeText}>
-                {isAutoMode ? `خۆکار (${currentStyle.sizePt}pt)` : `${currentStyle.sizePt}pt`}
+                {`${effectiveWordSize}pt`}
               </Text>
 
               <TouchableOpacity
                 style={styles.sizeBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ sizeScaleDelta: 0.1 })}
+                onPress={() =>
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }))
+                }
               >
                 <Text style={styles.sizeBtnText}>A+</Text>
               </TouchableOpacity>
@@ -373,9 +394,28 @@ export const PptTextToolbar = ({
                 onPress={setAutoMode}
               >
                 <Text style={[styles.autoModeText, isAutoMode && styles.autoModeTextActive]}>
-                  خۆکار
+                  {`خۆکار ${baseSize}pt`}
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Global Box Base Size Control ("قەبارەی گشتی") */}
+            <View style={styles.boxSizeRow}>
+              <Text style={styles.boxSizeLabel}>قەبارەی گشتی:</Text>
+
+              <TouchableOpacity style={styles.sizeBtn} onPress={() => changeBaseSize(-2)}>
+                <Text style={styles.sizeBtnText}>−</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.fontSizeText}>{`${baseSize}pt`}</Text>
+
+              <TouchableOpacity style={styles.sizeBtn} onPress={() => changeBaseSize(2)}>
+                <Text style={styles.sizeBtnText}>+</Text>
+              </TouchableOpacity>
+
+              {!isAutoMode && (
+                <Text style={styles.manualBadge}>دەستی</Text>
+              )}
             </View>
 
             <View style={styles.alignGroup}>
@@ -749,14 +789,18 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ sizeScaleDelta: 0.1 })}
+                onPress={() =>
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }))
+                }
               >
                 <Text style={styles.modalFormatBtnText}>A+</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ sizeScaleDelta: -0.1 })}
+                onPress={() =>
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }))
+                }
               >
                 <Text style={styles.modalFormatBtnText}>A-</Text>
               </TouchableOpacity>
@@ -1035,6 +1079,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
+  boxSizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  boxSizeLabel: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  manualBadge: {
+    color: '#ff9500',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 2,
+  },
   sizeBtn: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1045,8 +1109,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   fontSizeText: {
-    color: '#aaa',
+    color: '#fff',
     fontSize: 12,
+    fontWeight: 'bold',
     marginHorizontal: 4,
   },
   autoModeBtn: {

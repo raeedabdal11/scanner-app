@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import { planPage, splitRuns, SLIDE } from './pptFit';
+import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
 import { getElementRuns, updateTextWithRuns } from './formattedText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -234,17 +234,8 @@ export const PptCanvas = ({
           let effectiveHeight = elem.height;
           if (elem.type === 'text' && elem.text && elem.text.trim()) {
             const computedPt = elem.computedFontSize || elem.fontSize || 18;
-            const lineSpacing = elem.lineSpacing || 1.35;
-            const boxWidthPt = (elem.width / 100) * SLIDE.widthPt;
-            const charWidthPt = computedPt * 0.52;
-            const charsPerLine = Math.max(1, Math.floor(boxWidthPt / charWidthPt));
-            const paragraphs = elem.text.split('\n');
-            let totalWrappedLines = 0;
-            for (const p of paragraphs) {
-              totalWrappedLines += p.length ? Math.max(1, Math.ceil(p.length / charsPerLine)) : 1;
-            }
-            const totalHeightPt = totalWrappedLines * computedPt * lineSpacing;
-            const neededPercent = Math.ceil((totalHeightPt / SLIDE.heightPt) * 100);
+            const layoutMeas = measureElementLayout(elem, computedPt);
+            const neededPercent = Math.ceil((layoutMeas.totalHeightPt / SLIDE.heightPt) * 100);
             if (neededPercent > elem.height) {
               effectiveHeight = Math.min(96 - effectiveY, neededPercent + 2);
             }
@@ -255,7 +246,7 @@ export const PptCanvas = ({
           const dragResponder = createMovePanResponder(elem);
 
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
-          const scaledFontSize = computedPt * (canvasWidth / SLIDE.widthPt);
+          const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
           const formattedRuns = getElementRuns(elem);
 
@@ -281,13 +272,13 @@ export const PptCanvas = ({
                     <TextInput
                       style={{
                         flex: 1,
-                        fontSize: scaledFontSize,
+                        fontSize: scaledBaseSize,
                         fontWeight: elem.fontWeight || 'normal',
                         fontStyle: elem.fontStyle || 'normal',
                         textDecorationLine: elem.textDecorationLine || 'none',
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
-                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
+                        lineHeight: scaledBaseSize * (elem.lineSpacing || 1.35),
                         fontFamily: elem.kurdishFont || elem.englishFont || fontFamily || undefined,
                         paddingHorizontal: 6,
                         paddingVertical: 6,
@@ -316,8 +307,9 @@ export const PptCanvas = ({
                       }}
                     >
                       {formattedRuns.map((run, rIdx) => {
-                        const runPt = run.fontSize || elem.computedFontSize || elem.fontSize || 18;
-                        const runScaledFontSize = runPt * (canvasWidth / SLIDE.widthPt);
+                        const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+                        const runScaledFontSize = scaledBaseSize * runScale;
+                        const runLineHeight = runScaledFontSize * 1.35;
                         const scriptRuns = splitRuns(
                           run.text || '',
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
@@ -331,6 +323,7 @@ export const PptCanvas = ({
                             key={`trun_${rIdx}`}
                             style={{
                               fontSize: runScaledFontSize,
+                              lineHeight: runLineHeight,
                               fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
                               fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
                               textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
@@ -355,15 +348,16 @@ export const PptCanvas = ({
                       style={{
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
-                        lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
+                        lineHeight: scaledBaseSize * (elem.lineSpacing || 1.35),
                         paddingHorizontal: 6,
                         paddingVertical: 6,
                         borderRadius: 4,
                       }}
                     >
                       {formattedRuns.map((run, rIdx) => {
-                        const runPt = run.fontSize || elem.computedFontSize || elem.fontSize || 18;
-                        const runScaledFontSize = runPt * (canvasWidth / SLIDE.widthPt);
+                        const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+                        const runScaledFontSize = scaledBaseSize * runScale;
+                        const runLineHeight = runScaledFontSize * 1.35;
                         const scriptRuns = splitRuns(
                           run.text || '',
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
@@ -377,6 +371,7 @@ export const PptCanvas = ({
                             key={`frun_${rIdx}`}
                             style={{
                               fontSize: runScaledFontSize,
+                              lineHeight: runLineHeight,
                               fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
                               fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
                               textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',

@@ -113,7 +113,8 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               const runEnglishFont = getExportFontFamily(run.englishFont || elem.englishFont || 'Calibri', false);
               const scriptRuns = splitRuns(run.text || '', runKurdishFont, runEnglishFont);
 
-              const runFontSize = run.fontSize || fontSize;
+              const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+              const runFontSize = Math.round(fontSize * runScale * 10) / 10;
               const runColor = normalizeHex(run.color, '1C1C1E');
               const runHighlight = normalizeHex(run.highlight || run.highlightColor, null);
               const runShadow = normalizeHex(run.shadowColor || run.shadow, null);

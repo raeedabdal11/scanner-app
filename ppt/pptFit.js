@@ -1,4 +1,4 @@
-import { getElementRuns } from './formattedText';
+import { getElementRuns, runsToText } from './formattedText';
 
 /**
  * pptFit.js - Shared font-fitting math for PowerPoint Editor & Exporter
@@ -119,6 +119,131 @@ export const reverseTableLineColumns = (lineStr) => {
 };
 
 /**
+ * Measures layout height and fit for an element at a candidate base size (in pt)
+ * accounting for character-by-character run sizeScale and line wrapping.
+ */
+export const measureElementLayout = (elem, basePt) => {
+  const boxWidthPt = ((elem.width || 80) / 100) * SLIDE.widthPt;
+  const boxHeightPt = ((elem.height || 20) / 100) * SLIDE.heightPt;
+  const lineSpacingMultiple = elem.lineSpacing || 1.35;
+
+  const runs = getElementRuns(elem);
+  const fullText = runsToText(runs);
+  if (!runs || runs.length === 0 || !fullText.trim()) {
+    return { fits: true, totalHeightPt: 0, linesCount: 0 };
+  }
+
+  // Expand runs into character array with effective fontSize and width
+  const chars = [];
+  for (const r of runs) {
+    const scale = r.sizeScale !== undefined ? r.sizeScale : 1.0;
+    const fSize = basePt * scale;
+    const txt = r.text || '';
+    for (let i = 0; i < txt.length; i++) {
+      chars.push({ ch: txt[i], fontSize: fSize, charWidth: fSize * 0.52 });
+    }
+  }
+
+  // Split into paragraphs by newline
+  const paragraphs = [];
+  let currentP = [];
+  for (const c of chars) {
+    if (c.ch === '\n') {
+      paragraphs.push(currentP);
+      currentP = [];
+    } else {
+      currentP.push(c);
+    }
+  }
+  paragraphs.push(currentP);
+
+  let totalHeightPt = 0;
+  let totalWrappedLines = 0;
+  let singleWordExceedsWidth = false;
+
+  for (const pChars of paragraphs) {
+    if (pChars.length === 0) {
+      const defaultLineHeight = basePt * lineSpacingMultiple;
+      totalHeightPt += defaultLineHeight;
+      totalWrappedLines += 1;
+      continue;
+    }
+
+    // Group pChars into words (and space tokens)
+    const words = [];
+    let currentWord = [];
+    for (const c of pChars) {
+      if (c.ch === ' ') {
+        if (currentWord.length > 0) {
+          words.push(currentWord);
+          currentWord = [];
+        }
+        words.push([c]);
+      } else {
+        currentWord.push(c);
+      }
+    }
+    if (currentWord.length > 0) {
+      words.push(currentWord);
+    }
+
+    let currentLineWidth = 0;
+    let currentLineMaxFontSize = 0;
+    let lineHasContent = false;
+
+    for (const wordChars of words) {
+      const isSpace = wordChars.length === 1 && wordChars[0].ch === ' ';
+      const wordWidth = wordChars.reduce((sum, c) => sum + c.charWidth, 0);
+      const wordMaxFontSize = Math.max(...wordChars.map((c) => c.fontSize));
+
+      if (wordWidth > boxWidthPt + 1 && !isSpace) {
+        singleWordExceedsWidth = true;
+      }
+
+      if (!lineHasContent) {
+        if (isSpace) continue;
+        currentLineWidth = wordWidth;
+        currentLineMaxFontSize = wordMaxFontSize;
+        lineHasContent = true;
+      } else {
+        if (currentLineWidth + wordWidth <= boxWidthPt + 1) {
+          currentLineWidth += wordWidth;
+          if (wordMaxFontSize > currentLineMaxFontSize) {
+            currentLineMaxFontSize = wordMaxFontSize;
+          }
+        } else {
+          // Wrap to new line
+          const lineHeight = currentLineMaxFontSize * lineSpacingMultiple;
+          totalHeightPt += lineHeight;
+          totalWrappedLines += 1;
+
+          if (isSpace) {
+            currentLineWidth = 0;
+            currentLineMaxFontSize = 0;
+            lineHasContent = false;
+          } else {
+            currentLineWidth = wordWidth;
+            currentLineMaxFontSize = wordMaxFontSize;
+            lineHasContent = true;
+          }
+        }
+      }
+    }
+
+    if (lineHasContent) {
+      const lineHeight = currentLineMaxFontSize * lineSpacingMultiple;
+      totalHeightPt += lineHeight;
+      totalWrappedLines += 1;
+    }
+  }
+
+  const fitsHeight = totalHeightPt <= boxHeightPt + 2;
+  const fits = fitsHeight && !singleWordExceedsWidth;
+
+  return { fits, totalHeightPt, linesCount: totalWrappedLines };
+};
+
+/**
  * Calculates fitting font size for a text or table element inside its box
  */
 export const calculateFittingFontSize = (elem) => {
@@ -141,52 +266,11 @@ export const calculateFittingFontSize = (elem) => {
   const fontMode = elem.fontMode || 'auto';
   let targetFontSize = elem.fontSize || (isTable ? 16 : 18);
 
-  const boxWidthPt = ((elem.width || 80) / 100) * SLIDE.widthPt;
   const boxHeightPt = ((elem.height || 20) / 100) * SLIDE.heightPt;
-
-  const lineSpacingMultiple = elem.lineSpacing || 1.35;
-  const textStr = elem.text || '';
-
-  const runs = getElementRuns(elem);
-  const maxScale = Math.max(1.0, ...runs.map((r) => (r.sizeScale !== undefined ? r.sizeScale : 1.0)));
-
-  const checkFitsAtSize = (sizePt) => {
-    if (!textStr.trim()) return { fits: true, totalHeightPt: 0, linesCount: 0 };
-
-    const effectiveSizePt = sizePt * maxScale;
-    const lineHeightPt = effectiveSizePt * lineSpacingMultiple;
-    const charWidthPt = effectiveSizePt * 0.52;
-    const charsPerLine = Math.max(1, Math.floor(boxWidthPt / charWidthPt));
-
-    const paragraphs = textStr.split('\n');
-    let totalWrappedLines = 0;
-    let singleWordExceedsWidth = false;
-
-    for (const p of paragraphs) {
-      if (!p.length) {
-        totalWrappedLines += 1;
-      } else {
-        totalWrappedLines += Math.max(1, Math.ceil(p.length / charsPerLine));
-        const words = p.split(' ');
-        for (const w of words) {
-          if (w.length * charWidthPt > boxWidthPt + 1) {
-            singleWordExceedsWidth = true;
-            break;
-          }
-        }
-      }
-    }
-
-    const totalHeightPt = totalWrappedLines * lineHeightPt;
-    const fitsHeight = totalHeightPt <= boxHeightPt + 2;
-    const fits = fitsHeight && !singleWordExceedsWidth;
-
-    return { fits, totalHeightPt, linesCount: totalWrappedLines };
-  };
 
   if (fontMode === 'manual') {
     const clampedSize = Math.max(minPt, Math.min(maxPt, targetFontSize));
-    const { fits, totalHeightPt } = checkFitsAtSize(clampedSize);
+    const { fits, totalHeightPt } = measureElementLayout(elem, clampedSize);
     const overflowRatio = boxHeightPt > 0 ? totalHeightPt / boxHeightPt : 1;
     return {
       fontSizePt: clampedSize,
@@ -202,7 +286,7 @@ export const calculateFittingFontSize = (elem) => {
   let lastOverflowRatio = 1;
 
   while (currentPt >= minPt) {
-    const { fits, totalHeightPt } = checkFitsAtSize(currentPt);
+    const { fits, totalHeightPt } = measureElementLayout(elem, currentPt);
     lastOverflowRatio = boxHeightPt > 0 ? totalHeightPt / boxHeightPt : 1;
 
     if (fits) {

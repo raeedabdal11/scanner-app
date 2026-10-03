@@ -28,22 +28,16 @@ export const isWordChar = (ch) => {
 export const getElementRuns = (element) => {
   if (!element) return [{ text: '', color: '#1c1c1e' }];
 
+  let rawRuns = [];
   if (element.runs && Array.isArray(element.runs) && element.runs.length > 0) {
-    return element.runs.map((r) => ({
-      ...r,
-      color: r.color || '#1c1c1e',
-      highlight: r.highlight && r.highlight !== 'transparent' ? r.highlight : null,
-      shadowColor: r.shadowColor && r.shadowColor !== 'transparent' ? r.shadowColor : null,
-    }));
-  }
-
-  if (
+    rawRuns = element.runs;
+  } else if (
     element.formattedRuns &&
     Array.isArray(element.formattedRuns) &&
     element.formattedRuns.length > 0
   ) {
-    const basePt = element.fontSize || element.computedFontSize || 18;
-    return element.formattedRuns.map((r) => ({
+    const basePt = element.computedFontSize || element.fontSize || 18;
+    rawRuns = element.formattedRuns.map((r) => ({
       text: r.text || '',
       color: r.color || '#1c1c1e',
       sizeScale:
@@ -73,23 +67,34 @@ export const getElementRuns = (element) => {
       kuFont: r.kuFont || r.kurdishFont || element.kurdishFont || 'Tahoma',
       enFont: r.enFont || r.englishFont || element.englishFont || 'Calibri',
     }));
+  } else {
+    rawRuns = [
+      {
+        text: element.text || '',
+        color: element.color || '#1c1c1e',
+        sizeScale: 1.0,
+        bold: element.fontWeight === 'bold',
+        italic: element.fontStyle === 'italic',
+        underline: element.textDecorationLine === 'underline',
+        highlight: null,
+        shadowColor: null,
+        kuFont: element.kurdishFont || 'Tahoma',
+        enFont: element.englishFont || 'Calibri',
+      },
+    ];
   }
 
-  // Fallback single run for legacy elements
-  return [
-    {
-      text: element.text || '',
-      color: element.color || '#1c1c1e',
-      sizeScale: 1.0,
-      bold: element.fontWeight === 'bold',
-      italic: element.fontStyle === 'italic',
-      underline: element.textDecorationLine === 'underline',
-      highlight: null,
-      shadowColor: null,
-      kuFont: element.kurdishFont || 'Tahoma',
-      enFont: element.englishFont || 'Calibri',
-    },
-  ];
+  // Clean out sizeScaleDelta from all runs
+  return rawRuns.map((r) => {
+    const { sizeScaleDelta, ...cleanR } = r;
+    return {
+      ...cleanR,
+      color: cleanR.color || '#1c1c1e',
+      sizeScale: cleanR.sizeScale !== undefined ? cleanR.sizeScale : 1.0,
+      highlight: cleanR.highlight && cleanR.highlight !== 'transparent' ? cleanR.highlight : null,
+      shadowColor: cleanR.shadowColor && cleanR.shadowColor !== 'transparent' ? cleanR.shadowColor : null,
+    };
+  });
 };
 
 /**
@@ -247,7 +252,8 @@ export const applyStyleToElement = (
   }
 
   let patch = {};
-  if (key === 'color') patch = { color: value };
+  if (typeof key === 'function') patch = key;
+  else if (key === 'color') patch = { color: value };
   else if (key === 'highlight') patch = { highlight: value };
   else if (key === 'shadow' || key === 'shadowColor') patch = { shadowColor: value };
   else if (key === 'bold') patch = { bold: value };
@@ -255,7 +261,6 @@ export const applyStyleToElement = (
   else if (key === 'underline') patch = { underline: value };
   else if (key === 'kuFont') patch = { kuFont: value };
   else if (key === 'enFont') patch = { enFont: value };
-  else if (key === 'sizeScaleDelta') patch = { sizeScaleDelta: value };
   else patch = { [key]: value };
 
   const newRuns = applyStyle(currentRuns, start, end, patch);
@@ -357,7 +362,7 @@ export const updateTextWithRuns = (element, newText) => {
 export const getSelectionStyle = (element, selection = { start: 0, end: 0 }) => {
   const currentRuns = getElementRuns(element);
   const chars = runsToCharStyles(currentRuns, element);
-  const basePt = element.fontSize || element.computedFontSize || 18;
+  const basePt = element.computedFontSize || element.fontSize || 18;
 
   if (chars.length === 0) {
     return {
