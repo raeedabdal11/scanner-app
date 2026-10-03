@@ -30,15 +30,45 @@ import {
   createDefaultPresentation,
 } from './pptDraftStorage';
 
-const BACKGROUND_COLORS = [
+// Professional PowerPoint Slide Background Color Matrices
+const PPT_THEME_BG_COLORS = [
+  ['#ffffff', '#f8f9fa', '#f0f4f8', '#fff8e7', '#eef9ef', '#fef2f2', '#f3f0ff', '#f5f5f7', '#e5e5ea', '#1c1c1e'],
+  ['#000000', '#111827', '#1f2937', '#111111', '#0f172a', '#1e1b4b', '#064e3b', '#451a03', '#881337', '#312e81'],
+  ['#000000', '#ffffff', '#1f497d', '#eeece1', '#4f81bd', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646'],
+  ['#7f7f7f', '#f2f2f2', '#c6d9f1', '#d8d8d8', '#dce6f1', '#f2dcdb', '#eaf1dd', '#e5e0ec', '#d1eef4', '#fde9d9'],
+  ['#595959', '#d9d9d9', '#8db4e2', '#bfbfbf', '#b8cce4', '#e5b9b7', '#d7e3bc', '#ccc1d9', '#a6d9e8', '#fbd5b5'],
+];
+
+const STANDARD_BG_COLORS = [
   '#ffffff',
-  '#f8f9fa',
-  '#f0f4f8',
-  '#fff8e7',
-  '#eef9ef',
+  '#c00000',
+  '#ff0000',
+  '#ffc000',
+  '#ffff00',
+  '#92d050',
+  '#00b0f0',
+  '#0070c0',
+  '#002060',
+  '#7030a0',
+];
+
+const PASTEL_BG_COLORS = [
+  '#f8fafc',
+  '#f1f5f9',
+  '#f0fdf4',
+  '#fefce8',
   '#fef2f2',
-  '#1c1c1e',
-  '#2c2c2e',
+  '#faf5ff',
+  '#f0f9ff',
+  '#fff7ed',
+  '#fdf2f8',
+  '#18181b',
+];
+
+const SPECTRUM_BG_COLORS = [
+  ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00c7be', '#30b0c7', '#32ade6', '#007aff', '#5856d6', '#af52de'],
+  ['#ff2d55', '#a2845e', '#8e8e93', '#aeaeb2', '#c7c7cc', '#d1d1d6', '#e5e5ea', '#f2f2f7', '#8b3a2b', '#5c2217'],
+  ['#b02a1e', '#d97706', '#b45309', '#15803d', '#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6b21a8', '#831843'],
 ];
 
 // Single Page Card Component for Continuous Document Scroll
@@ -542,7 +572,19 @@ export const PptEditorModal = ({
     );
     const newPres = { ...presentation, slides: newSlides };
     pushState(newPres, pageId);
-    setBgPickerPageId(null);
+  };
+
+  // Apply Slide Background Color to all pages
+  const handleApplyBackgroundToAll = (color) => {
+    const newSlides = presentation.slides.map((s) => ({
+      ...s,
+      background: color,
+    }));
+    const newPres = { ...presentation, slides: newSlides };
+    pushState(newPres, bgPickerPageId);
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('ڕەنگی پاشبنەما بۆ هەموو پەڕەکان جێگیرکرا', ToastAndroid.SHORT);
+    }
   };
 
   // Update Element in specific page
@@ -815,29 +857,172 @@ export const PptEditorModal = ({
                       return (
                         <React.Fragment key={slide.id || index}>
 
-                          {/* Page Background Picker Strip if active for this page */}
+                          {/* Professional Slide Background Picker Panel if active for this page */}
                           {bgPickerPageId === slide.id && (
-                            <View style={styles.bgPickerStrip}>
-                              <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 4 }}>
-                                ڕەنگی پاشبنەمای پەڕە:
-                              </Text>
-                              <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={{ gap: 8 }}
-                              >
-                                {BACKGROUND_COLORS.map((col) => (
-                                  <TouchableOpacity
-                                    key={col}
-                                    style={[
-                                      styles.bgDot,
-                                      { backgroundColor: col },
-                                      slide.background === col && styles.bgDotActive,
-                                    ]}
-                                    onPress={() => handleChangeBackground(slide.id, col)}
-                                  />
-                                ))}
+                            <View style={styles.bgPickerPanel}>
+                              <View style={styles.bgPickerHeader}>
+                                <Text style={styles.bgPickerTitle}>
+                                  🎨 ڕەنگی پاشبنەمای پەڕەی {index + 1} (Slide Background)
+                                </Text>
+                                <TouchableOpacity onPress={() => setBgPickerPageId(null)}>
+                                  <Text style={styles.bgPickerCloseBtn}>✕</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              {/* Quick Presets Row */}
+                              <Text style={styles.bgSectionTitle}>ڕەنگە خێرا و پرۆفیشناڵەکان (Quick Presets):</Text>
+                              <View style={styles.presetChipRow}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.presetChip,
+                                    (slide.background || '#ffffff') === '#ffffff' && styles.presetChipActive,
+                                  ]}
+                                  onPress={() => handleChangeBackground(slide.id, '#ffffff')}
+                                >
+                                  <View style={[styles.presetDot, { backgroundColor: '#ffffff' }]} />
+                                  <Text style={styles.presetChipText}>سپی (White)</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.presetChip,
+                                    slide.background === '#1c1c1e' && styles.presetChipActive,
+                                  ]}
+                                  onPress={() => handleChangeBackground(slide.id, '#1c1c1e')}
+                                >
+                                  <View style={[styles.presetDot, { backgroundColor: '#1c1c1e' }]} />
+                                  <Text style={styles.presetChipText}>تاریک (Dark)</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.presetChip,
+                                    slide.background === '#fff8e7' && styles.presetChipActive,
+                                  ]}
+                                  onPress={() => handleChangeBackground(slide.id, '#fff8e7')}
+                                >
+                                  <View style={[styles.presetDot, { backgroundColor: '#fff8e7' }]} />
+                                  <Text style={styles.presetChipText}>که‌ن (Cream)</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={[
+                                    styles.presetChip,
+                                    slide.background === '#1f497d' && styles.presetChipActive,
+                                  ]}
+                                  onPress={() => handleChangeBackground(slide.id, '#1f497d')}
+                                >
+                                  <View style={[styles.presetDot, { backgroundColor: '#1f497d' }]} />
+                                  <Text style={styles.presetChipText}>شینی پاوەرپۆینت</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                                {/* 1. PowerPoint Theme Colors Grid */}
+                                <Text style={styles.bgSectionTitle}>ڕەنگەکانی تێمی پاوەرپۆینت (PowerPoint Theme Colors)</Text>
+                                <View style={styles.bgGridBox}>
+                                  {PPT_THEME_BG_COLORS.map((row, rIdx) => (
+                                    <View key={`bg_theme_row_${rIdx}`} style={styles.bgGridRow}>
+                                      {row.map((hex, cIdx) => (
+                                        <TouchableOpacity
+                                          key={`bg_theme_${rIdx}_${cIdx}`}
+                                          style={[
+                                            styles.bgSquare,
+                                            { backgroundColor: hex },
+                                            (slide.background || '#ffffff') === hex && styles.bgSquareActive,
+                                          ]}
+                                          onPress={() => handleChangeBackground(slide.id, hex)}
+                                        >
+                                          {(slide.background || '#ffffff') === hex && (
+                                            <Text
+                                              style={{
+                                                color: hex === '#ffffff' || hex === '#eeece1' || hex === '#f2f2f2' ? '#000' : '#fff',
+                                                fontSize: 10,
+                                                fontWeight: 'bold',
+                                              }}
+                                            >
+                                              ✓
+                                            </Text>
+                                          )}
+                                        </TouchableOpacity>
+                                      ))}
+                                    </View>
+                                  ))}
+                                </View>
+
+                                {/* 2. Standard Colors */}
+                                <Text style={[styles.bgSectionTitle, { marginTop: 10 }]}>ڕەنگە ستانداردەکان (Standard Colors)</Text>
+                                <View style={styles.bgStandardRow}>
+                                  {STANDARD_BG_COLORS.map((hex) => (
+                                    <TouchableOpacity
+                                      key={`bg_std_${hex}`}
+                                      style={[
+                                        styles.bgSquare,
+                                        { backgroundColor: hex },
+                                        (slide.background || '#ffffff') === hex && styles.bgSquareActive,
+                                      ]}
+                                      onPress={() => handleChangeBackground(slide.id, hex)}
+                                    >
+                                      {(slide.background || '#ffffff') === hex && (
+                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>✓</Text>
+                                      )}
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+
+                                {/* 3. Pastel & Light Backgrounds */}
+                                <Text style={[styles.bgSectionTitle, { marginTop: 10 }]}>پاشبنەمای کاڵ و پاستێلەکان (Pastel & Light Backgrounds)</Text>
+                                <View style={styles.bgStandardRow}>
+                                  {PASTEL_BG_COLORS.map((hex) => (
+                                    <TouchableOpacity
+                                      key={`bg_pastel_${hex}`}
+                                      style={[
+                                        styles.bgSquare,
+                                        { backgroundColor: hex },
+                                        (slide.background || '#ffffff') === hex && styles.bgSquareActive,
+                                      ]}
+                                      onPress={() => handleChangeBackground(slide.id, hex)}
+                                    >
+                                      {(slide.background || '#ffffff') === hex && (
+                                        <Text style={{ color: '#000', fontSize: 10, fontWeight: 'bold' }}>✓</Text>
+                                      )}
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+
+                                {/* 4. Full Color Spectrum Grid */}
+                                <Text style={[styles.bgSectionTitle, { marginTop: 10 }]}>پانیی ڕەنگە پرۆفیشناڵەکان (Full Color Spectrum)</Text>
+                                <View style={styles.bgGridBox}>
+                                  {SPECTRUM_BG_COLORS.map((row, rIdx) => (
+                                    <View key={`bg_spec_row_${rIdx}`} style={styles.bgGridRow}>
+                                      {row.map((hex, cIdx) => (
+                                        <TouchableOpacity
+                                          key={`bg_spec_${rIdx}_${cIdx}`}
+                                          style={[
+                                            styles.bgSquare,
+                                            { backgroundColor: hex },
+                                            (slide.background || '#ffffff') === hex && styles.bgSquareActive,
+                                          ]}
+                                          onPress={() => handleChangeBackground(slide.id, hex)}
+                                        >
+                                          {(slide.background || '#ffffff') === hex && (
+                                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>✓</Text>
+                                          )}
+                                        </TouchableOpacity>
+                                      ))}
+                                    </View>
+                                  ))}
+                                </View>
                               </ScrollView>
+
+                              {/* Apply to All Slides Button */}
+                              <TouchableOpacity
+                                style={styles.applyAllBtn}
+                                onPress={() => handleApplyBackgroundToAll(slide.background || '#ffffff')}
+                              >
+                                <Ionicons name="copy-outline" size={14} color="#ffffff" />
+                                <Text style={styles.applyAllText}>🌐 جێگیرکردنی ئەم ڕەنگە بۆ هەموو پەڕەکان (Apply to All Slides)</Text>
+                              </TouchableOpacity>
                             </View>
                           )}
 
@@ -1173,22 +1358,116 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 11,
   },
-  bgPickerStrip: {
-    backgroundColor: '#2c2c2e',
-    padding: 8,
-    borderRadius: 8,
+  bgPickerPanel: {
+    backgroundColor: '#1c1c1e',
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  bgPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  bgDot: {
+  bgPickerTitle: {
+    color: '#8B3A2B',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  bgPickerCloseBtn: {
+    color: '#aaaaaa',
+    fontSize: 16,
+    fontWeight: 'bold',
+    padding: 2,
+  },
+  bgSectionTitle: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  presetChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  presetChipActive: {
+    borderColor: '#8B3A2B',
+    backgroundColor: '#3a3a3c',
+  },
+  presetDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  presetChipText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  bgGridBox: {
+    backgroundColor: '#2c2c2e',
+    borderRadius: 10,
+    padding: 6,
+    gap: 4,
+  },
+  bgGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bgStandardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#2c2c2e',
+    borderRadius: 10,
+    padding: 6,
+  },
+  bgSquare: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#555',
+    borderColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  bgDotActive: {
-    borderWidth: 2,
-    borderColor: '#8B3A2B',
+  bgSquareActive: {
+    borderWidth: 2.5,
+    borderColor: '#30d158',
+  },
+  applyAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8B3A2B',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 6,
+  },
+  applyAllText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   editorArea: {
     flex: 1,

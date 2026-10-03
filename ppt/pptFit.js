@@ -12,8 +12,9 @@ export const SLIDE = {
 
 // Font limits (in points)
 export const FONT = {
-  textMaxPt: 40,
-  textMinPt: 14,
+  textMaxPt: 40,   // Max 40pt for body
+  titleMaxPt: 36,  // Max 36pt for titles
+  textMinPt: 14,   // Min 14pt for text
   tableMaxPt: 28,
   tableMinPt: 11,
   defaultManualPt: 18,
@@ -26,6 +27,72 @@ export const BODY_BOX = {
   yPercent: 25,
   widthPercent: 90,
   heightPercent: 65,
+};
+
+/**
+ * Checks if a character is in the Arabic/Kurdish script range
+ */
+export const isArabicKurdishChar = (ch) => {
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  return (
+    (code >= 0x0600 && code <= 0x06FF) ||
+    (code >= 0x0750 && code <= 0x077F) ||
+    (code >= 0x08A0 && code <= 0x08FF) ||
+    (code >= 0xFB50 && code <= 0xFDFF) ||
+    (code >= 0xFE70 && code <= 0xFEFE)
+  );
+};
+
+/**
+ * Splits text into runs based on script (Kurdish/Arabic vs English/Latin)
+ */
+export const splitRuns = (text, kurdishFont = 'Tahoma', englishFont = 'Calibri') => {
+  if (!text) return [];
+
+  const runs = [];
+  let currentText = '';
+  let currentIsKurdish = null;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const isKu = isArabicKurdishChar(ch);
+    const isEng = /[a-zA-Z]/.test(ch);
+
+    let charScriptIsKurdish = currentIsKurdish !== null ? currentIsKurdish : true;
+    if (isKu) {
+      charScriptIsKurdish = true;
+    } else if (isEng) {
+      charScriptIsKurdish = false;
+    }
+
+    if (currentIsKurdish === null) {
+      currentIsKurdish = charScriptIsKurdish;
+      currentText += ch;
+    } else if (charScriptIsKurdish === currentIsKurdish) {
+      currentText += ch;
+    } else {
+      if (currentText) {
+        runs.push({
+          text: currentText,
+          isKurdish: currentIsKurdish,
+          fontFamily: currentIsKurdish ? kurdishFont : englishFont,
+        });
+      }
+      currentText = ch;
+      currentIsKurdish = charScriptIsKurdish;
+    }
+  }
+
+  if (currentText) {
+    runs.push({
+      text: currentText,
+      isKurdish: currentIsKurdish,
+      fontFamily: currentIsKurdish ? kurdishFont : englishFont,
+    });
+  }
+
+  return runs;
 };
 
 /**
@@ -64,7 +131,7 @@ export const calculateFittingFontSize = (elem) => {
   const maxPt = isTable
     ? FONT.tableMaxPt
     : isTitle
-    ? Math.min(48, FONT.textMaxPt + 8)
+    ? FONT.titleMaxPt
     : FONT.textMaxPt;
 
   const minPt = isTable ? FONT.tableMinPt : FONT.textMinPt;
@@ -82,7 +149,6 @@ export const calculateFittingFontSize = (elem) => {
     if (!textStr.trim()) return { fits: true, totalHeightPt: 0, linesCount: 0 };
 
     const lineHeightPt = sizePt * lineSpacingMultiple;
-    // Average character width for Arial / Sorani Kurdish text: approx 0.52 * sizePt
     const charWidthPt = sizePt * 0.52;
     const charsPerLine = Math.max(1, Math.floor(boxWidthPt / charWidthPt));
 
@@ -95,7 +161,6 @@ export const calculateFittingFontSize = (elem) => {
         totalWrappedLines += 1;
       } else {
         totalWrappedLines += Math.max(1, Math.ceil(p.length / charsPerLine));
-        // Check if any individual word exceeds box width at sizePt
         const words = p.split(' ');
         for (const w of words) {
           if (w.length * charWidthPt > boxWidthPt + 1) {
@@ -114,10 +179,11 @@ export const calculateFittingFontSize = (elem) => {
   };
 
   if (fontMode === 'manual') {
-    const { fits, totalHeightPt } = checkFitsAtSize(targetFontSize);
+    const clampedSize = Math.max(minPt, Math.min(maxPt, targetFontSize));
+    const { fits, totalHeightPt } = checkFitsAtSize(clampedSize);
     const overflowRatio = boxHeightPt > 0 ? totalHeightPt / boxHeightPt : 1;
     return {
-      fontSizePt: targetFontSize,
+      fontSizePt: clampedSize,
       fits,
       overflowRatio,
     };
@@ -169,7 +235,6 @@ export const splitElementContent = (elem, fontSizePt) => {
   const maxLinesPerBox = Math.max(1, Math.floor(boxHeightPt / lineHeightPt));
 
   if (isTable) {
-    // Table split by rows, repeating header row on every slide
     let headerLine = '';
     let dataLines = [];
 
@@ -180,7 +245,7 @@ export const splitElementContent = (elem, fontSizePt) => {
 
     const chunks = [];
     let currentChunk = [];
-    let currentLineCount = 1; // 1 line for header
+    let currentLineCount = 1;
 
     for (const row of dataLines) {
       if (currentLineCount + 1 > maxLinesPerBox && currentChunk.length > 0) {
@@ -199,7 +264,6 @@ export const splitElementContent = (elem, fontSizePt) => {
     return chunks;
   }
 
-  // Regular body text split at line / word boundaries
   const allWrappedLines = [];
   for (const p of paragraphs) {
     if (!p) {
@@ -230,7 +294,6 @@ export const splitElementContent = (elem, fontSizePt) => {
 
 /**
  * planPage(page)
- * Takes a slide page object and returns the planned slide(s), fill percentage, and overflow info.
  */
 export const planPage = (page) => {
   if (!page || !page.elements) {
@@ -272,7 +335,6 @@ export const planPage = (page) => {
 
   const pageFill = textElemCount > 0 ? Math.min(1, totalFillAccumulator / textElemCount) : 0;
 
-  // Check if splitting across slides is needed
   const overflowElem = elementsWithComputed.find((e) => {
     if (e.type !== 'text') return false;
     const { fits } = calculateFittingFontSize(e);
@@ -290,7 +352,6 @@ export const planPage = (page) => {
     };
   }
 
-  // Handle Overflow: Split element content into chunks
   const chunks = splitElementContent(overflowElem, overflowElem.computedFontSize);
   const totalSlidesNeeded = chunks.length;
 
@@ -305,7 +366,6 @@ export const planPage = (page) => {
     };
   }
 
-  // Find title element to append slide numbering e.g. "(1/2)", "(2/2)"
   const titleElem = elementsWithComputed.find(
     (e) => e.type === 'text' && e.id !== overflowElem.id && (e.fontSize >= 20 || e.fontWeight === 'bold' || e.y < 20)
   );
@@ -350,7 +410,6 @@ export const planPage = (page) => {
 
 /**
  * countSlides(pages)
- * Returns the total count of PPTX slides generated from an array of pages.
  */
 export const countSlides = (pages = []) => {
   if (!Array.isArray(pages)) return 0;

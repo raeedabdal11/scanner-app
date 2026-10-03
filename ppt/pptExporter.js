@@ -1,5 +1,5 @@
 import { File, Paths } from 'expo-file-system';
-import { planPage, reverseTableLineColumns, isTableElement } from './pptFit';
+import { planPage, reverseTableLineColumns, isTableElement, splitRuns } from './pptFit';
 
 if (typeof window === 'undefined') {
   global.window = global;
@@ -102,6 +102,14 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
             // Computed fontSize from planPage
             const fontSize = elem.computedFontSize || elem.fontSize || 18;
 
+            const runs = splitRuns(
+              textContent,
+              elem.kurdishFont || 'Tahoma',
+              elem.englishFont || 'Calibri'
+            );
+
+            const primaryFont = runs[0]?.fontFamily || elem.kurdishFont || elem.englishFont || 'Arial';
+
             const textOptions = {
               x: xIn,
               y: yIn,
@@ -116,7 +124,7 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               rtl: true,
               lineSpacingMultiple: 1.35,
               margin: 0,
-              fontFace: 'Arial',
+              fontFace: primaryFont,
               valign: 'top',
             };
 
@@ -126,7 +134,34 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               textOptions.fill = { color: highlightColor };
             }
 
-            slide.addText(textContent, textOptions);
+            // Set text shadow for PowerPoint export
+            if (elem.shadowColor && elem.shadowColor !== 'transparent') {
+              textOptions.shadow = {
+                type: 'outer',
+                color: elem.shadowColor.replace('#', ''),
+                blur: 3,
+                offset: 2,
+                angle: 45,
+                opacity: 0.6,
+              };
+            }
+
+            if (runs.length > 1) {
+              const formattedRuns = runs.map((run) => ({
+                text: run.text,
+                options: {
+                  fontSize: fontSize,
+                  fontFace: run.fontFamily,
+                  bold: isBold,
+                  italic: isItalic,
+                  underline: isUnderline ? { style: 'single' } : false,
+                  color: textColor,
+                },
+              }));
+              slide.addText(formattedRuns, textOptions);
+            } else {
+              slide.addText(textContent, textOptions);
+            }
           } else if (elem.type === 'image') {
             if (!elem.uri) continue;
 

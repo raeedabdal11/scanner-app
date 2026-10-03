@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import { planPage, SLIDE } from './pptFit';
+import { planPage, splitRuns, SLIDE } from './pptFit';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -226,7 +226,7 @@ export const PptCanvas = ({
           const top = (effectiveY / 100) * canvasHeight;
           const elemWidth = (elem.width / 100) * canvasWidth;
 
-          // Dynamically adjust height in auto mode so long text expands and fits on screen
+          // Dynamically adjust height in auto mode so long text expands and fits on screen without clipping
           let effectiveHeight = elem.height;
           if (elem.type === 'text' && elem.text && elem.text.trim()) {
             const computedPt = elem.computedFontSize || elem.fontSize || 18;
@@ -253,6 +253,12 @@ export const PptCanvas = ({
           // Scaled font size in pixels based on (boxWidthPx / boxWidthPt) = (canvasWidth / SLIDE.widthPt)
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
           const scaledFontSize = computedPt * (canvasWidth / SLIDE.widthPt);
+
+          const runs = splitRuns(
+            elem.text || '',
+            elem.kurdishFont || 'Tahoma',
+            elem.englishFont || 'Calibri'
+          );
 
           return (
             <View
@@ -285,12 +291,22 @@ export const PptCanvas = ({
                           elem.highlightColor && elem.highlightColor !== 'transparent'
                             ? elem.highlightColor
                             : undefined,
+                        textShadowColor:
+                          elem.shadowColor && elem.shadowColor !== 'transparent'
+                            ? elem.shadowColor
+                            : undefined,
+                        textShadowOffset:
+                          elem.shadowColor && elem.shadowColor !== 'transparent'
+                            ? { width: 1, height: 1 }
+                            : { width: 0, height: 0 },
+                        textShadowRadius:
+                          elem.shadowColor && elem.shadowColor !== 'transparent' ? 2 : 0,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
-                        fontFamily: fontFamily || undefined,
-                        paddingHorizontal: 2,
-                        paddingVertical: 2,
+                        fontFamily: elem.kurdishFont || elem.englishFont || fontFamily || undefined,
+                        paddingHorizontal: 6,
+                        paddingVertical: 6,
                         borderRadius: 4,
                         margin: 0,
                         textAlignVertical: 'top',
@@ -317,16 +333,29 @@ export const PptCanvas = ({
                           elem.highlightColor && elem.highlightColor !== 'transparent'
                             ? elem.highlightColor
                             : undefined,
+                        textShadowColor:
+                          elem.shadowColor && elem.shadowColor !== 'transparent'
+                            ? elem.shadowColor
+                            : undefined,
+                        textShadowOffset:
+                          elem.shadowColor && elem.shadowColor !== 'transparent'
+                            ? { width: 1, height: 1 }
+                            : { width: 0, height: 0 },
+                        textShadowRadius:
+                          elem.shadowColor && elem.shadowColor !== 'transparent' ? 2 : 0,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: scaledFontSize * (elem.lineSpacing || 1.35),
-                        fontFamily: fontFamily || undefined,
-                        paddingHorizontal: 2,
-                        paddingVertical: 2,
+                        paddingHorizontal: 6,
+                        paddingVertical: 6,
                         borderRadius: 4,
                       }}
                     >
-                      {elem.text || '...'}
+                      {runs.map((run, rIdx) => (
+                        <Text key={rIdx} style={{ fontFamily: run.fontFamily }}>
+                          {run.text}
+                        </Text>
+                      ))}
                     </Text>
                   )}
                 </View>
@@ -464,7 +493,8 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
     justifyContent: 'center',
-    padding: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
   },
   imageContainer: {
     flex: 1,
