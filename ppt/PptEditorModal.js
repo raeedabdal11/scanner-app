@@ -94,7 +94,11 @@ const PageCard = ({
   onDeletePage,
   onToggleBgPicker,
   selRef,
+  pendingSelRef,
   pressingRef,
+  stickyRangeRef,
+  ignoreSelectionRef,
+  inputRef,
   selState,
   setSelState,
 }) => {
@@ -228,7 +232,11 @@ const PageCard = ({
         onChangeImageElement={onChangeImageElement}
         fontFamily={vazirmatnFont}
         selRef={selRef}
+        pendingSelRef={pendingSelRef}
         pressingRef={pressingRef}
+        stickyRangeRef={stickyRangeRef}
+        ignoreSelectionRef={ignoreSelectionRef}
+        inputRef={inputRef}
         selState={selState}
         setSelState={setSelState}
       />
@@ -251,6 +259,9 @@ export const PptEditorModal = ({
   const selRef = useRef(null);
   const pendingSelRef = useRef(null);
   const pressingRef = useRef(false);
+  const stickyRangeRef = useRef(null);
+  const ignoreSelectionRef = useRef(false);
+  const inputRef = useRef(null);
   const [selState, setSelState] = useState(undefined);
 
   // Saved state per page e.g. { [pageId]: boolean }
@@ -869,7 +880,7 @@ export const PptEditorModal = ({
                     ref={scrollViewRef}
                     style={{ flex: 1 }}
                     contentContainerStyle={styles.documentScrollContent}
-                    keyboardShouldPersistTaps="handled"
+                    keyboardShouldPersistTaps="always"
                   >
                     {presentation.slides.map((slide, index) => {
                       const isSaved = !!savedPages[slide.id];
@@ -1078,7 +1089,11 @@ export const PptEditorModal = ({
                               setBgPickerPageId(bgPickerPageId === pId ? null : pId)
                             }
                             selRef={selRef}
+                            pendingSelRef={pendingSelRef}
                             pressingRef={pressingRef}
+                            stickyRangeRef={stickyRangeRef}
+                            ignoreSelectionRef={ignoreSelectionRef}
+                            inputRef={inputRef}
                             selState={selState}
                             setSelState={setSelState}
                           />
@@ -1121,6 +1136,9 @@ export const PptEditorModal = ({
                   selRef={selRef}
                   pendingSelRef={pendingSelRef}
                   pressingRef={pressingRef}
+                  stickyRangeRef={stickyRangeRef}
+                  ignoreSelectionRef={ignoreSelectionRef}
+                  inputRef={inputRef}
                   selState={selState}
                   setSelState={setSelState}
                 />

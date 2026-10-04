@@ -412,3 +412,44 @@ export const getSelectionStyle = (element, selection = { start: 0, end: 0 }) => 
     shadowColor: sample.shadow && sample.shadow !== 'transparent' ? sample.shadow : sample.shadowColor && sample.shadowColor !== 'transparent' ? sample.shadowColor : 'transparent',
   };
 };
+
+/**
+ * Splits runs for display only, attaching isStickySelected: true for sticky selection range.
+ * Does not mutate runs or saved state.
+ */
+export const getDisplayRunsWithSelection = (runs, stickyRange) => {
+  if (!runs || !Array.isArray(runs) || runs.length === 0) return [];
+  if (!stickyRange || stickyRange.start === undefined || stickyRange.end === undefined) {
+    return runs;
+  }
+  const start = Math.max(0, Math.min(stickyRange.start, stickyRange.end));
+  const end = Math.max(0, Math.min(stickyRange.start, stickyRange.end));
+  if (start === end) return runs;
+
+  const out = [];
+  let pos = 0;
+  for (const r of runs) {
+    const rText = r.text || '';
+    const a = pos;
+    const b = pos + rText.length;
+    pos = b;
+
+    if (b <= start || a >= end) {
+      out.push(r);
+      continue;
+    }
+
+    const s = Math.max(start, a) - a;
+    const e = Math.min(end, b) - a;
+
+    if (s > 0) {
+      out.push({ ...r, text: rText.slice(0, s) });
+    }
+    out.push({ ...r, text: rText.slice(s, e), isStickySelected: true });
+    if (e < rText.length) {
+      out.push({ ...r, text: rText.slice(e) });
+    }
+  }
+  return out;
+};
+

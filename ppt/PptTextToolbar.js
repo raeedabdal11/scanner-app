@@ -16,6 +16,7 @@ import {
   updateElementText,
   getSelectionStyle,
   isWordChar,
+  getDisplayRunsWithSelection,
 } from './formattedText';
 import { applyStyle, wordRangeAt } from './richText';
 
@@ -72,6 +73,9 @@ export const PptTextToolbar = ({
   selRef: externalSelRef,
   pendingSelRef: externalPendingSelRef,
   pressingRef: externalPressingRef,
+  stickyRangeRef: externalStickyRangeRef,
+  ignoreSelectionRef: externalIgnoreSelectionRef,
+  inputRef: externalInputRef,
   selState: externalSelState,
   setSelState: externalSetSelState,
 }) => {
@@ -84,13 +88,21 @@ export const PptTextToolbar = ({
   const localSelRef = useRef(null);
   const localPendingSelRef = useRef(null);
   const localPressingRef = useRef(false);
+  const localStickyRangeRef = useRef(null);
+  const localIgnoreSelectionRef = useRef(false);
+  const localInputRef = useRef(null);
   const [localSelState, setLocalSelState] = useState(undefined);
 
   const selRef = externalSelRef || localSelRef;
   const pendingSelRef = externalPendingSelRef || localPendingSelRef;
   const pressingRef = externalPressingRef || localPressingRef;
+  const stickyRangeRef = externalStickyRangeRef || localStickyRangeRef;
+  const ignoreSelectionRef = externalIgnoreSelectionRef || localIgnoreSelectionRef;
+  const inputRef = externalInputRef || localInputRef;
   const selState = externalSelState !== undefined ? externalSelState : localSelState;
   const setSelState = externalSetSelState || setLocalSelState;
+
+  const modalInputRef = useRef(null);
 
   // Font Sheet Modal State
   const [fontModalVisible, setFontModalVisible] = useState(false);
@@ -121,13 +133,15 @@ export const PptTextToolbar = ({
 
   const handlePressIn = () => {
     pressingRef.current = true;
-    if (selRef.current) {
+    if (stickyRangeRef.current) {
+      pendingSelRef.current = { ...stickyRangeRef.current };
+    } else if (selRef.current) {
       pendingSelRef.current = { ...selRef.current };
     }
   };
 
   // ONE function for ALL formatting
-  function applyRunStyle(patch) {
+  function applyRunStyle(patch, patchName = 'style') {
     const plain = runs.map((r) => r.text).join('');
     if (!plain) {
       showNoSelectionToast();
@@ -136,70 +150,114 @@ export const PptTextToolbar = ({
       return;
     }
 
-    const currentSel = pendingSelRef.current || selRef.current;
-    if (!currentSel || currentSel.start === undefined || currentSel.start === null) {
-      showNoSelectionToast();
-      pressingRef.current = false;
-      pendingSelRef.current = null;
-      return;
-    }
+    let start = undefined;
+    let end = undefined;
 
-    let start = Math.max(0, Math.min(plain.length, currentSel.start));
-    let end = Math.max(0, Math.min(plain.length, currentSel.end));
-
-    if (start > end) {
-      [start, end] = [end, start];
-    }
-
-    if (start === end) {
-      let isWord = false;
-      if (start < plain.length && isWordChar(plain[start])) {
-        isWord = true;
-      } else if (start > 0 && start === plain.length && isWordChar(plain[start - 1])) {
-        isWord = true;
+    // 1. Check stickyRangeRef first
+    if (
+      stickyRangeRef.current &&
+      stickyRangeRef.current.start !== undefined &&
+      stickyRangeRef.current.end !== undefined
+    ) {
+      const s = Math.max(0, Math.min(plain.length, stickyRangeRef.current.start));
+      const e = Math.max(0, Math.min(plain.length, stickyRangeRef.current.end));
+      if (s !== e) {
+        start = Math.min(s, e);
+        end = Math.max(s, e);
       }
+    }
 
-      if (isWord) {
-        const idxToSearch = start < plain.length ? start : start - 1;
-        const wRange = wordRangeAt(plain, idxToSearch);
-        if (wRange.start !== wRange.end) {
-          start = wRange.start;
-          end = wRange.end;
+    // 2. If no valid stickyRange, check pendingSelRef / selRef / selection / word boundary
+    if (start === undefined || end === undefined || start === end) {
+      const currentSel = pendingSelRef.current || selRef.current || selection;
+      if (currentSel && currentSel.start !== undefined && currentSel.start !== null) {
+        let s = Math.max(0, Math.min(plain.length, currentSel.start));
+        let e = Math.max(0, Math.min(plain.length, currentSel.end));
+        if (s > e) [s, e] = [e, s];
+
+        if (s !== e) {
+          start = s;
+          end = e;
+        } else {
+          // Cursor at single index - check if word under cursor
+          let isWord = false;
+          if (s < plain.length && isWordChar(plain[s])) {
+            isWord = true;
+          } else if (s > 0 && s === plain.length && isWordChar(plain[s - 1])) {
+            isWord = true;
+          }
+
+          if (isWord) {
+            const idxToSearch = s < plain.length ? s : s - 1;
+            const wRange = wordRangeAt(plain, idxToSearch);
+            if (wRange.start !== wRange.end) {
+              start = wRange.start;
+              end = wRange.end;
+            }
+          }
         }
       }
     }
 
-    if (start === end) {
+    if (start === undefined || end === undefined || start === end) {
       showNoSelectionToast();
       pressingRef.current = false;
       pendingSelRef.current = null;
       return;
     }
+
+    // Set & keep stickyRangeRef
+    const targetSel = { start, end };
+    stickyRangeRef.current = targetSel;
+    selRef.current = targetSel;
+    if (setSelState) setSelState(targetSel);
+
+    console.log('[STICKY]', stickyRangeRef.current, 'after', patchName);
 
     const oldStyle = getSelectionStyle(element, { start, end });
     const oldScale = oldStyle.sizeScale ?? 1;
 
     const newRuns = applyStyle(runs, start, end, patch);
 
-    const targetSel = { start, end };
-    selRef.current = targetSel;
-    if (setSelState) setSelState(targetSel);
-
     const newStyle = getSelectionStyle({ ...element, runs: newRuns }, targetSel);
     const newScale = newStyle.sizeScale ?? 1;
 
     console.log('[SIZE]', start, end, 'before', oldScale, 'after', newScale, 'base', baseSize);
 
+    ignoreSelectionRef.current = true;
+
     setRuns(newRuns);
 
-    setTimeout(() => {
-      pressingRef.current = false;
-      pendingSelRef.current = null;
-    }, 100);
+    const activeTargetInput = editTextModal ? modalInputRef.current : inputRef.current;
+
+    const restoreSelection = () => {
+      if (setSelState) setSelState({ ...targetSel });
+      const targetInput = activeTargetInput;
+      if (targetInput) {
+        if (targetInput.focus) targetInput.focus();
+        if (targetInput.setNativeProps) {
+          targetInput.setNativeProps({ selection: { ...targetSel } });
+        }
+      }
+    };
+
+    if (activeTargetInput && activeTargetInput.focus) {
+      activeTargetInput.focus();
+    }
+
+    requestAnimationFrame(() => {
+      restoreSelection();
+      setTimeout(() => {
+        restoreSelection();
+        ignoreSelectionRef.current = false;
+        pressingRef.current = false;
+        pendingSelRef.current = null;
+      }, 50);
+    });
   }
 
   // Active selection/word style query
-  const currentSel = pendingSelRef.current || selRef.current || selection;
+  const currentSel = stickyRangeRef.current || pendingSelRef.current || selRef.current || selection;
   const currentStyle = getSelectionStyle(element, currentSel);
   const effectiveWordSize = Math.round(baseSize * (currentStyle.sizeScale ?? 1));
 
@@ -369,7 +427,7 @@ export const PptTextToolbar = ({
                 style={styles.sizeBtn}
                 onPressIn={handlePressIn}
                 onPress={() =>
-                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }))
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }), 'A-')
                 }
               >
                 <Text style={styles.sizeBtnText}>A-</Text>
@@ -383,7 +441,7 @@ export const PptTextToolbar = ({
                 style={styles.sizeBtn}
                 onPressIn={handlePressIn}
                 onPress={() =>
-                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }))
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }), 'A+')
                 }
               >
                 <Text style={styles.sizeBtnText}>A+</Text>
@@ -451,7 +509,7 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.bold && styles.styleBtnActive]}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ bold: !currentStyle.bold })}
+                onPress={() => applyRunStyle({ bold: !currentStyle.bold }, 'bold')}
               >
                 <Text style={[styles.styleBtnText, { fontWeight: 'bold' }]}>B</Text>
               </TouchableOpacity>
@@ -459,7 +517,7 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.italic && styles.styleBtnActive]}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ italic: !currentStyle.italic })}
+                onPress={() => applyRunStyle({ italic: !currentStyle.italic }, 'italic')}
               >
                 <Text style={[styles.styleBtnText, { fontStyle: 'italic' }]}>I</Text>
               </TouchableOpacity>
@@ -467,7 +525,7 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={[styles.styleBtn, currentStyle.underline && styles.styleBtnActive]}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ underline: !currentStyle.underline })}
+                onPress={() => applyRunStyle({ underline: !currentStyle.underline }, 'underline')}
               >
                 <Text style={[styles.styleBtnText, { textDecorationLine: 'underline' }]}>U</Text>
               </TouchableOpacity>
@@ -523,7 +581,7 @@ export const PptTextToolbar = ({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
             contentContainerStyle={{ gap: 6 }}
           >
             {KURDISH_FONTS.slice(0, 10).map((font) => {
@@ -533,7 +591,7 @@ export const PptTextToolbar = ({
                   key={`quick_ku_${font.name}`}
                   style={[styles.fontChip, isSelected && styles.fontChipActive]}
                   onPressIn={handlePressIn}
-                  onPress={() => applyRunStyle({ kuFont: font.name })}
+                  onPress={() => applyRunStyle({ kuFont: font.name }, 'kuFont')}
                 >
                   <Text style={[styles.fontChipText, { fontFamily: font.name }, isSelected && styles.fontChipTextActive]}>
                     {isSelected ? `✓ ${font.name}` : font.name}
@@ -625,7 +683,7 @@ export const PptTextToolbar = ({
           <ScrollView
             style={{ maxHeight: 220 }}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
           >
             {colorTarget === 'shadow' && (
               <TouchableOpacity
@@ -768,21 +826,21 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ bold: !currentStyle.bold })}
+                onPress={() => applyRunStyle({ bold: !currentStyle.bold }, 'bold')}
               >
                 <Text style={[styles.modalFormatBtnText, currentStyle.bold && { color: '#30d158' }]}>B</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ italic: !currentStyle.italic })}
+                onPress={() => applyRunStyle({ italic: !currentStyle.italic }, 'italic')}
               >
                 <Text style={[styles.modalFormatBtnText, { fontStyle: 'italic' }, currentStyle.italic && { color: '#30d158' }]}>I</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
-                onPress={() => applyRunStyle({ underline: !currentStyle.underline })}
+                onPress={() => applyRunStyle({ underline: !currentStyle.underline }, 'underline')}
               >
                 <Text style={[styles.modalFormatBtnText, { textDecorationLine: 'underline' }, currentStyle.underline && { color: '#30d158' }]}>U</Text>
               </TouchableOpacity>
@@ -790,7 +848,7 @@ export const PptTextToolbar = ({
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
                 onPress={() =>
-                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }))
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) + 0.15, 0.5, 3) }), 'A+')
                 }
               >
                 <Text style={styles.modalFormatBtnText}>A+</Text>
@@ -799,7 +857,7 @@ export const PptTextToolbar = ({
                 style={styles.modalFormatBtn}
                 onPressIn={handlePressIn}
                 onPress={() =>
-                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }))
+                  applyRunStyle((r) => ({ sizeScale: clamp((r.sizeScale ?? 1) - 0.15, 0.5, 3) }), 'A-')
                 }
               >
                 <Text style={styles.modalFormatBtnText}>A-</Text>
@@ -810,7 +868,7 @@ export const PptTextToolbar = ({
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
               contentContainerStyle={{ gap: 6, marginBottom: 10 }}
             >
               {['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#5856d6', '#af52de', '#ffffff', '#000000'].map((hex) => (
@@ -818,25 +876,35 @@ export const PptTextToolbar = ({
                   key={`modal_color_${hex}`}
                   style={[styles.colorSquare, { backgroundColor: hex, width: 22, height: 22 }]}
                   onPressIn={handlePressIn}
-                  onPress={() => applyRunStyle({ color: hex })}
+                  onPress={() => applyRunStyle({ color: hex }, 'color')}
                 />
               ))}
             </ScrollView>
 
             <TextInput
+              ref={modalInputRef}
               style={[styles.modalInput, { color: undefined }]}
               multiline
               selection={selState}
               onSelectionChange={(e) => {
                 const sel = e.nativeEvent.selection;
                 console.log('[SEL]', sel);
+                if (ignoreSelectionRef.current) return;
                 if (!pressingRef.current) {
                   setSelection(sel);
                   if (selRef) selRef.current = sel;
+                  if (sel && sel.start !== undefined && sel.end !== undefined) {
+                    if (sel.start !== sel.end) {
+                      stickyRangeRef.current = { start: sel.start, end: sel.end };
+                    } else {
+                      stickyRangeRef.current = null;
+                    }
+                  }
                   if (setSelState) setSelState(sel);
                 }
               }}
               onChangeText={(text) => {
+                stickyRangeRef.current = null;
                 if (text === tempText) return;
                 setTempText(text);
                 const updated = updateElementText(element, text, selection);
@@ -846,8 +914,14 @@ export const PptTextToolbar = ({
               placeholderTextColor="#777"
               textAlign={element.writingDirection === 'ltr' ? 'left' : 'right'}
             >
-              {runs.map((r, i) => (
-                <Text key={i} style={{ color: r.color || '#1c1c1e' }}>
+              {getDisplayRunsWithSelection(runs, stickyRangeRef.current).map((r, i) => (
+                <Text
+                  key={i}
+                  style={{
+                    color: r.color || '#1c1c1e',
+                    backgroundColor: r.isStickySelected ? '#3390FF33' : r.highlight || undefined,
+                  }}
+                >
                   {r.text}
                 </Text>
               ))}
@@ -981,7 +1055,7 @@ export const PptTextToolbar = ({
             <ScrollView
               style={{ flex: 1 }}
               showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
+              keyboardShouldPersistTaps="always"
             >
               {filteredFontList.map((font) => {
                 const isKurdishTab = fontModalCategory === 'kurdish';
@@ -996,9 +1070,9 @@ export const PptTextToolbar = ({
                     onPressIn={handlePressIn}
                     onPress={() => {
                       if (isKurdishTab) {
-                        applyRunStyle({ kuFont: font.name });
+                        applyRunStyle({ kuFont: font.name }, 'kuFont');
                       } else {
-                        applyRunStyle({ enFont: font.name });
+                        applyRunStyle({ enFont: font.name }, 'enFont');
                       }
                     }}
                   >

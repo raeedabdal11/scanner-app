@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
-import { getElementRuns, updateTextWithRuns } from './formattedText';
+import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from './formattedText';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -39,7 +39,11 @@ export const PptCanvas = ({
   onChangeImageElement,
   fontFamily,
   selRef,
+  pendingSelRef,
   pressingRef,
+  stickyRangeRef,
+  ignoreSelectionRef,
+  inputRef,
   selState,
   setSelState,
 }) => {
@@ -249,6 +253,8 @@ export const PptCanvas = ({
           const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
           const formattedRuns = getElementRuns(elem);
+          const activeStickyRange = stickyRangeRef?.current;
+          const displayRuns = getDisplayRunsWithSelection(formattedRuns, activeStickyRange);
 
           return (
             <View
@@ -270,6 +276,7 @@ export const PptCanvas = ({
                 <View style={styles.textContainer}>
                   {isEditing ? (
                     <TextInput
+                      ref={inputRef}
                       style={{
                         flex: 1,
                         fontSize: scaledBaseSize,
@@ -292,12 +299,23 @@ export const PptCanvas = ({
                       onSelectionChange={(e) => {
                         const sel = e.nativeEvent.selection;
                         console.log('[SEL]', sel);
+                        if (ignoreSelectionRef && ignoreSelectionRef.current) {
+                          return;
+                        }
                         if (!pressingRef || !pressingRef.current) {
                           if (selRef) selRef.current = sel;
+                          if (sel && sel.start !== undefined && sel.end !== undefined) {
+                            if (sel.start !== sel.end) {
+                              if (stickyRangeRef) stickyRangeRef.current = { start: sel.start, end: sel.end };
+                            } else {
+                              if (stickyRangeRef) stickyRangeRef.current = null;
+                            }
+                          }
                           if (setSelState) setSelState(sel);
                         }
                       }}
                       onChangeText={(text) => {
+                        if (stickyRangeRef) stickyRangeRef.current = null;
                         if (text === elem.text) return;
                         const updated = updateTextWithRuns(elem, text);
                         onChangeElement(updated);
@@ -306,7 +324,7 @@ export const PptCanvas = ({
                         if (onEndInlineEditing) onEndInlineEditing();
                       }}
                     >
-                      {formattedRuns.map((run, rIdx) => {
+                      {displayRuns.map((run, rIdx) => {
                         const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
                         const runScaledFontSize = scaledBaseSize * runScale;
                         const runLineHeight = runScaledFontSize * 1.35;
@@ -315,7 +333,11 @@ export const PptCanvas = ({
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
                           run.englishFont || elem.englishFont || 'Calibri'
                         );
-                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+                        const runHighlight = run.isStickySelected
+                          ? '#3390FF33'
+                          : (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent'
+                          ? (run.highlight || run.highlightColor)
+                          : undefined;
                         const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
 
                         return (
@@ -354,7 +376,7 @@ export const PptCanvas = ({
                         borderRadius: 4,
                       }}
                     >
-                      {formattedRuns.map((run, rIdx) => {
+                      {displayRuns.map((run, rIdx) => {
                         const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
                         const runScaledFontSize = scaledBaseSize * runScale;
                         const runLineHeight = runScaledFontSize * 1.35;
@@ -363,7 +385,11 @@ export const PptCanvas = ({
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
                           run.englishFont || elem.englishFont || 'Calibri'
                         );
-                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+                        const runHighlight = run.isStickySelected
+                          ? '#3390FF33'
+                          : (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent'
+                          ? (run.highlight || run.highlightColor)
+                          : undefined;
                         const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
 
                         return (
