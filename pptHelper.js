@@ -1,8 +1,40 @@
 import * as FileSystem from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 // Ensure global window object exists for libraries checking window
 if (typeof window === 'undefined') {
   global.window = global;
+}
+
+/**
+ * Converts image to standard JPEG format for PowerPoint compatibility
+ */
+async function prepareImage(uri) {
+  if (!uri) return null;
+  try {
+    const manipulated = await manipulateAsync(
+      uri,
+      [],
+      { compress: 0.9, format: SaveFormat.JPEG }
+    );
+    const rawBase64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return `data:image/jpeg;base64,${rawBase64}`;
+  } catch (err) {
+    try {
+      if (uri.startsWith('data:image/jpeg') || uri.startsWith('data:image/png')) {
+        return uri;
+      }
+      const rawBase64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const mime = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      return `data:${mime};base64,${rawBase64}`;
+    } catch (fbErr) {
+      return null;
+    }
+  }
 }
 
 /**
@@ -123,30 +155,21 @@ export const generatePptxFile = async (slides, options = {}) => {
           });
         }
       } else if (item.type === 'image' && item.uri) {
-        let base64Img = '';
-        if (item.uri.startsWith('data:image')) {
-          base64Img = item.uri;
-        } else {
-          const rawBase64 = await FileSystem.readAsStringAsync(item.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const mime = item.uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-          base64Img = `data:${mime};base64,${rawBase64}`;
-        }
-
-        // Add image fitting inside slide without stretching or cropping
-        slide.addImage({
-          data: base64Img,
-          x: 0.2,
-          y: 0.2,
-          w: slideW - 0.4,
-          h: slideH - 0.4,
-          sizing: {
-            type: 'contain',
+        const base64Img = await prepareImage(item.uri);
+        if (base64Img) {
+          slide.addImage({
+            data: base64Img,
+            x: 0.2,
+            y: 0.2,
             w: slideW - 0.4,
             h: slideH - 0.4,
-          },
-        });
+            sizing: {
+              type: 'contain',
+              w: slideW - 0.4,
+              h: slideH - 0.4,
+            },
+          });
+        }
       }
     }
 

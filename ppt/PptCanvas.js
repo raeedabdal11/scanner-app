@@ -5,6 +5,7 @@ import {
   TextInput,
   Image,
   TouchableOpacity,
+  Pressable,
   PanResponder,
   StyleSheet,
   Dimensions,
@@ -59,19 +60,21 @@ export const PptCanvas = ({
   const canvasWidth = SCREEN_WIDTH - 24;
   const canvasHeight = is43 ? (canvasWidth * 3) / 4 : (canvasWidth * 9) / 16;
 
-  // Move Element Drag & Tap Handler
-  const createMovePanResponder = (element) => {
+  // Move Element Drag Handler - only captures gestures when element is selected & moved
+  const createMovePanResponder = (element, isSelected) => {
     let initialX = element.x;
     let initialY = element.y;
     let isDragging = false;
 
     return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
+        if (!isSelected) return false;
+        if (editingElementId === element.id) return false;
+        return Math.abs(gestureState.dx) > 8 || Math.abs(gestureState.dy) > 8;
       },
+      onPanResponderTerminationRequest: () => true,
       onPanResponderGrant: () => {
-        onSelectElement(element.id);
         initialX = element.x;
         initialY = element.y;
         isDragging = false;
@@ -103,16 +106,11 @@ export const PptCanvas = ({
           });
         }
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        const dist = Math.hypot(gestureState.dx, gestureState.dy);
-        if (!isDragging && dist <= 8) {
-          onSelectElement(element.id);
-          if (element.type === 'text') {
-            onStartInlineEditing(element.id);
-          } else if (element.type === 'image' && !element.uri) {
-            onChangeImageElement(element);
-          }
-        }
+      onPanResponderRelease: () => {
+        isDragging = false;
+      },
+      onPanResponderTerminate: () => {
+        isDragging = false;
       },
     });
   };
@@ -125,8 +123,9 @@ export const PptCanvas = ({
     let initialH = element.height;
 
     return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => true,
       onPanResponderGrant: () => {
         initialX = element.x;
         initialY = element.y;
@@ -253,7 +252,7 @@ export const PptCanvas = ({
 
           const elemHeight = (effectiveHeight / 100) * canvasHeight;
 
-          const dragResponder = createMovePanResponder(elem);
+          const dragResponder = createMovePanResponder(elem, isSelected);
 
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
           const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
@@ -300,6 +299,7 @@ export const PptCanvas = ({
                         textAlignVertical: 'top',
                       }}
                       multiline={true}
+                      scrollEnabled={false}
                       autoFocus={true}
                       selection={controlledSelection}
                       onSelectionChange={(e) => {
@@ -365,74 +365,92 @@ export const PptCanvas = ({
                       })}
                     </TextInput>
                   ) : (
-                    <Text
-                      style={{
-                        textAlign: elem.textAlign || 'right',
-                        writingDirection: elem.writingDirection || 'rtl',
-                        lineHeight: scaledBaseSize * (elem.lineSpacing || 1.35),
-                        paddingHorizontal: 6,
-                        paddingVertical: 6,
-                        borderRadius: 4,
+                    <Pressable
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        onSelectElement(elem.id);
+                        onStartInlineEditing(elem.id);
                       }}
                     >
-                      {displayRuns.map((run, rIdx) => {
-                        const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
-                        const runScaledFontSize = scaledBaseSize * runScale;
-                        const runLineHeight = runScaledFontSize * 1.35;
-                        const scriptRuns = splitRuns(
-                          run.text || '',
-                          run.kurdishFont || elem.kurdishFont || 'Tahoma',
-                          run.englishFont || elem.englishFont || 'Calibri'
-                        );
-                        const hasOwnHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent';
-                        const runHighlight = run.isStickySelected
-                          ? (hasOwnHighlight ? (run.highlight || run.highlightColor) : '#3390FF55')
-                          : (hasOwnHighlight ? (run.highlight || run.highlightColor) : undefined);
-                        const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
-                        const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
-                        const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
-                        const isUnderlined = run.isStickySelected && hasOwnHighlight ? true : run.underline;
+                      <Text
+                        style={{
+                          textAlign: elem.textAlign || 'right',
+                          writingDirection: elem.writingDirection || 'rtl',
+                          lineHeight: scaledBaseSize * (elem.lineSpacing || 1.35),
+                          paddingHorizontal: 6,
+                          paddingVertical: 6,
+                          borderRadius: 4,
+                        }}
+                      >
+                        {displayRuns.map((run, rIdx) => {
+                          const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+                          const runScaledFontSize = scaledBaseSize * runScale;
+                          const runLineHeight = runScaledFontSize * 1.35;
+                          const scriptRuns = splitRuns(
+                            run.text || '',
+                            run.kurdishFont || elem.kurdishFont || 'Tahoma',
+                            run.englishFont || elem.englishFont || 'Calibri'
+                          );
+                          const hasOwnHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent';
+                          const runHighlight = run.isStickySelected
+                            ? (hasOwnHighlight ? (run.highlight || run.highlightColor) : '#3390FF55')
+                            : (hasOwnHighlight ? (run.highlight || run.highlightColor) : undefined);
+                          const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
+                          const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
+                          const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
+                          const isUnderlined = run.isStickySelected && hasOwnHighlight ? true : run.underline;
 
-                        return (
-                          <Text
-                            key={`frun_${rIdx}`}
-                            style={{
-                              fontSize: runScaledFontSize,
-                              lineHeight: runLineHeight,
-                              fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
-                              fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
-                              textDecorationLine: isUnderlined ? 'underline' : elem.textDecorationLine || 'none',
-                              textDecorationColor: run.isStickySelected && hasOwnHighlight ? '#3390FF' : undefined,
-                              color: run.color || '#1c1c1e',
-                              backgroundColor: runHighlight,
-                              textShadowColor: runShadow,
-                              textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
-                              textShadowRadius: runShadow ? runShadowRadius : 0,
-                            }}
-                          >
-                            {scriptRuns.map((sRun, sIdx) => (
-                              <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
-                                {sRun.text}
-                              </Text>
-                            ))}
-                          </Text>
-                        );
-                      })}
-                    </Text>
+                          return (
+                            <Text
+                              key={`frun_${rIdx}`}
+                              style={{
+                                fontSize: runScaledFontSize,
+                                lineHeight: runLineHeight,
+                                fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
+                                fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
+                                textDecorationLine: isUnderlined ? 'underline' : elem.textDecorationLine || 'none',
+                                textDecorationColor: run.isStickySelected && hasOwnHighlight ? '#3390FF' : undefined,
+                                color: run.color || '#1c1c1e',
+                                backgroundColor: runHighlight,
+                                textShadowColor: runShadow,
+                                textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
+                                textShadowRadius: runShadow ? runShadowRadius : 0,
+                              }}
+                            >
+                              {scriptRuns.map((sRun, sIdx) => (
+                                <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+                                  {sRun.text}
+                                </Text>
+                              ))}
+                            </Text>
+                          );
+                        })}
+                      </Text>
+                    </Pressable>
                   )}
                 </View>
               ) : (
                 <View style={styles.imageContainer}>
                   {elem.uri ? (
-                    <Image
-                      source={{ uri: elem.uri }}
-                      style={styles.image}
-                      resizeMode="cover"
-                    />
+                    <Pressable
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        onSelectElement(elem.id);
+                      }}
+                    >
+                      <Image
+                        source={{ uri: elem.uri }}
+                        style={styles.image}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
                   ) : (
                     <TouchableOpacity
                       style={styles.imagePlaceholder}
-                      onPress={() => onChangeImageElement(elem)}
+                      onPress={() => {
+                        onSelectElement(elem.id);
+                        onChangeImageElement(elem);
+                      }}
                     >
                       <Text style={{ fontSize: 22, marginBottom: 2 }}>🖼️</Text>
                       <Text style={{ color: '#007AFF', fontSize: 11, fontWeight: 'bold', textAlign: 'center' }}>

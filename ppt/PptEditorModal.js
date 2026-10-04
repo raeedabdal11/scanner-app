@@ -1038,7 +1038,7 @@ export const PptEditorModal = ({
                     ref={scrollViewRef}
                     style={{ flex: 1 }}
                     contentContainerStyle={styles.documentScrollContent}
-                    keyboardShouldPersistTaps="always"
+                    keyboardShouldPersistTaps="handled"
                   >
                     {presentation.slides.map((slide, index) => {
                       const isSaved = !!savedPages[slide.id];

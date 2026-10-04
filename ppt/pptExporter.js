@@ -1,12 +1,15 @@
-import { File, Paths } from 'expo-file-system';
+import { File, Paths, EncodingType } from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
-import { planPage, reverseTableLineColumns, isTableElement, splitRuns } from './pptFit';
+import { planPage, reverseTableLineColumns, isTableElement, splitRuns, calculateFittingFontSize } from './pptFit';
 import { getExportFontFamily } from './fonts';
 import { getElementRuns } from './formattedText';
 
 if (typeof window === 'undefined') {
   global.window = global;
 }
+
+const DRAWINGML_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 
 /**
  * Standard named colors mapped to 6-character uppercase hex
@@ -104,6 +107,38 @@ const normalizeHex = (colorStr, defaultHex = null) => {
   const parsed = parseColor(colorStr, defaultHex);
   return parsed ? parsed.hex : defaultHex;
 };
+
+/**
+ * Converts any image URI (WEBP, HEIC, PNG, JPEG, file, data URI)
+ * to a clean standard JPEG base64 data URI using expo-image-manipulator.
+ */
+async function prepareImageForPptx(uri) {
+  if (!uri) return null;
+  try {
+    const manipulated = await manipulateAsync(
+      uri,
+      [],
+      { compress: 0.9, format: SaveFormat.JPEG }
+    );
+    const imgFile = new File(manipulated.uri);
+    const rawBase64 = await imgFile.base64();
+    return `data:image/jpeg;base64,${rawBase64}`;
+  } catch (err) {
+    console.log('[PPT Exporter] Image manipulation error, attempting fallback:', err);
+    try {
+      if (uri.startsWith('data:image/jpeg') || uri.startsWith('data:image/png')) {
+        return uri;
+      }
+      const imgFile = new File(uri);
+      const rawBase64 = await imgFile.base64();
+      const mime = uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+      return `data:${mime};base64,${rawBase64}`;
+    } catch (fbErr) {
+      console.log('[PPT Exporter] Image fallback error:', fbErr);
+      return null;
+    }
+  }
+}
 
 /**
  * Required child element order inside <a:rPr> per OOXML Schema (ECMA-376 Part 1):
@@ -267,7 +302,15 @@ export async function validatePptxZip(zip) {
   return { valid: true };
 }
 
-export const exportPresentationToPptx = async (presentation, selectedSlideIds = null) => {
+/**
+ * Exports presentation slides to .pptx format.
+ * Supports debugOptions ({ noHighlight, noShadow, noImages, noPostProcessing }) for bisect troubleshooting.
+ */
+export const exportPresentationToPptx = async (
+  presentation,
+  selectedSlideIds = null,
+  debugOptions = {}
+) => {
   try {
     let PptxGenJS;
     try {
@@ -297,8 +340,9 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
     let slideCount = 0;
     // Stores sequential run specifications for JSZip post-processing
-    // { slideNum: [ { text: "...", color: {hex, alpha}, highlight: {hex, alpha}, shadow: {hex, alpha} }, ... ] }
     const slideRunSpecs = {};
+    // Stores text box scaling / fit specifications per slide
+    const slideTextElemSpecs = {};
 
     for (const pageData of targetPages) {
       // Use planPage to get computed font sizes & split slides if text overflows
@@ -309,6 +353,7 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
         const slide = pptx.addSlide();
         slideCount++;
         slideRunSpecs[slideCount] = [];
+        slideTextElemSpecs[slideCount] = [];
 
         // Set slide background color
         if (slideData.background && slideData.background !== '#ffffff') {
@@ -347,6 +392,19 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
             // Computed fontSize from planPage
             const fontSize = elem.computedFontSize || elem.fontSize || 18;
+
+            // Measure fit to determine fontScale for <a:normAutofit fontScale="..."/>
+            const fitRes = calculateFittingFontSize(elem);
+            let fontScaleAttr = null;
+            if (fitRes && fitRes.overflowRatio > 1.0) {
+              const computedScale = Math.max(30000, Math.floor((1.0 / fitRes.overflowRatio) * 100000));
+              fontScaleAttr = String(computedScale);
+            }
+
+            slideTextElemSpecs[slideCount].push({
+              textSnippet: textContent.trim().substring(0, 30),
+              fontScale: fontScaleAttr,
+            });
 
             const elemRuns = getElementRuns(elem);
             const pptxRuns = [];
@@ -455,18 +513,12 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
               slide.addText(textContent, textOptions);
             }
           } else if (elem.type === 'image') {
+            if (debugOptions.noImages) continue;
             if (!elem.uri) continue;
 
             try {
-              let base64Img = '';
-              if (elem.uri.startsWith('data:image')) {
-                base64Img = elem.uri;
-              } else {
-                const imgFile = new File(elem.uri);
-                const rawBase64 = await imgFile.base64();
-                const mime = elem.uri.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-                base64Img = `data:${mime};base64,${rawBase64}`;
-              }
+              const base64Img = await prepareImageForPptx(elem.uri);
+              if (!base64Img) continue;
 
               slide.addImage({
                 data: base64Img,
@@ -494,23 +546,49 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
       compression: true,
     });
 
+    if (debugOptions.noPostProcessing) {
+      console.log('[PPTX Exporter] Debug option noPostProcessing active, returning raw pptxgenjs output.');
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
+      const filename = `PPT_Debug_D_${dateStr}.pptx`;
+
+      const file = new File(Paths.document, filename);
+      file.create();
+      await file.write(rawUint8Array);
+
+      const savedBytes = await file.bytes();
+      const first4Bytes = Array.from(savedBytes.subarray(0, 4))
+        .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+        .join(' ');
+
+      console.log('[PPTX Debug] Saved file first 4 bytes:', first4Bytes);
+
+      if (first4Bytes !== '50 4B 03 04') {
+        throw new Error(`پاشەکەوتکردنی فایلەکە سەرکەوتوو نەبوو: سەردێڕی فایلەکە هەڵەیە (${first4Bytes}).`);
+      }
+
+      return {
+        fileUri: file.uri,
+        filename: filename,
+      };
+    }
+
     let finalUint8Array = rawUint8Array;
 
     try {
       const JSZip = require('jszip');
-      const zip = await JSZip.loadAsync(rawUint8Array);
+      const zip = await JSZip.loadAsync(rawUint8Array, { createFolders: false });
       const parser = new DOMParser();
 
       for (let slideNum = 1; slideNum <= slideCount; slideNum++) {
         const runSpecs = slideRunSpecs[slideNum] || [];
-        if (runSpecs.length === 0) continue;
-
         const slideFileName = `ppt/slides/slide${slideNum}.xml`;
         const slideFile = zip.file(slideFileName);
         if (!slideFile) continue;
 
         const xmlText = await slideFile.async('text');
         const slideDoc = parser.parseFromString(xmlText, 'text/xml');
+        let modified = false;
 
         // Clean up duplicate <a:pPr> elements inserted by pptxgenjs inside paragraphs
         const pNodes = slideDoc.getElementsByTagName('a:p');
@@ -533,8 +611,61 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
           }
         }
 
+        // Configure <a:bodyPr> for text boxes to enforce wrap="square", tight zero insets, and <a:normAutofit/>
+        const txBodyNodes = slideDoc.getElementsByTagName('p:txBody');
+        const textElemSpecs = slideTextElemSpecs[slideNum] || [];
+
+        for (let bIdx = 0; bIdx < txBodyNodes.length; bIdx++) {
+          const txBody = txBodyNodes[bIdx];
+          let bodyPrNodes = txBody.getElementsByTagName('a:bodyPr');
+          let bodyPr;
+          if (bodyPrNodes.length > 0) {
+            bodyPr = bodyPrNodes[0];
+          } else {
+            bodyPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:bodyPr');
+            if (txBody.firstChild) {
+              txBody.insertBefore(bodyPr, txBody.firstChild);
+            } else {
+              txBody.appendChild(bodyPr);
+            }
+          }
+
+          bodyPr.setAttribute('wrap', 'square');
+          bodyPr.setAttribute('lIns', '0');
+          bodyPr.setAttribute('tIns', '0');
+          bodyPr.setAttribute('rIns', '0');
+          bodyPr.setAttribute('bIns', '0');
+          bodyPr.setAttribute('rtlCol', '0');
+
+          // Remove any noAutofit or spAutoFit children
+          const noAutofits = bodyPr.getElementsByTagName('a:noAutofit');
+          while (noAutofits.length > 0) {
+            bodyPr.removeChild(noAutofits[0]);
+          }
+          const spAutofits = bodyPr.getElementsByTagName('a:spAutoFit');
+          while (spAutofits.length > 0) {
+            bodyPr.removeChild(spAutofits[0]);
+          }
+
+          let normAutofits = bodyPr.getElementsByTagName('a:normAutofit');
+          let normAutofit;
+          if (normAutofits.length > 0) {
+            normAutofit = normAutofits[0];
+          } else {
+            normAutofit = slideDoc.createElementNS(DRAWINGML_NS, 'a:normAutofit');
+            bodyPr.appendChild(normAutofit);
+          }
+
+          const elemSpec = textElemSpecs[bIdx];
+          if (elemSpec && elemSpec.fontScale) {
+            normAutofit.setAttribute('fontScale', elemSpec.fontScale);
+          }
+
+          modified = true;
+        }
+
+        // Process text run nodes
         const runNodes = slideDoc.getElementsByTagName('a:r');
-        let modified = false;
         let specIdx = 0;
 
         for (let i = 0; i < runNodes.length; i++) {
@@ -567,13 +698,13 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
           if (!spec) continue;
 
-          // Find or create <a:rPr>
+          // Find or create <a:rPr> using DrawingML namespace
           let rPrNodes = runNode.getElementsByTagName('a:rPr');
           let rPrNode;
           if (rPrNodes.length > 0) {
             rPrNode = rPrNodes[0];
           } else {
-            rPrNode = slideDoc.createElement('a:rPr');
+            rPrNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:rPr');
             if (runNode.firstChild) {
               runNode.insertBefore(rPrNode, runNode.firstChild);
             } else {
@@ -584,14 +715,14 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
           // 1. Text Color (<a:solidFill>)
           if (spec.color && spec.color.hex) {
             let solidFillNodes = rPrNode.getElementsByTagName('a:solidFill');
-            let solidFillNode = solidFillNodes.length > 0 ? solidFillNodes[0] : slideDoc.createElement('a:solidFill');
+            let solidFillNode = solidFillNodes.length > 0 ? solidFillNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
             let clrNodes = solidFillNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElement('a:srgbClr');
+            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
             clrNode.setAttribute('val', spec.color.hex);
 
             if (spec.color.alpha !== null && spec.color.alpha !== undefined) {
               let alphaNodes = clrNode.getElementsByTagName('a:alpha');
-              let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElement('a:alpha');
+              let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
               alphaNode.setAttribute('val', String(spec.color.alpha));
               if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
             }
@@ -602,11 +733,11 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
           }
 
           // 2. Text Shadow (<a:effectLst>)
-          if (spec.shadow && spec.shadow.hex) {
+          if (!debugOptions.noShadow && spec.shadow && spec.shadow.hex) {
             let effNodes = rPrNode.getElementsByTagName('a:effectLst');
-            let effNode = effNodes.length > 0 ? effNodes[0] : slideDoc.createElement('a:effectLst');
+            let effNode = effNodes.length > 0 ? effNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:effectLst');
             let shdwNodes = effNode.getElementsByTagName('a:outerShdw');
-            let shdwNode = shdwNodes.length > 0 ? shdwNodes[0] : slideDoc.createElement('a:outerShdw');
+            let shdwNode = shdwNodes.length > 0 ? shdwNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:outerShdw');
 
             shdwNode.setAttribute('blurRad', String(spec.shadow.blurRad !== undefined ? spec.shadow.blurRad : 38100));
             shdwNode.setAttribute('dist', String(spec.shadow.dist !== undefined ? spec.shadow.dist : 35921));
@@ -615,12 +746,12 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
             shdwNode.setAttribute('rotWithShape', '0');
 
             let clrNodes = shdwNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElement('a:srgbClr');
+            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
             clrNode.setAttribute('val', spec.shadow.hex);
 
             const shadowAlpha = spec.shadow.alpha !== null && spec.shadow.alpha !== undefined ? spec.shadow.alpha : 60000;
             let alphaNodes = clrNode.getElementsByTagName('a:alpha');
-            let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElement('a:alpha');
+            let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
             alphaNode.setAttribute('val', String(shadowAlpha));
             if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
 
@@ -637,18 +768,17 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
           }
 
           // 3. Text Highlight (<a:highlight>)
-          if (spec.highlight && spec.highlight.hex) {
+          if (!debugOptions.noHighlight && spec.highlight && spec.highlight.hex) {
             let hlNodes = rPrNode.getElementsByTagName('a:highlight');
-            let hlNode = hlNodes.length > 0 ? hlNodes[0] : slideDoc.createElement('a:highlight');
+            let hlNode = hlNodes.length > 0 ? hlNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:highlight');
             let clrNodes = hlNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElement('a:srgbClr');
+            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
             clrNode.setAttribute('val', spec.highlight.hex);
 
             if (clrNodes.length === 0) hlNode.appendChild(clrNode);
             if (hlNodes.length === 0) rPrNode.appendChild(hlNode);
             modified = true;
           } else {
-            // Remove highlight element if run spec has no highlight
             let hlNodes = rPrNode.getElementsByTagName('a:highlight');
             if (hlNodes.length > 0) {
               rPrNode.removeChild(hlNodes[0]);
@@ -658,26 +788,73 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
 
           // Reorder child element nodes according to strict OOXML Schema
           reorderRPrChildren(rPrNode);
-
-          if (spec.color && spec.shadow && spec.highlight) {
-            console.log('[PPTX Export] Sample <a:rPr> XML with color + shadow + highlight:\n', new XMLSerializer().serializeToString(rPrNode));
-          }
         }
 
         if (modified) {
           const updatedXml = new XMLSerializer().serializeToString(slideDoc);
           zip.file(slideFileName, updatedXml);
-          console.log(`[PPTX Export] Raw post-processed XML for ${slideFileName}:\n${updatedXml}`);
         }
       }
 
-      const validation = await validatePptxZip(zip);
+      // Clean [Content_Types].xml: remove every <Override> whose PartName does not exist as a file in the package
+      const contentTypesFile = zip.file('[Content_Types].xml');
+      if (contentTypesFile) {
+        const ctXml = await contentTypesFile.async('text');
+        const ctDoc = parser.parseFromString(ctXml, 'text/xml');
+        const overrideElems = Array.from(ctDoc.getElementsByTagName('Override'));
+
+        for (const overrideElem of overrideElems) {
+          const pn = overrideElem.getAttribute('PartName');
+          if (pn) {
+            const normalizedPn = pn.startsWith('/') ? pn.slice(1) : pn;
+            const targetFile = zip.file(normalizedPn);
+            if (!targetFile || targetFile.dir) {
+              if (overrideElem.parentNode) {
+                overrideElem.parentNode.removeChild(overrideElem);
+              }
+            }
+          }
+        }
+        const cleanedCtXml = new XMLSerializer().serializeToString(ctDoc);
+        zip.file('[Content_Types].xml', cleanedCtXml);
+      }
+
+      // Build a NEW JSZip instance and copy ONLY file entries (skip every entry where entry.dir === true)
+      const newZip = new JSZip();
+
+      const allFilePaths = Object.keys(zip.files).filter((path) => {
+        const entry = zip.files[path];
+        return entry && !entry.dir;
+      });
+
+      // Add files in order: "[Content_Types].xml" first, then "_rels/.rels", then all other files
+      const orderedPaths = [];
+      if (allFilePaths.includes('[Content_Types].xml')) {
+        orderedPaths.push('[Content_Types].xml');
+      }
+      if (allFilePaths.includes('_rels/.rels')) {
+        orderedPaths.push('_rels/.rels');
+      }
+      for (const path of allFilePaths) {
+        if (path !== '[Content_Types].xml' && path !== '_rels/.rels') {
+          orderedPaths.push(path);
+        }
+      }
+
+      for (const path of orderedPaths) {
+        const content = await zip.file(path).async('uint8array');
+        newZip.file(path, content, { createFolders: false });
+      }
+
+      const validation = await validatePptxZip(newZip);
       if (validation.valid) {
-        finalUint8Array = await zip.generateAsync({
+        finalUint8Array = await newZip.generateAsync({
           type: 'uint8array',
           compression: 'DEFLATE',
+          compressionOptions: { level: 6 },
           mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         });
+        console.log('[PPTX] ZIP entry list:', Object.keys(newZip.files));
       } else {
         console.log('[PPTX] Validation failed post-processing, falling back to raw output:', validation.error);
         finalUint8Array = rawUint8Array;
@@ -687,20 +864,26 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
       finalUint8Array = rawUint8Array;
     }
 
-    // Log the first 4 bytes of the output
-    const first4 = Array.from(finalUint8Array.slice(0, 4))
-      .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
-      .join(' ');
-    console.log('[PPTX] First 4 bytes of written file:', first4);
-
     const now = new Date();
     const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
     const filename = `PPT_${dateStr}.pptx`;
 
-    // Modern expo-file-system API with File and Paths: write Uint8Array directly
     const file = new File(Paths.document, filename);
     file.create();
     await file.write(finalUint8Array);
+
+    // Read the first 4 bytes of the saved file and log them
+    const savedBytes = await file.bytes();
+    const first4Bytes = Array.from(savedBytes.subarray(0, 4))
+      .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+      .join(' ');
+
+    console.log('[PPTX] Saved file first 4 bytes:', first4Bytes);
+
+    if (first4Bytes !== '50 4B 03 04') {
+      console.log('[PPTX] Error: Saved file header is invalid:', first4Bytes);
+      throw new Error(`پاشەکەوتکردنی فایلەکە سەرکەوتوو نەبوو: سەردێڕی فایلەکە هەڵەیە (${first4Bytes}).`);
+    }
 
     return {
       fileUri: file.uri,
@@ -711,4 +894,3 @@ export const exportPresentationToPptx = async (presentation, selectedSlideIds = 
     throw err;
   }
 };
-

@@ -240,8 +240,7 @@ export default function App() {
       if (vipStatus === 'true') setIsVip(true);
       const count = await AsyncStorage.getItem('free_use_count');
       if (count) setFreeUseCount(parseInt(count));
-      const activePpt = await AsyncStorage.getItem('ppt_active_state');
-      if (activePpt === 'true') setPptEditorVisible(true);
+      await AsyncStorage.removeItem('ppt_active_state');
     } catch (e) {}
   };
 
@@ -1095,7 +1094,6 @@ export default function App() {
   };
 
   const handlePPT = () => {
-    AsyncStorage.setItem('ppt_active_state', 'true');
     setToolsModalVisible(false);
     setPptEditorVisible(true);
   };
@@ -2561,7 +2559,6 @@ export default function App() {
       <PptEditorModal
         visible={pptEditorVisible}
         onClose={() => {
-          AsyncStorage.removeItem('ppt_active_state');
           setPptEditorVisible(false);
           setToolsModalVisible(true);
         }}
