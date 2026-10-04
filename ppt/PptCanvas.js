@@ -42,12 +42,18 @@ export const PptCanvas = ({
   pendingSelRef,
   pressingRef,
   stickyRangeRef,
+  userTouchRef: externalUserTouchRef,
   ignoreSelectionRef,
   inputRef,
   selState,
   setSelState,
+  isApplyingStyleRef: externalIsApplyingStyleRef,
+  controlledSelection,
 }) => {
   const [resizingElement, setResizingElement] = useState(null);
+  const localUserTouchRef = React.useRef(false);
+  const userTouchRef = externalUserTouchRef || localUserTouchRef;
+  const touchTimeoutRef = React.useRef(null);
 
   const is43 = aspectRatio === '4:3';
   const canvasWidth = SCREEN_WIDTH - 24;
@@ -253,7 +259,7 @@ export const PptCanvas = ({
           const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
 
           const formattedRuns = getElementRuns(elem);
-          const activeStickyRange = stickyRangeRef?.current;
+          const activeStickyRange = isEditing ? stickyRangeRef?.current : null;
           const displayRuns = getDisplayRunsWithSelection(formattedRuns, activeStickyRange);
 
           return (
@@ -295,27 +301,22 @@ export const PptCanvas = ({
                       }}
                       multiline={true}
                       autoFocus={true}
-                      selection={selState}
+                      selection={controlledSelection}
                       onSelectionChange={(e) => {
-                        const sel = e.nativeEvent.selection;
-                        console.log('[SEL]', sel);
-                        if (ignoreSelectionRef && ignoreSelectionRef.current) {
+                        if (externalIsApplyingStyleRef?.current) {
                           return;
                         }
-                        if (!pressingRef || !pressingRef.current) {
-                          if (selRef) selRef.current = sel;
-                          if (sel && sel.start !== undefined && sel.end !== undefined) {
-                            if (sel.start !== sel.end) {
-                              if (stickyRangeRef) stickyRangeRef.current = { start: sel.start, end: sel.end };
-                            } else {
-                              if (stickyRangeRef) stickyRangeRef.current = null;
-                            }
-                          }
-                          if (setSelState) setSelState(sel);
-                        }
+                        const sel = e.nativeEvent.selection;
+                        console.log('[SEL] user', sel);
+                        if (stickyRangeRef) stickyRangeRef.current = sel;
+                        if (setSelState) setSelState(sel);
                       }}
                       onChangeText={(text) => {
-                        if (stickyRangeRef) stickyRangeRef.current = null;
+                        if (externalIsApplyingStyleRef?.current) {
+                          return;
+                        }
+                        const cursorPos = stickyRangeRef?.current?.start ?? text.length;
+                        if (stickyRangeRef) stickyRangeRef.current = { start: cursorPos, end: cursorPos };
                         if (text === elem.text) return;
                         const updated = updateTextWithRuns(elem, text);
                         onChangeElement(updated);
@@ -324,21 +325,19 @@ export const PptCanvas = ({
                         if (onEndInlineEditing) onEndInlineEditing();
                       }}
                     >
-                      {displayRuns.map((run, rIdx) => {
+                      {formattedRuns.map((run, rIdx) => {
                         const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
                         const runScaledFontSize = scaledBaseSize * runScale;
                         const runLineHeight = runScaledFontSize * 1.35;
                         const scriptRuns = splitRuns(
                           run.text || '',
-                          run.kurdishFont || elem.kurdishFont || 'Tahoma',
-                          run.englishFont || elem.englishFont || 'Calibri'
+                          run.kurdishFont || run.kuFont || elem.kurdishFont || 'Tahoma',
+                          run.englishFont || run.enFont || elem.englishFont || 'Calibri'
                         );
-                        const runHighlight = run.isStickySelected
-                          ? '#3390FF33'
-                          : (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent'
-                          ? (run.highlight || run.highlightColor)
-                          : undefined;
-                        const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
+                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+                        const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
+                        const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
+                        const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
 
                         return (
                           <Text
@@ -352,8 +351,8 @@ export const PptCanvas = ({
                               color: run.color || '#1c1c1e',
                               backgroundColor: runHighlight,
                               textShadowColor: runShadow,
-                              textShadowOffset: runShadow ? { width: 1, height: 1 } : { width: 0, height: 0 },
-                              textShadowRadius: runShadow ? 2 : 0,
+                              textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
+                              textShadowRadius: runShadow ? runShadowRadius : 0,
                             }}
                           >
                             {scriptRuns.map((sRun, sIdx) => (
@@ -385,12 +384,14 @@ export const PptCanvas = ({
                           run.kurdishFont || elem.kurdishFont || 'Tahoma',
                           run.englishFont || elem.englishFont || 'Calibri'
                         );
+                        const hasOwnHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent';
                         const runHighlight = run.isStickySelected
-                          ? '#3390FF33'
-                          : (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent'
-                          ? (run.highlight || run.highlightColor)
-                          : undefined;
-                        const runShadow = (run.shadowColor || run.shadow) && (run.shadowColor || run.shadow) !== 'transparent' ? (run.shadowColor || run.shadow) : undefined;
+                          ? (hasOwnHighlight ? (run.highlight || run.highlightColor) : '#3390FF55')
+                          : (hasOwnHighlight ? (run.highlight || run.highlightColor) : undefined);
+                        const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
+                        const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
+                        const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
+                        const isUnderlined = run.isStickySelected && hasOwnHighlight ? true : run.underline;
 
                         return (
                           <Text
@@ -400,12 +401,13 @@ export const PptCanvas = ({
                               lineHeight: runLineHeight,
                               fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
                               fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
-                              textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
+                              textDecorationLine: isUnderlined ? 'underline' : elem.textDecorationLine || 'none',
+                              textDecorationColor: run.isStickySelected && hasOwnHighlight ? '#3390FF' : undefined,
                               color: run.color || '#1c1c1e',
                               backgroundColor: runHighlight,
                               textShadowColor: runShadow,
-                              textShadowOffset: runShadow ? { width: 1, height: 1 } : { width: 0, height: 0 },
-                              textShadowRadius: runShadow ? 2 : 0,
+                              textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
+                              textShadowRadius: runShadow ? runShadowRadius : 0,
                             }}
                           >
                             {scriptRuns.map((sRun, sIdx) => (

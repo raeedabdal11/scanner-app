@@ -22,6 +22,77 @@ import { applyStyle, wordRangeAt } from './richText';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+function parseShadowColor(shadowColorStr) {
+  if (!shadowColorStr || shadowColorStr === 'transparent' || shadowColorStr === 'none') {
+    return { baseColor: '#000000', opacity: 0.6 };
+  }
+  const rgbaMatch = shadowColorStr.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+  if (rgbaMatch) {
+    const r = parseInt(rgbaMatch[1], 10) || 0;
+    const g = parseInt(rgbaMatch[2], 10) || 0;
+    const b = parseInt(rgbaMatch[3], 10) || 0;
+    const opacity = rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1;
+    const hex = '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+    return { baseColor: hex, opacity: isNaN(opacity) ? 0.6 : opacity };
+  }
+  let hex = shadowColorStr.replace('#', '');
+  if (hex.length === 8) {
+    const alphaHex = hex.slice(6, 8);
+    const opacity = parseInt(alphaHex, 16) / 255;
+    const baseHex = '#' + hex.slice(0, 6);
+    return { baseColor: baseHex, opacity: isNaN(opacity) ? 0.6 : opacity };
+  }
+  if (hex.length === 3) {
+    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+  }
+  if (hex.length === 6) {
+    return { baseColor: '#' + hex, opacity: 1.0 };
+  }
+  return { baseColor: '#000000', opacity: 0.6 };
+}
+
+function hexToRgba(hexInput, opacity = 1) {
+  if (!hexInput || hexInput === 'transparent') return 'transparent';
+  let clean = hexInput.replace('#', '').trim();
+  if (clean.length === 3) {
+    clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
+  }
+  if (clean.length >= 6) {
+    const r = parseInt(clean.substring(0, 2), 16) || 0;
+    const g = parseInt(clean.substring(2, 4), 16) || 0;
+    const b = parseInt(clean.substring(4, 6), 16) || 0;
+    const op = Math.min(1, Math.max(0, opacity));
+    return `rgba(${r}, ${g}, ${b}, ${Math.round(op * 100) / 100})`;
+  }
+  return hexInput;
+}
+
+function getShadowParams(style) {
+  const shadowColorStr = style?.shadowColor;
+  const hasShadow = !!(shadowColorStr && shadowColorStr !== 'transparent' && shadowColorStr !== 'none');
+
+  const offsetObj = style?.textShadowOffset || style?.shadowOffset || { width: 2, height: 2 };
+  const currOffset = hasShadow
+    ? (typeof offsetObj.width === 'number' ? offsetObj.width : 2)
+    : 2;
+
+  const currBlur = hasShadow
+    ? (style?.textShadowRadius !== undefined ? style.textShadowRadius : (style?.shadowRadius !== undefined ? style.shadowRadius : 3))
+    : 3;
+
+  const parsed = parseShadowColor(shadowColorStr);
+  const currBaseColor = hasShadow ? parsed.baseColor : '#000000';
+  const currOpacity = hasShadow ? parsed.opacity : 0.6;
+
+  return {
+    hasShadow,
+    offset: Math.min(10, Math.max(0, Math.round(currOffset))),
+    blur: Math.min(15, Math.max(0, Math.round(currBlur))),
+    opacity: Math.min(1.0, Math.max(0.1, Math.round(currOpacity * 10) / 10)),
+    baseColor: currBaseColor,
+  };
+}
+
 // 1. PowerPoint Theme Colors Matrix (10 columns x 5 rows = 50 shades)
 const THEME_COLORS_GRID = [
   ['#000000', '#ffffff', '#1f497d', '#eeece1', '#4f81bd', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646'],
@@ -74,10 +145,14 @@ export const PptTextToolbar = ({
   pendingSelRef: externalPendingSelRef,
   pressingRef: externalPressingRef,
   stickyRangeRef: externalStickyRangeRef,
+  userTouchRef: externalUserTouchRef,
   ignoreSelectionRef: externalIgnoreSelectionRef,
   inputRef: externalInputRef,
   selState: externalSelState,
   setSelState: externalSetSelState,
+  isApplyingStyleRef: externalIsApplyingStyleRef,
+  controlledSelection: externalControlledSelection,
+  setControlledSelection: externalSetControlledSelection,
 }) => {
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
@@ -88,19 +163,27 @@ export const PptTextToolbar = ({
   const localSelRef = useRef(null);
   const localPendingSelRef = useRef(null);
   const localPressingRef = useRef(false);
-  const localStickyRangeRef = useRef(null);
+  const localStickyRangeRef = useRef({ start: 0, end: 0 });
+  const localUserTouchRef = useRef(false);
   const localIgnoreSelectionRef = useRef(false);
   const localInputRef = useRef(null);
   const [localSelState, setLocalSelState] = useState(undefined);
+  const localIsApplyingStyleRef = useRef(false);
+  const [localControlledSelection, setLocalControlledSelection] = useState(undefined);
+  const touchTimeoutRef = useRef(null);
 
   const selRef = externalSelRef || localSelRef;
   const pendingSelRef = externalPendingSelRef || localPendingSelRef;
   const pressingRef = externalPressingRef || localPressingRef;
   const stickyRangeRef = externalStickyRangeRef || localStickyRangeRef;
+  const userTouchRef = externalUserTouchRef || localUserTouchRef;
   const ignoreSelectionRef = externalIgnoreSelectionRef || localIgnoreSelectionRef;
   const inputRef = externalInputRef || localInputRef;
   const selState = externalSelState !== undefined ? externalSelState : localSelState;
   const setSelState = externalSetSelState || setLocalSelState;
+  const isApplyingStyleRef = externalIsApplyingStyleRef || localIsApplyingStyleRef;
+  const controlledSelection = externalControlledSelection !== undefined ? externalControlledSelection : localControlledSelection;
+  const setControlledSelection = externalSetControlledSelection || setLocalControlledSelection;
 
   const modalInputRef = useRef(null);
 
@@ -116,9 +199,9 @@ export const PptTextToolbar = ({
 
   const setRuns = (newRuns) => {
     const plain = newRuns.map((r) => r.text).join('');
-    const { color: _c, ...elemWithoutColor } = element;
+    const { color: _c, highlight: _h, highlightColor: _hc, shadowColor: _sc, shadow: _s, ...elemClean } = element;
     onChangeElement({
-      ...elemWithoutColor,
+      ...elemClean,
       runs: newRuns,
       formattedRuns: newRuns,
       text: plain,
@@ -127,7 +210,7 @@ export const PptTextToolbar = ({
 
   const showNoSelectionToast = () => {
     if (Platform.OS === 'android') {
-      ToastAndroid.show('سەرەتا وشەیەک دیاری بکە', ToastAndroid.SHORT);
+      ToastAndroid.show('سەرەتا دەقێک دیاری بکە', ToastAndroid.SHORT);
     }
   };
 
@@ -145,113 +228,59 @@ export const PptTextToolbar = ({
     const plain = runs.map((r) => r.text).join('');
     if (!plain) {
       showNoSelectionToast();
-      pressingRef.current = false;
-      pendingSelRef.current = null;
       return;
     }
 
-    let start = undefined;
-    let end = undefined;
-
-    // 1. Check stickyRangeRef first
+    const curSticky = stickyRangeRef.current;
     if (
-      stickyRangeRef.current &&
-      stickyRangeRef.current.start !== undefined &&
-      stickyRangeRef.current.end !== undefined
+      !curSticky ||
+      curSticky.start === undefined ||
+      curSticky.end === undefined ||
+      curSticky.start === curSticky.end
     ) {
-      const s = Math.max(0, Math.min(plain.length, stickyRangeRef.current.start));
-      const e = Math.max(0, Math.min(plain.length, stickyRangeRef.current.end));
-      if (s !== e) {
-        start = Math.min(s, e);
-        end = Math.max(s, e);
-      }
-    }
-
-    // 2. If no valid stickyRange, check pendingSelRef / selRef / selection / word boundary
-    if (start === undefined || end === undefined || start === end) {
-      const currentSel = pendingSelRef.current || selRef.current || selection;
-      if (currentSel && currentSel.start !== undefined && currentSel.start !== null) {
-        let s = Math.max(0, Math.min(plain.length, currentSel.start));
-        let e = Math.max(0, Math.min(plain.length, currentSel.end));
-        if (s > e) [s, e] = [e, s];
-
-        if (s !== e) {
-          start = s;
-          end = e;
-        } else {
-          // Cursor at single index - check if word under cursor
-          let isWord = false;
-          if (s < plain.length && isWordChar(plain[s])) {
-            isWord = true;
-          } else if (s > 0 && s === plain.length && isWordChar(plain[s - 1])) {
-            isWord = true;
-          }
-
-          if (isWord) {
-            const idxToSearch = s < plain.length ? s : s - 1;
-            const wRange = wordRangeAt(plain, idxToSearch);
-            if (wRange.start !== wRange.end) {
-              start = wRange.start;
-              end = wRange.end;
-            }
-          }
-        }
-      }
-    }
-
-    if (start === undefined || end === undefined || start === end) {
       showNoSelectionToast();
-      pressingRef.current = false;
-      pendingSelRef.current = null;
       return;
     }
 
-    // Set & keep stickyRangeRef
-    const targetSel = { start, end };
-    stickyRangeRef.current = targetSel;
-    selRef.current = targetSel;
-    if (setSelState) setSelState(targetSel);
+    let start = Math.max(0, Math.min(plain.length, curSticky.start));
+    let end = Math.max(0, Math.min(plain.length, curSticky.end));
+    if (start > end) [start, end] = [end, start];
+
+    if (start === end) {
+      showNoSelectionToast();
+      return;
+    }
+
+    const savedRange = { start, end };
+    if (isApplyingStyleRef) isApplyingStyleRef.current = true;
+
+    const newRuns = applyStyle(runs, start, end, patch);
+    setRuns(newRuns);
 
     console.log('[STICKY]', stickyRangeRef.current, 'after', patchName);
 
-    const oldStyle = getSelectionStyle(element, { start, end });
-    const oldScale = oldStyle.sizeScale ?? 1;
-
-    const newRuns = applyStyle(runs, start, end, patch);
-
-    const newStyle = getSelectionStyle({ ...element, runs: newRuns }, targetSel);
-    const newScale = newStyle.sizeScale ?? 1;
-
-    console.log('[SIZE]', start, end, 'before', oldScale, 'after', newScale, 'base', baseSize);
-
-    ignoreSelectionRef.current = true;
-
-    setRuns(newRuns);
-
-    const activeTargetInput = editTextModal ? modalInputRef.current : inputRef.current;
-
-    const restoreSelection = () => {
-      if (setSelState) setSelState({ ...targetSel });
-      const targetInput = activeTargetInput;
-      if (targetInput) {
-        if (targetInput.focus) targetInput.focus();
-        if (targetInput.setNativeProps) {
-          targetInput.setNativeProps({ selection: { ...targetSel } });
-        }
-      }
-    };
-
-    if (activeTargetInput && activeTargetInput.focus) {
-      activeTargetInput.focus();
+    if (setControlledSelection) {
+      setControlledSelection(savedRange);
     }
 
     requestAnimationFrame(() => {
-      restoreSelection();
+      const activeTargetInput = editTextModal ? modalInputRef.current : inputRef.current;
+      if (activeTargetInput) {
+        if (activeTargetInput.focus) activeTargetInput.focus();
+        if (activeTargetInput.setNativeProps && savedRange) {
+          activeTargetInput.setNativeProps({
+            selection: savedRange,
+          });
+        }
+      }
+
       setTimeout(() => {
-        restoreSelection();
-        ignoreSelectionRef.current = false;
-        pressingRef.current = false;
-        pendingSelRef.current = null;
+        if (setControlledSelection) {
+          setControlledSelection(undefined);
+        }
+        setTimeout(() => {
+          if (isApplyingStyleRef) isApplyingStyleRef.current = false;
+        }, 100);
       }, 50);
     });
   }
@@ -344,20 +373,83 @@ export const PptTextToolbar = ({
   const currentKurdishFont = currentStyle.kuFont || element.kurdishFont || 'Tahoma';
   const currentEnglishFont = currentStyle.enFont || element.englishFont || 'Calibri';
 
+  const shadowParams = getShadowParams(currentStyle);
+
+  const applyShadowPatch = (newOffset, newBlur, newOpacity, newBaseColor) => {
+    const finalOffset = clamp(newOffset, 0, 10);
+    const finalBlur = clamp(newBlur, 0, 15);
+    const finalOpacity = clamp(Math.round(newOpacity * 10) / 10, 0.1, 1.0);
+    const finalColor = hexToRgba(newBaseColor || shadowParams.baseColor, finalOpacity);
+
+    applyRunStyle(
+      {
+        shadowColor: finalColor,
+        textShadowColor: finalColor,
+        shadow: finalColor,
+        textShadowOffset: { width: finalOffset, height: finalOffset },
+        shadowOffset: { width: finalOffset, height: finalOffset },
+        textShadowRadius: finalBlur,
+        shadowRadius: finalBlur,
+      },
+      'shadow'
+    );
+  };
+
+  const changeShadowOffset = (delta) => {
+    applyShadowPatch(shadowParams.offset + delta, shadowParams.blur, shadowParams.opacity, shadowParams.baseColor);
+  };
+
+  const changeShadowBlur = (delta) => {
+    applyShadowPatch(shadowParams.offset, shadowParams.blur + delta, shadowParams.opacity, shadowParams.baseColor);
+  };
+
+  const changeShadowOpacity = (delta) => {
+    applyShadowPatch(shadowParams.offset, shadowParams.blur, shadowParams.opacity + delta, shadowParams.baseColor);
+  };
+
+  const applyShadowPreset = (type) => {
+    if (type === 'light') {
+      applyShadowPatch(1, 2, 0.4, shadowParams.baseColor);
+    } else if (type === 'medium') {
+      applyShadowPatch(2, 3, 0.6, shadowParams.baseColor);
+    } else if (type === 'strong') {
+      applyShadowPatch(4, 6, 0.9, shadowParams.baseColor);
+    }
+  };
+
+  const clearShadow = () => {
+    applyRunStyle(
+      {
+        shadowColor: null,
+        textShadowColor: null,
+        shadow: null,
+        textShadowOffset: { width: 0, height: 0 },
+        shadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 0,
+        shadowRadius: 0,
+      },
+      'shadow'
+    );
+  };
+
   const activeSelectedColor =
     colorTarget === 'text'
       ? currentColor
       : colorTarget === 'shadow'
-      ? currentShadow
+      ? shadowParams.baseColor
       : currentHighlight;
 
   const handleColorSelect = (hexColor) => {
     if (colorTarget === 'text') {
-      applyRunStyle({ color: hexColor });
+      applyRunStyle({ color: hexColor }, 'color');
     } else if (colorTarget === 'shadow') {
-      applyRunStyle({ shadowColor: hexColor === 'transparent' ? null : hexColor });
+      if (hexColor === 'transparent') {
+        clearShadow();
+      } else {
+        applyShadowPatch(shadowParams.offset, shadowParams.blur, shadowParams.opacity, hexColor);
+      }
     } else if (colorTarget === 'highlight') {
-      applyRunStyle({ highlight: hexColor === 'transparent' ? null : hexColor });
+      applyRunStyle({ highlight: hexColor === 'transparent' ? null : hexColor }, 'highlight');
     }
   };
 
@@ -374,6 +466,21 @@ export const PptTextToolbar = ({
 
   const activeKurdishObj = KURDISH_FONTS.find((f) => f.name === currentKurdishFont) || KURDISH_FONTS[0];
   const activeEnglishObj = ENGLISH_FONTS.find((f) => f.name === currentEnglishFont) || ENGLISH_FONTS[0];
+
+  const handleCloseFontModal = () => {
+    setFontModalVisible(false);
+    if (setControlledSelection && stickyRangeRef.current) {
+      const cur = { ...stickyRangeRef.current };
+      setControlledSelection(cur);
+      setTimeout(() => {
+        if (inputRef.current?.focus) inputRef.current.focus();
+        if (inputRef.current?.setNativeProps) {
+          inputRef.current.setNativeProps({ selection: cur });
+        }
+        setControlledSelection(undefined);
+      }, 50);
+    }
+  };
 
   return (
     <View style={styles.toolbarContainer}>
@@ -529,6 +636,20 @@ export const PptTextToolbar = ({
               >
                 <Text style={[styles.styleBtnText, { textDecorationLine: 'underline' }]}>U</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.styleBtn, shadowParams.hasShadow && styles.styleBtnActive]}
+                onPressIn={handlePressIn}
+                onPress={() => {
+                  if (shadowParams.hasShadow) {
+                    clearShadow();
+                  } else {
+                    applyShadowPatch(2, 3, 0.6, '#000000');
+                  }
+                }}
+              >
+                <Text style={[styles.styleBtnText, { fontWeight: 'bold' }]}>S</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.iconBtn} onPress={applyBulletList}>
@@ -681,22 +802,120 @@ export const PptTextToolbar = ({
           </View>
 
           <ScrollView
-            style={{ maxHeight: 220 }}
+            style={{ maxHeight: 280 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="always"
           >
             {colorTarget === 'shadow' && (
-              <TouchableOpacity
-                style={styles.noHighlightBtn}
-                onPressIn={handlePressIn}
-                onPress={() => handleColorSelect('transparent')}
-              >
-                <Text style={styles.noHighlightText}>
-                  {currentShadow === 'transparent'
-                    ? '✓ بێ سێبەر (No Shadow / Transparent)'
-                    : '⊗ لابردنی سێبەر (Clear Shadow)'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.shadowControlPanel}>
+                {/* Quick Presets */}
+                <Text style={styles.sectionTitle}>پێشەنگە خێراکان (Quick Presets):</Text>
+                <View style={styles.presetRow}>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPressIn={handlePressIn}
+                    onPress={() => applyShadowPreset('light')}
+                  >
+                    <Text style={styles.presetBtnText}>سووک</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPressIn={handlePressIn}
+                    onPress={() => applyShadowPreset('medium')}
+                  >
+                    <Text style={styles.presetBtnText}>مامناوەند</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.presetBtn}
+                    onPressIn={handlePressIn}
+                    onPress={() => applyShadowPreset('strong')}
+                  >
+                    <Text style={styles.presetBtnText}>بەهێز</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Controls: Size, Blur, Opacity */}
+                <View style={styles.shadowControlsBox}>
+                  {/* 1. Size / Offset */}
+                  <View style={styles.shadowControlRow}>
+                    <Text style={styles.shadowControlLabel}>قەبارە / دووری (Size):</Text>
+                    <View style={styles.stepperContainer}>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowOffset(-1)}
+                      >
+                        <Text style={styles.stepperBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValText}>{shadowParams.offset}</Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowOffset(1)}
+                      >
+                        <Text style={styles.stepperBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* 2. Blur / Softness */}
+                  <View style={styles.shadowControlRow}>
+                    <Text style={styles.shadowControlLabel}>لێڵی / نەرمی (Blur):</Text>
+                    <View style={styles.stepperContainer}>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowBlur(-1)}
+                      >
+                        <Text style={styles.stepperBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValText}>{shadowParams.blur}</Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowBlur(1)}
+                      >
+                        <Text style={styles.stepperBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* 3. Darkness / Opacity */}
+                  <View style={styles.shadowControlRow}>
+                    <Text style={styles.shadowControlLabel}>تۆخی / ڕووناکی (Darkness):</Text>
+                    <View style={styles.stepperContainer}>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowOpacity(-0.1)}
+                      >
+                        <Text style={styles.stepperBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.stepperValText}>{`${Math.round(shadowParams.opacity * 100)}%`}</Text>
+                      <TouchableOpacity
+                        style={styles.stepperBtn}
+                        onPressIn={handlePressIn}
+                        onPress={() => changeShadowOpacity(0.1)}
+                      >
+                        <Text style={styles.stepperBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Remove shadow button */}
+                <TouchableOpacity
+                  style={styles.noHighlightBtn}
+                  onPressIn={handlePressIn}
+                  onPress={clearShadow}
+                >
+                  <Text style={styles.noHighlightText}>
+                    {shadowParams.hasShadow
+                      ? '⊗ لابردنی سێبەر (Clear Shadow)'
+                      : '✓ بێ سێبەر (No Shadow / Transparent)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {colorTarget === 'highlight' && (
@@ -714,7 +933,13 @@ export const PptTextToolbar = ({
             )}
 
             {/* 1. PowerPoint Theme Colors */}
-            <Text style={styles.sectionTitle}>ڕەنگەکانی تێمی پاوەرپۆینت (Theme Colors)</Text>
+            <Text style={styles.sectionTitle}>
+              {colorTarget === 'shadow'
+                ? 'ڕەنگی سێبەر (Shadow Color)'
+                : colorTarget === 'highlight'
+                ? 'ڕەنگی هاینایت (Highlight Color)'
+                : 'ڕەنگەکانی تێمی پاوەرپۆینت (Theme Colors)'}
+            </Text>
             <View style={styles.gridBox}>
               {THEME_COLORS_GRID.map((row, rIdx) => (
                 <View key={`theme_${rIdx}`} style={styles.gridRow}>
@@ -883,48 +1108,48 @@ export const PptTextToolbar = ({
 
             <TextInput
               ref={modalInputRef}
+              selection={controlledSelection}
               style={[styles.modalInput, { color: undefined }]}
               multiline
-              selection={selState}
               onSelectionChange={(e) => {
+                if (isApplyingStyleRef?.current) return;
                 const sel = e.nativeEvent.selection;
-                console.log('[SEL]', sel);
-                if (ignoreSelectionRef.current) return;
-                if (!pressingRef.current) {
-                  setSelection(sel);
-                  if (selRef) selRef.current = sel;
-                  if (sel && sel.start !== undefined && sel.end !== undefined) {
-                    if (sel.start !== sel.end) {
-                      stickyRangeRef.current = { start: sel.start, end: sel.end };
-                    } else {
-                      stickyRangeRef.current = null;
-                    }
-                  }
-                  if (setSelState) setSelState(sel);
-                }
+                console.log('[SEL] user', sel);
+                if (stickyRangeRef) stickyRangeRef.current = sel;
+                if (setSelState) setSelState(sel);
               }}
               onChangeText={(text) => {
-                stickyRangeRef.current = null;
+                if (isApplyingStyleRef?.current) return;
+                const cursorPos = stickyRangeRef?.current?.start ?? text.length;
+                if (stickyRangeRef) stickyRangeRef.current = { start: cursorPos, end: cursorPos };
                 if (text === tempText) return;
                 setTempText(text);
-                const updated = updateElementText(element, text, selection);
+                const updated = updateElementText(element, text, stickyRangeRef.current);
                 onChangeElement(updated);
               }}
               placeholder="دەقەکەت لێرە بنووسە..."
               placeholderTextColor="#777"
               textAlign={element.writingDirection === 'ltr' ? 'left' : 'right'}
             >
-              {getDisplayRunsWithSelection(runs, stickyRangeRef.current).map((r, i) => (
-                <Text
-                  key={i}
-                  style={{
-                    color: r.color || '#1c1c1e',
-                    backgroundColor: r.isStickySelected ? '#3390FF33' : r.highlight || undefined,
-                  }}
-                >
-                  {r.text}
-                </Text>
-              ))}
+              {runs.map((r, i) => {
+                const hasOwnHighlight = (r.highlight || r.highlightColor) && (r.highlight || r.highlightColor) !== 'transparent';
+                const runHighlight = hasOwnHighlight ? (r.highlight || r.highlightColor) : undefined;
+
+                return (
+                  <Text
+                    key={i}
+                    style={{
+                      fontWeight: r.bold ? 'bold' : 'normal',
+                      fontStyle: r.italic ? 'italic' : 'normal',
+                      textDecorationLine: r.underline ? 'underline' : 'none',
+                      color: r.color || '#1c1c1e',
+                      backgroundColor: runHighlight,
+                    }}
+                  >
+                    {r.text}
+                  </Text>
+                );
+              })}
             </TextInput>
 
             <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 10, textAlign: 'right' }}>
@@ -941,6 +1166,7 @@ export const PptTextToolbar = ({
               <TouchableOpacity
                 style={styles.modalSaveBtn}
                 onPress={() => {
+                  if (stickyRangeRef) stickyRangeRef.current = { start: 0, end: 0 };
                   const updated = updateElementText(element, tempText, selection);
                   onChangeElement(updated);
                   setEditTextModal(false);
@@ -958,7 +1184,7 @@ export const PptTextToolbar = ({
         <TouchableOpacity
           style={styles.bottomSheetOverlay}
           activeOpacity={1}
-          onPress={() => setFontModalVisible(false)}
+          onPress={handleCloseFontModal}
         >
           <TouchableOpacity style={styles.bottomSheetBox} activeOpacity={1}>
             <View style={styles.bottomSheetHandle} />
@@ -966,14 +1192,14 @@ export const PptTextToolbar = ({
             <View style={styles.fontModalHeader}>
               <TouchableOpacity
                 style={styles.doneBtn}
-                onPress={() => setFontModalVisible(false)}
+                onPress={handleCloseFontModal}
               >
                 <Text style={styles.doneBtnText}>تەواو (Done) ✓</Text>
               </TouchableOpacity>
 
               <Text style={styles.fontModalTitle}>هەڵبژاردنی فۆنت 🔤</Text>
 
-              <TouchableOpacity onPress={() => setFontModalVisible(false)}>
+              <TouchableOpacity onPress={handleCloseFontModal}>
                 <Text style={styles.fontModalClose}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -1337,6 +1563,69 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  shadowControlPanel: {
+    marginBottom: 8,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  presetBtn: {
+    flex: 1,
+    backgroundColor: '#2c2c2e',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  presetBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  shadowControlsBox: {
+    backgroundColor: '#2c2c2e',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    gap: 8,
+  },
+  shadowControlRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  shadowControlLabel: {
+    color: '#ccc',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  stepperBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  stepperBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  stepperValText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    minWidth: 36,
+    textAlign: 'center',
   },
   noHighlightBtn: {
     backgroundColor: '#2c2c2e',

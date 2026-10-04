@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import { getElementRuns } from './formattedText';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -91,22 +92,33 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily }) 
                   >
                     <Text
                       style={{
-                        fontSize: (elem.fontSize || 18) * (canvasWidth / 360),
-                        fontWeight: elem.fontWeight || 'normal',
-                        fontStyle: elem.fontStyle || 'normal',
-                        textDecorationLine: elem.textDecorationLine || 'none',
-                        color: elem.color || '#1c1c1e',
-                        backgroundColor:
-                          elem.highlightColor && elem.highlightColor !== 'transparent'
-                            ? elem.highlightColor
-                            : undefined,
                         textAlign: elem.textAlign || 'right',
                         writingDirection: elem.writingDirection || 'rtl',
                         lineHeight: ((elem.fontSize || 18) * (canvasWidth / 360)) * (elem.lineSpacing || 1.2),
-                        fontFamily: fontFamily || undefined,
                       }}
                     >
-                      {elem.text}
+                      {getElementRuns(elem).map((run, rIdx) => {
+                        const runScaledFontSize = (elem.fontSize || 18) * (canvasWidth / 360) * (run.sizeScale || 1.0);
+                        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent'
+                          ? (run.highlight || run.highlightColor)
+                          : undefined;
+                        return (
+                          <Text
+                            key={`prun_${rIdx}`}
+                            style={{
+                              fontSize: runScaledFontSize,
+                              fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
+                              fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
+                              textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
+                              color: run.color || '#1c1c1e',
+                              backgroundColor: runHighlight,
+                              fontFamily: fontFamily || undefined,
+                            }}
+                          >
+                            {run.text}
+                          </Text>
+                        );
+                      })}
                     </Text>
                   </View>
                 ) : (

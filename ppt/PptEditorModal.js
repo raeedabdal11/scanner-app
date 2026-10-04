@@ -17,7 +17,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
+import { captureRef } from 'react-native-view-shot';
 import { PptCanvas } from './PptCanvas';
+import { PptCleanSlide } from './PptCleanSlide';
 import { PptTextToolbar } from './PptTextToolbar';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
@@ -97,10 +100,13 @@ const PageCard = ({
   pendingSelRef,
   pressingRef,
   stickyRangeRef,
+  userTouchRef,
   ignoreSelectionRef,
   inputRef,
   selState,
   setSelState,
+  isApplyingStyleRef,
+  controlledSelection,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -235,10 +241,13 @@ const PageCard = ({
         pendingSelRef={pendingSelRef}
         pressingRef={pressingRef}
         stickyRangeRef={stickyRangeRef}
+        userTouchRef={userTouchRef}
         ignoreSelectionRef={ignoreSelectionRef}
         inputRef={inputRef}
         selState={selState}
         setSelState={setSelState}
+        isApplyingStyleRef={isApplyingStyleRef}
+        controlledSelection={controlledSelection}
       />
     </View>
   );
@@ -259,10 +268,13 @@ export const PptEditorModal = ({
   const selRef = useRef(null);
   const pendingSelRef = useRef(null);
   const pressingRef = useRef(false);
-  const stickyRangeRef = useRef(null);
+  const stickyRangeRef = useRef({ start: 0, end: 0 });
+  const userTouchRef = useRef(false);
   const ignoreSelectionRef = useRef(false);
   const inputRef = useRef(null);
   const [selState, setSelState] = useState(undefined);
+  const isApplyingStyleRef = useRef(false);
+  const [controlledSelection, setControlledSelection] = useState(undefined);
 
   // Saved state per page e.g. { [pageId]: boolean }
   const [savedPages, setSavedPages] = useState({});
@@ -278,6 +290,10 @@ export const PptEditorModal = ({
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [selectedExportPageIds, setSelectedExportPageIds] = useState([]);
   const [exporting, setExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState(null); // null | 'pptx' | 'pdf'
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
+  const [currentOffscreenSlide, setCurrentOffscreenSlide] = useState(null);
+  const offscreenSlideRef = useRef(null);
   const [createdDoc, setCreatedDoc] = useState(null);
 
   const scrollViewRef = useRef(null);
@@ -723,13 +739,14 @@ export const PptEditorModal = ({
   };
 
   // Execute Export to PPTX
-  const handleConfirmExport = async () => {
+  const handleConfirmExportPptx = async () => {
     if (selectedExportPageIds.length === 0) {
       Alert.alert('ئاگاداری', 'تکایە هەڵبژاردنی بۆ ئه‌و په‌ڕانه‌ بکه‌ که‌ ده‌ته‌وێت دروستیان بکه‌یت.');
       return;
     }
 
     setExporting(true);
+    setExportingFormat('pptx');
     try {
       const result = await exportPresentationToPptx(presentation, selectedExportPageIds);
 
@@ -762,10 +779,151 @@ export const PptEditorModal = ({
         });
       }
     } catch (err) {
-      console.log('[PPT Editor] Export error:', err);
+      console.log('[PPT Editor] Export PPTX error:', err);
       Alert.alert('هەڵە', 'کێشەیەک ڕوویدا لە دروستکردنی پاوەرپۆینت: ' + (err.message || err));
     } finally {
       setExporting(false);
+      setExportingFormat(null);
+    }
+  };
+
+  // Execute Export to PDF (exact look render)
+  const handleConfirmExportPdf = async () => {
+    if (selectedExportPageIds.length === 0) {
+      Alert.alert('ئاگاداری', 'تکایە هەڵبژاردنی بۆ ئه‌و په‌ڕانه‌ بکه‌ که‌ ده‌ته‌وێت دروستیان بکه‌یت.');
+      return;
+    }
+
+    setExporting(true);
+    setExportingFormat('pdf');
+    try {
+      const targetPages = presentation.slides.filter((s) =>
+        selectedExportPageIds.includes(s.id)
+      );
+
+      const allSlidesToRender = [];
+      for (const pageData of targetPages) {
+        const planned = planPage(pageData);
+        const generatedSlides = planned.slides || [pageData];
+        allSlidesToRender.push(...generatedSlides);
+      }
+
+      setExportProgress({ current: 0, total: allSlidesToRender.length });
+
+      const capturedImageUris = [];
+
+      for (let i = 0; i < allSlidesToRender.length; i++) {
+        const slideObj = allSlidesToRender[i];
+        setCurrentOffscreenSlide(slideObj);
+        setExportProgress({ current: i + 1, total: allSlidesToRender.length });
+
+        await new Promise((resolve) => setTimeout(resolve, 180));
+
+        if (offscreenSlideRef.current) {
+          const imageUri = await captureRef(offscreenSlideRef, {
+            format: 'png',
+            quality: 1.0,
+            result: 'data-uri',
+          });
+          capturedImageUris.push(imageUri);
+        }
+      }
+
+      setCurrentOffscreenSlide(null);
+
+      const is43 = presentation.aspectRatio === '4:3';
+      const widthPt = 960;
+      const heightPt = is43 ? 720 : 540;
+
+      const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @page {
+    size: ${widthPt}pt ${heightPt}pt;
+    margin: 0;
+  }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    width: ${widthPt}pt;
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+  }
+  .slide-page {
+    width: ${widthPt}pt;
+    height: ${heightPt}pt;
+    page-break-after: always;
+    page-break-inside: avoid;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    background-color: #ffffff;
+  }
+  .slide-page:last-child {
+    page-break-after: auto;
+  }
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+</style>
+</head>
+<body>
+  ${capturedImageUris.map((uri) => `<div class="slide-page"><img src="${uri}" /></div>`).join('')}
+</body>
+</html>
+      `;
+
+      const { uri: pdfUri } = await Print.printToFileAsync({
+        html: htmlContent,
+        width: widthPt,
+        height: heightPt,
+      });
+
+      const firstImageElem = (presentation.slides[0]?.elements || []).find((e) => e.type === 'image');
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
+
+      const newDoc = {
+        id: Date.now().toString(),
+        name: `PDF_${dateStr}`,
+        date: new Date().toLocaleDateString('ku-IQ') || new Date().toLocaleDateString(),
+        fileUri: pdfUri,
+        type: 'pdf',
+        thumbnail: firstImageElem?.uri || null,
+        pages: selectedExportPageIds,
+      };
+
+      if (onSaveDocument) {
+        onSaveDocument(newDoc);
+      }
+
+      setCreatedDoc(newDoc);
+      setExportModalVisible(false);
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(pdfUri, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'هاوبەشکردنی PDF',
+          UTI: 'com.adobe.pdf',
+        });
+      }
+    } catch (pdfErr) {
+      console.log('[PPT Editor] Export PDF error:', pdfErr);
+      Alert.alert('هەڵە', 'کێشەیەک ڕوویدا لە دروستکردنی PDF: ' + (pdfErr.message || pdfErr));
+    } finally {
+      setExporting(false);
+      setExportingFormat(null);
+      setCurrentOffscreenSlide(null);
     }
   };
 
@@ -1065,6 +1223,9 @@ export const PptEditorModal = ({
                             selectedElementId={selectedPageId === slide.id ? selectedElementId : null}
                             editingElementId={selectedPageId === slide.id ? editingElementId : null}
                             onSelectElement={(elemId) => {
+                              if (elemId !== selectedElementId) {
+                                stickyRangeRef.current = { start: 0, end: 0 };
+                              }
                               setSelectedPageId(slide.id);
                               setSelectedElementId(elemId);
                               if (!elemId) setEditingElementId(null);
@@ -1092,10 +1253,13 @@ export const PptEditorModal = ({
                             pendingSelRef={pendingSelRef}
                             pressingRef={pressingRef}
                             stickyRangeRef={stickyRangeRef}
+                            userTouchRef={userTouchRef}
                             ignoreSelectionRef={ignoreSelectionRef}
                             inputRef={inputRef}
                             selState={selState}
                             setSelState={setSelState}
+                            isApplyingStyleRef={isApplyingStyleRef}
+                            controlledSelection={controlledSelection}
                           />
 
                           {/* Page Divider between pages */}
@@ -1137,10 +1301,14 @@ export const PptEditorModal = ({
                   pendingSelRef={pendingSelRef}
                   pressingRef={pressingRef}
                   stickyRangeRef={stickyRangeRef}
+                  userTouchRef={userTouchRef}
                   ignoreSelectionRef={ignoreSelectionRef}
                   inputRef={inputRef}
                   selState={selState}
                   setSelState={setSelState}
+                  isApplyingStyleRef={isApplyingStyleRef}
+                  controlledSelection={controlledSelection}
+                  setControlledSelection={setControlledSelection}
                 />
               )}
 
@@ -1315,22 +1483,35 @@ export const PptEditorModal = ({
                         <TouchableOpacity
                           style={styles.cancelExportBtn}
                           onPress={() => setExportModalVisible(false)}
-                          disabled={exporting}
+                          disabled={!!exportingFormat}
                         >
-                          <Text style={styles.cancelExportText}>پاشگەزبوونەوە</Text>
+                          <Text style={styles.cancelExportText}>داخستن</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.exportPdfBtn}
+                          onPress={handleConfirmExportPdf}
+                          disabled={!!exportingFormat || selectedExportPageIds.length === 0}
+                        >
+                          {exportingFormat === 'pdf' ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <ActivityIndicator size="small" color="#ffffff" />
+                              <Text style={styles.confirmExportText}>{`PDF (${exportProgress.current}/${exportProgress.total})`}</Text>
+                            </View>
+                          ) : (
+                            <Text style={styles.confirmExportText}>PDF 📄</Text>
+                          )}
                         </TouchableOpacity>
 
                         <TouchableOpacity
                           style={styles.confirmExportBtn}
-                          onPress={handleConfirmExport}
-                          disabled={exporting || selectedExportPageIds.length === 0}
+                          onPress={handleConfirmExportPptx}
+                          disabled={!!exportingFormat || selectedExportPageIds.length === 0}
                         >
-                          {exporting ? (
+                          {exportingFormat === 'pptx' ? (
                             <ActivityIndicator size="small" color="#ffffff" />
                           ) : (
-                            <Text style={styles.confirmExportText}>
-                              {`دروستکردنی ${totalCreatedSlides} سلاید`}
-                            </Text>
+                            <Text style={styles.confirmExportText}>PPTX 📊</Text>
                           )}
                         </TouchableOpacity>
                       </View>
@@ -1340,6 +1521,30 @@ export const PptEditorModal = ({
               </View>
             </View>
           </Modal>
+
+          {/* Offscreen Slide Container for high-res PDF export capture */}
+          <View
+            style={{
+              position: 'absolute',
+              left: -9999,
+              top: -9999,
+              width: presentation.aspectRatio === '4:3' ? 1024 : 1280,
+              height: presentation.aspectRatio === '4:3' ? 768 : 720,
+              opacity: currentOffscreenSlide ? 1 : 0,
+            }}
+            pointerEvents="none"
+          >
+            {currentOffscreenSlide && (
+              <PptCleanSlide
+                ref={offscreenSlideRef}
+                slide={currentOffscreenSlide}
+                aspectRatio={presentation.aspectRatio}
+                width={presentation.aspectRatio === '4:3' ? 1024 : 1280}
+                height={presentation.aspectRatio === '4:3' ? 768 : 720}
+                fontFamily={vazirmatnFont}
+              />
+            )}
+          </View>
 
         </View>
       </View>
@@ -1842,14 +2047,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelExportText: {
     color: '#ffffff',
     fontSize: 13,
     fontWeight: 'bold',
   },
+  exportPdfBtn: {
+    flex: 1.2,
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   confirmExportBtn: {
-    flex: 2,
+    flex: 1.2,
     backgroundColor: '#8B3A2B',
     paddingVertical: 12,
     borderRadius: 10,

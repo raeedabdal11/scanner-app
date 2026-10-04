@@ -59,11 +59,18 @@ export const getElementRuns = (element) => {
           ? r.underline
           : r.textDecorationLine === 'underline' ||
             element.textDecorationLine === 'underline',
-      highlight: r.highlight && r.highlight !== 'transparent' ? r.highlight : null,
-      shadowColor:
-        (r.shadowColor || r.shadow) && (r.shadowColor || r.shadow) !== 'transparent'
-          ? r.shadowColor || r.shadow
+      highlight:
+        (r.highlight || r.highlightColor || element.highlight || element.highlightColor) &&
+        (r.highlight || r.highlightColor || element.highlight || element.highlightColor) !== 'transparent'
+          ? r.highlight || r.highlightColor || element.highlight || element.highlightColor
           : null,
+      shadowColor:
+        (r.shadowColor || r.shadow || r.textShadowColor || element.shadowColor || element.shadow || element.textShadowColor) &&
+        (r.shadowColor || r.shadow || r.textShadowColor || element.shadowColor || element.shadow || element.textShadowColor) !== 'transparent'
+          ? r.shadowColor || r.shadow || r.textShadowColor || element.shadowColor || element.shadow || element.textShadowColor
+          : null,
+      textShadowOffset: r.textShadowOffset || r.shadowOffset || element.textShadowOffset || element.shadowOffset || { width: 2, height: 2 },
+      textShadowRadius: r.textShadowRadius !== undefined ? r.textShadowRadius : (r.shadowRadius !== undefined ? r.shadowRadius : (element.textShadowRadius !== undefined ? element.textShadowRadius : (element.shadowRadius !== undefined ? element.shadowRadius : 3))),
       kuFont: r.kuFont || r.kurdishFont || element.kurdishFont || 'Tahoma',
       enFont: r.enFont || r.englishFont || element.englishFont || 'Calibri',
     }));
@@ -76,8 +83,18 @@ export const getElementRuns = (element) => {
         bold: element.fontWeight === 'bold',
         italic: element.fontStyle === 'italic',
         underline: element.textDecorationLine === 'underline',
-        highlight: null,
-        shadowColor: null,
+        highlight:
+          (element.highlight || element.highlightColor) &&
+          (element.highlight || element.highlightColor) !== 'transparent'
+            ? element.highlight || element.highlightColor
+            : null,
+        shadowColor:
+          (element.shadowColor || element.shadow || element.textShadowColor) &&
+          (element.shadowColor || element.shadow || element.textShadowColor) !== 'transparent'
+            ? element.shadowColor || element.shadow || element.textShadowColor
+            : null,
+        textShadowOffset: element.textShadowOffset || element.shadowOffset || { width: 2, height: 2 },
+        textShadowRadius: element.textShadowRadius !== undefined ? element.textShadowRadius : (element.shadowRadius !== undefined ? element.shadowRadius : 3),
         kuFont: element.kurdishFont || 'Tahoma',
         enFont: element.englishFont || 'Calibri',
       },
@@ -87,12 +104,21 @@ export const getElementRuns = (element) => {
   // Clean out sizeScaleDelta from all runs
   return rawRuns.map((r) => {
     const { sizeScaleDelta, ...cleanR } = r;
+    const effHighlight = cleanR.highlight || cleanR.highlightColor || element.highlight || element.highlightColor;
+    const effShadow = cleanR.shadowColor || cleanR.shadow || cleanR.textShadowColor || element.shadowColor || element.shadow || element.textShadowColor;
+    const effOffset = cleanR.textShadowOffset || cleanR.shadowOffset || element.textShadowOffset || element.shadowOffset || { width: 2, height: 2 };
+    const effRadius = cleanR.textShadowRadius !== undefined ? cleanR.textShadowRadius : (cleanR.shadowRadius !== undefined ? cleanR.shadowRadius : (element.textShadowRadius !== undefined ? element.textShadowRadius : (element.shadowRadius !== undefined ? element.shadowRadius : 3)));
+
     return {
       ...cleanR,
-      color: cleanR.color || '#1c1c1e',
+      color: cleanR.color || element.color || '#1c1c1e',
       sizeScale: cleanR.sizeScale !== undefined ? cleanR.sizeScale : 1.0,
-      highlight: cleanR.highlight && cleanR.highlight !== 'transparent' ? cleanR.highlight : null,
-      shadowColor: cleanR.shadowColor && cleanR.shadowColor !== 'transparent' ? cleanR.shadowColor : null,
+      highlight:
+        effHighlight && effHighlight !== 'transparent' ? effHighlight : null,
+      shadowColor:
+        effShadow && effShadow !== 'transparent' ? effShadow : null,
+      textShadowOffset: effOffset,
+      textShadowRadius: effRadius,
     };
   });
 };
@@ -114,12 +140,18 @@ export const runsToCharStyles = (runs, defaultElem = {}) => {
 
   const defaultKuFont = defaultElem.kurdishFont || 'Tahoma';
   const defaultEnFont = defaultElem.englishFont || 'Calibri';
-  const defaultHighlight = defaultElem.highlightColor || 'transparent';
-  const defaultShadow = defaultElem.shadowColor || 'transparent';
+  const defaultHighlight = defaultElem.highlight || defaultElem.highlightColor || 'transparent';
+  const defaultShadow = defaultElem.shadowColor || defaultElem.shadow || 'transparent';
+  const defaultOffset = defaultElem.textShadowOffset || defaultElem.shadowOffset || { width: 2, height: 2 };
+  const defaultRadius = defaultElem.textShadowRadius !== undefined ? defaultElem.textShadowRadius : (defaultElem.shadowRadius !== undefined ? defaultElem.shadowRadius : 3);
 
   for (const run of runs) {
     const txt = run.text || '';
     const runColor = run.color || '#1c1c1e';
+    const runHighlight = run.highlight || run.highlightColor || defaultHighlight;
+    const runShadow = run.shadowColor || run.shadow || defaultShadow;
+    const runOffset = run.textShadowOffset || run.shadowOffset || defaultOffset;
+    const runRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : defaultRadius);
     for (let i = 0; i < txt.length; i++) {
       chars.push({
         ch: txt[i],
@@ -128,8 +160,10 @@ export const runsToCharStyles = (runs, defaultElem = {}) => {
         bold: !!run.bold,
         italic: !!run.italic,
         underline: !!run.underline,
-        highlight: run.highlight || defaultHighlight,
-        shadow: run.shadow || defaultShadow,
+        highlight: runHighlight && runHighlight !== 'transparent' ? runHighlight : 'transparent',
+        shadow: runShadow && runShadow !== 'transparent' ? runShadow : 'transparent',
+        textShadowOffset: runOffset,
+        textShadowRadius: runRadius,
         kuFont: run.kuFont || defaultKuFont,
         enFont: run.enFont || defaultEnFont,
       });
@@ -149,6 +183,11 @@ export const charStylesToRuns = (chars) => {
 
   for (const item of chars) {
     const itemColor = item.color || '#1c1c1e';
+    const itemHighlight = item.highlight && item.highlight !== 'transparent' ? item.highlight : null;
+    const itemShadow = item.shadow && item.shadow !== 'transparent' ? item.shadow : null;
+    const itemOffset = item.textShadowOffset || { width: 2, height: 2 };
+    const itemRadius = item.textShadowRadius !== undefined ? item.textShadowRadius : 3;
+
     if (!currentRun) {
       currentRun = {
         text: item.ch,
@@ -157,8 +196,10 @@ export const charStylesToRuns = (chars) => {
         bold: item.bold,
         italic: item.italic,
         underline: item.underline,
-        highlight: item.highlight,
-        shadow: item.shadow,
+        highlight: itemHighlight,
+        shadowColor: itemShadow,
+        textShadowOffset: itemOffset,
+        textShadowRadius: itemRadius,
         kuFont: item.kuFont,
         enFont: item.enFont,
       };
@@ -168,10 +209,12 @@ export const charStylesToRuns = (chars) => {
       !!item.bold === !!currentRun.bold &&
       !!item.italic === !!currentRun.italic &&
       !!item.underline === !!currentRun.underline &&
-      item.highlight === currentRun.highlight &&
-      item.shadow === currentRun.shadow &&
-      item.kuFont === currentRun.kuFont &&
-      item.enFont === currentRun.enFont
+      (currentRun.highlight || null) === itemHighlight &&
+      (currentRun.shadowColor || null) === itemShadow &&
+      (currentRun.textShadowOffset?.width || 2) === (itemOffset?.width || 2) &&
+      (currentRun.textShadowRadius ?? 3) === (itemRadius ?? 3) &&
+      currentRun.kuFont === item.kuFont &&
+      currentRun.enFont === item.enFont
     ) {
       currentRun.text += item.ch;
     } else {
@@ -183,8 +226,10 @@ export const charStylesToRuns = (chars) => {
         bold: item.bold,
         italic: item.italic,
         underline: item.underline,
-        highlight: item.highlight,
-        shadow: item.shadow,
+        highlight: itemHighlight,
+        shadowColor: itemShadow,
+        textShadowOffset: itemOffset,
+        textShadowRadius: itemRadius,
         kuFont: item.kuFont,
         enFont: item.enFont,
       };
@@ -225,26 +270,17 @@ export const applyStyleToElement = (
   if (forceWhole) {
     start = 0;
     end = plain.length;
-  } else if (selection.start !== selection.end) {
-    start = Math.max(0, Math.min(selection.start, selection.end));
-    end = Math.min(plain.length, Math.max(selection.start, selection.end));
   } else {
-    const selIdx = selection.start;
-    if (selIdx < plain.length && isWordChar(plain[selIdx])) {
-      const wRange = wordRangeAt(plain, selIdx);
-      start = wRange.start;
-      end = wRange.end;
-    } else if (selIdx > 0 && selIdx === plain.length && isWordChar(plain[selIdx - 1])) {
-      const wRange = wordRangeAt(plain, selIdx - 1);
-      start = wRange.start;
-      end = wRange.end;
-    }
+    const s1 = selection ? selection.start : 0;
+    const s2 = selection ? selection.end : 0;
+    start = Math.max(0, Math.min(plain.length, Math.min(s1, s2)));
+    end = Math.max(0, Math.min(plain.length, Math.max(s1, s2)));
   }
 
   if (start === end) {
-    const { color: _c, ...elemWithoutColor } = element;
+    const { color: _c, highlight: _h, highlightColor: _hc, shadowColor: _sc, shadow: _s, ...elemClean } = element;
     return {
-      ...elemWithoutColor,
+      ...elemClean,
       text: plain,
       runs: currentRuns,
       formattedRuns: currentRuns,
@@ -264,10 +300,10 @@ export const applyStyleToElement = (
   else patch = { [key]: value };
 
   const newRuns = applyStyle(currentRuns, start, end, patch);
-  const { color: _c, ...elemWithoutColor } = element;
+  const { color: _c, highlight: _h, highlightColor: _hc, shadowColor: _sc, shadow: _s, ...elemClean } = element;
 
   return {
-    ...elemWithoutColor,
+    ...elemClean,
     text: plain,
     runs: newRuns,
     formattedRuns: newRuns,
@@ -376,23 +412,13 @@ export const getSelectionStyle = (element, selection = { start: 0, end: 0 }) => 
       enFont: element.englishFont || 'Calibri',
       highlight: 'transparent',
       shadowColor: 'transparent',
+      textShadowOffset: { width: 2, height: 2 },
+      textShadowRadius: 3,
     };
   }
 
   const start = selection ? selection.start : 0;
-  const end = selection ? selection.end : 0;
-  const text = element.text || '';
-  let targetIdx = start;
-
-  if (start === end) {
-    if (start < text.length && isWordChar(text[start])) {
-      const wordRange = wordRangeAt(text, start);
-      targetIdx = wordRange.start;
-    } else if (start > 0 && start === text.length && isWordChar(text[start - 1])) {
-      const wordRange = wordRangeAt(text, start - 1);
-      targetIdx = wordRange.start;
-    }
-  }
+  const targetIdx = Math.max(0, Math.min(start, chars.length - 1));
 
   const idx = Math.max(0, Math.min(targetIdx, chars.length - 1));
   const sample = chars[idx] || chars[0];
@@ -410,6 +436,8 @@ export const getSelectionStyle = (element, selection = { start: 0, end: 0 }) => 
     enFont: sample.enFont || element.englishFont || 'Calibri',
     highlight: sample.highlight && sample.highlight !== 'transparent' ? sample.highlight : 'transparent',
     shadowColor: sample.shadow && sample.shadow !== 'transparent' ? sample.shadow : sample.shadowColor && sample.shadowColor !== 'transparent' ? sample.shadowColor : 'transparent',
+    textShadowOffset: sample.textShadowOffset || sample.shadowOffset || { width: 2, height: 2 },
+    textShadowRadius: sample.textShadowRadius !== undefined ? sample.textShadowRadius : (sample.shadowRadius !== undefined ? sample.shadowRadius : 3),
   };
 };
 
@@ -422,8 +450,10 @@ export const getDisplayRunsWithSelection = (runs, stickyRange) => {
   if (!stickyRange || stickyRange.start === undefined || stickyRange.end === undefined) {
     return runs;
   }
-  const start = Math.max(0, Math.min(stickyRange.start, stickyRange.end));
-  const end = Math.max(0, Math.min(stickyRange.start, stickyRange.end));
+  const s1 = Math.min(stickyRange.start, stickyRange.end);
+  const s2 = Math.max(stickyRange.start, stickyRange.end);
+  const start = Math.max(0, s1);
+  const end = Math.max(0, s2);
   if (start === end) return runs;
 
   const out = [];

@@ -29,7 +29,7 @@
     "react-native-document-scanner-plugin": "^2.0.4",
     "react-native-image-crop-picker": "^0.51.1",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-view-shot": "^6.0.1",
+    "react-native-view-shot": "5.1.0",
     "upng-js": "^2.1.0"
   },
   "scripts": {
