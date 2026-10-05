@@ -103,10 +103,9 @@ const PageCard = ({
   userTouchRef,
   ignoreSelectionRef,
   inputRef,
-  selState,
-  setSelState,
   isApplyingStyleRef,
   controlledSelection,
+  setControlledSelection,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -244,10 +243,9 @@ const PageCard = ({
         userTouchRef={userTouchRef}
         ignoreSelectionRef={ignoreSelectionRef}
         inputRef={inputRef}
-        selState={selState}
-        setSelState={setSelState}
         isApplyingStyleRef={isApplyingStyleRef}
         controlledSelection={controlledSelection}
+        setControlledSelection={setControlledSelection}
       />
     </View>
   );
@@ -272,7 +270,6 @@ export const PptEditorModal = ({
   const userTouchRef = useRef(false);
   const ignoreSelectionRef = useRef(false);
   const inputRef = useRef(null);
-  const [selState, setSelState] = useState(undefined);
   const isApplyingStyleRef = useRef(false);
   const [controlledSelection, setControlledSelection] = useState(undefined);
 
@@ -1256,10 +1253,9 @@ export const PptEditorModal = ({
                             userTouchRef={userTouchRef}
                             ignoreSelectionRef={ignoreSelectionRef}
                             inputRef={inputRef}
-                            selState={selState}
-                            setSelState={setSelState}
                             isApplyingStyleRef={isApplyingStyleRef}
                             controlledSelection={controlledSelection}
+                            setControlledSelection={setControlledSelection}
                           />
 
                           {/* Page Divider between pages */}
@@ -1304,8 +1300,6 @@ export const PptEditorModal = ({
                   userTouchRef={userTouchRef}
                   ignoreSelectionRef={ignoreSelectionRef}
                   inputRef={inputRef}
-                  selState={selState}
-                  setSelState={setSelState}
                   isApplyingStyleRef={isApplyingStyleRef}
                   controlledSelection={controlledSelection}
                   setControlledSelection={setControlledSelection}

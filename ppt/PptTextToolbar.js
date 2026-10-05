@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -148,8 +148,6 @@ export const PptTextToolbar = ({
   userTouchRef: externalUserTouchRef,
   ignoreSelectionRef: externalIgnoreSelectionRef,
   inputRef: externalInputRef,
-  selState: externalSelState,
-  setSelState: externalSetSelState,
   isApplyingStyleRef: externalIsApplyingStyleRef,
   controlledSelection: externalControlledSelection,
   setControlledSelection: externalSetControlledSelection,
@@ -167,7 +165,6 @@ export const PptTextToolbar = ({
   const localUserTouchRef = useRef(false);
   const localIgnoreSelectionRef = useRef(false);
   const localInputRef = useRef(null);
-  const [localSelState, setLocalSelState] = useState(undefined);
   const localIsApplyingStyleRef = useRef(false);
   const [localControlledSelection, setLocalControlledSelection] = useState(undefined);
   const touchTimeoutRef = useRef(null);
@@ -179,13 +176,85 @@ export const PptTextToolbar = ({
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
   const ignoreSelectionRef = externalIgnoreSelectionRef || localIgnoreSelectionRef;
   const inputRef = externalInputRef || localInputRef;
-  const selState = externalSelState !== undefined ? externalSelState : localSelState;
-  const setSelState = externalSetSelState || setLocalSelState;
   const isApplyingStyleRef = externalIsApplyingStyleRef || localIsApplyingStyleRef;
   const controlledSelection = externalControlledSelection !== undefined ? externalControlledSelection : localControlledSelection;
   const setControlledSelection = externalSetControlledSelection || setLocalControlledSelection;
 
   const modalInputRef = useRef(null);
+  const guardTimerRef = useRef(null);
+  const hardGuardTimerRef = useRef(null);
+
+  const turnOffGuard = (reason) => {
+    if (guardTimerRef.current) {
+      clearTimeout(guardTimerRef.current);
+      guardTimerRef.current = null;
+    }
+    if (hardGuardTimerRef.current) {
+      clearTimeout(hardGuardTimerRef.current);
+      hardGuardTimerRef.current = null;
+    }
+    if (isApplyingStyleRef.current) {
+      isApplyingStyleRef.current = false;
+      console.log(`[GUARD] off (${reason})`);
+    }
+    if (setControlledSelection) {
+      setControlledSelection(undefined);
+    }
+  };
+
+  const turnOnGuard = (savedRange) => {
+    isApplyingStyleRef.current = true;
+    console.log('[GUARD] on', savedRange);
+
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+    if (hardGuardTimerRef.current) clearTimeout(hardGuardTimerRef.current);
+
+    guardTimerRef.current = setTimeout(() => {
+      turnOffGuard('soft timeout');
+    }, 350);
+
+    // HARD maximum: ALWAYS turns off at most 600 ms after style was applied
+    hardGuardTimerRef.current = setTimeout(() => {
+      turnOffGuard('hard max 600ms');
+    }, 600);
+  };
+
+  const restoreSelection = (savedRange) => {
+    if (!savedRange) return;
+    console.log('[STICKY] restore', savedRange);
+    const activeTargetInput = editTextModal ? modalInputRef.current : inputRef.current;
+    if (activeTargetInput) {
+      if (activeTargetInput.focus) activeTargetInput.focus();
+      if (typeof activeTargetInput.setSelection === 'function') {
+        activeTargetInput.setSelection(savedRange.start, savedRange.end);
+      } else if (activeTargetInput.setNativeProps) {
+        activeTargetInput.setNativeProps({ selection: savedRange });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isApplyingStyleRef.current && stickyRangeRef.current) {
+      const saved = stickyRangeRef.current;
+
+      if (setControlledSelection) {
+        setControlledSelection({ ...saved });
+      }
+
+      restoreSelection(saved);
+
+      if (guardTimerRef.current) clearTimeout(guardTimerRef.current);
+      guardTimerRef.current = setTimeout(() => {
+        turnOffGuard('soft timeout');
+      }, 350);
+    }
+  }, [element]);
+
+  useEffect(() => {
+    return () => {
+      turnOffGuard('unmount');
+    };
+  }, []);
 
   // Font Sheet Modal State
   const [fontModalVisible, setFontModalVisible] = useState(false);
@@ -194,8 +263,31 @@ export const PptTextToolbar = ({
 
   if (!element || element.type !== 'text') return null;
 
-  const runs = getElementRuns(element);
+  const runs = getElementRuns(element) || [];
   const baseSize = Math.round(element.computedFontSize || element.fontSize || 18);
+
+  const memoizedModalChildren = useMemo(() => {
+    console.log('[RENDER] Modal TextInput children');
+    return (runs ?? []).map((r, i) => {
+      const hasOwnHighlight = (r.highlight || r.highlightColor) && (r.highlight || r.highlightColor) !== 'transparent';
+      const runHighlight = hasOwnHighlight ? (r.highlight || r.highlightColor) : undefined;
+
+      return (
+        <Text
+          key={i}
+          style={{
+            fontWeight: r.bold ? 'bold' : 'normal',
+            fontStyle: r.italic ? 'italic' : 'normal',
+            textDecorationLine: r.underline ? 'underline' : 'none',
+            color: r.color || '#1c1c1e',
+            backgroundColor: runHighlight,
+          }}
+        >
+          {r.text}
+        </Text>
+      );
+    });
+  }, [runs]);
 
   const setRuns = (newRuns) => {
     const plain = newRuns.map((r) => r.text).join('');
@@ -252,37 +344,18 @@ export const PptTextToolbar = ({
     }
 
     const savedRange = { start, end };
-    if (isApplyingStyleRef) isApplyingStyleRef.current = true;
+    stickyRangeRef.current = savedRange;
+
+    turnOnGuard(savedRange);
 
     const newRuns = applyStyle(runs, start, end, patch);
     setRuns(newRuns);
 
-    console.log('[STICKY]', stickyRangeRef.current, 'after', patchName);
-
     if (setControlledSelection) {
-      setControlledSelection(savedRange);
+      setControlledSelection({ ...savedRange });
     }
 
-    requestAnimationFrame(() => {
-      const activeTargetInput = editTextModal ? modalInputRef.current : inputRef.current;
-      if (activeTargetInput) {
-        if (activeTargetInput.focus) activeTargetInput.focus();
-        if (activeTargetInput.setNativeProps && savedRange) {
-          activeTargetInput.setNativeProps({
-            selection: savedRange,
-          });
-        }
-      }
-
-      setTimeout(() => {
-        if (setControlledSelection) {
-          setControlledSelection(undefined);
-        }
-        setTimeout(() => {
-          if (isApplyingStyleRef) isApplyingStyleRef.current = false;
-        }, 100);
-      }, 50);
-    });
+    restoreSelection(savedRange);
   }
 
   // Active selection/word style query
@@ -1111,12 +1184,37 @@ export const PptTextToolbar = ({
               selection={controlledSelection}
               style={[styles.modalInput, { color: undefined }]}
               multiline
+              onTouchStart={() => {
+                if (userTouchRef) userTouchRef.current = true;
+                if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
+                touchTimeoutRef.current = setTimeout(() => {
+                  if (userTouchRef) userTouchRef.current = false;
+                }, 500);
+
+                if (isApplyingStyleRef?.current) {
+                  turnOffGuard('user touch');
+                }
+              }}
               onSelectionChange={(e) => {
-                if (isApplyingStyleRef?.current) return;
                 const sel = e.nativeEvent.selection;
+                const isGuardActive = isApplyingStyleRef?.current;
+                const saved = stickyRangeRef?.current;
+
+                if (isGuardActive) {
+                  const textLen = (element?.text || tempText || '').length;
+                  const isCollapsedAtEnd = sel.start === sel.end && sel.start === textLen;
+                  const matchesSaved = saved && sel.start === saved.start && sel.end === saved.end;
+
+                  if (!userTouchRef?.current && (matchesSaved || isCollapsedAtEnd)) {
+                    console.log('[SEL] ignored', sel);
+                    return;
+                  }
+
+                  turnOffGuard('user selection');
+                }
+
                 console.log('[SEL] user', sel);
                 if (stickyRangeRef) stickyRangeRef.current = sel;
-                if (setSelState) setSelState(sel);
               }}
               onChangeText={(text) => {
                 if (isApplyingStyleRef?.current) return;
@@ -1131,25 +1229,7 @@ export const PptTextToolbar = ({
               placeholderTextColor="#777"
               textAlign={element.writingDirection === 'ltr' ? 'left' : 'right'}
             >
-              {runs.map((r, i) => {
-                const hasOwnHighlight = (r.highlight || r.highlightColor) && (r.highlight || r.highlightColor) !== 'transparent';
-                const runHighlight = hasOwnHighlight ? (r.highlight || r.highlightColor) : undefined;
-
-                return (
-                  <Text
-                    key={i}
-                    style={{
-                      fontWeight: r.bold ? 'bold' : 'normal',
-                      fontStyle: r.italic ? 'italic' : 'normal',
-                      textDecorationLine: r.underline ? 'underline' : 'none',
-                      color: r.color || '#1c1c1e',
-                      backgroundColor: runHighlight,
-                    }}
-                  >
-                    {r.text}
-                  </Text>
-                );
-              })}
+              {memoizedModalChildren}
             </TextInput>
 
             <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 10, textAlign: 'right' }}>
