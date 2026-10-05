@@ -103,6 +103,8 @@ const InlineTextInput = React.memo(({
   stickyRangeRef,
   onChangeElement,
   onEndInlineEditing,
+  showSoftInputOnFocus = true,
+  setShowSoftInputOnFocus,
 }) => {
   console.log('[RENDER] TextInput');
   useRenderWhy('TextInput', {
@@ -121,6 +123,7 @@ const InlineTextInput = React.memo(({
   onEndInlineEditingRef.current = onEndInlineEditing;
 
   const handleTouchStart = useCallback(() => {
+    if (setShowSoftInputOnFocus) setShowSoftInputOnFocus(true);
     if (userTouchRef) userTouchRef.current = true;
     if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
     touchTimeoutRef.current = setTimeout(() => {
@@ -134,7 +137,7 @@ const InlineTextInput = React.memo(({
       }
       console.log('[GUARD] off (user touch)');
     }
-  }, [userTouchRef, touchTimeoutRef, externalIsApplyingStyleRef, setControlledSelection, controlledSelection]);
+  }, [userTouchRef, touchTimeoutRef, externalIsApplyingStyleRef, setControlledSelection, controlledSelection, setShowSoftInputOnFocus]);
 
   const handleSelectionChange = useCallback((e) => {
     const sel = e.nativeEvent.selection;
@@ -174,8 +177,19 @@ const InlineTextInput = React.memo(({
   }, [elem, externalIsApplyingStyleRef, stickyRangeRef]);
 
   const handleBlur = useCallback(() => {
-    if (onEndInlineEditingRef.current) onEndInlineEditingRef.current();
-  }, []);
+    console.log('[BLUR] TextInput blurred, keeping edit state and selection');
+    const saved = stickyRangeRef?.current;
+    if (saved && inputRef?.current) {
+      setTimeout(() => {
+        if (inputRef.current?.focus) inputRef.current.focus();
+        if (typeof inputRef.current?.setSelection === 'function') {
+          inputRef.current.setSelection(saved.start, saved.end);
+        } else if (inputRef.current?.setNativeProps) {
+          inputRef.current.setNativeProps({ selection: saved });
+        }
+      }, 50);
+    }
+  }, [inputRef, stickyRangeRef]);
 
   const inputStyle = useMemo(() => ({
     flex: 1,
@@ -201,6 +215,7 @@ const InlineTextInput = React.memo(({
       style={inputStyle}
       multiline={true}
       autoFocus={true}
+      showSoftInputOnFocus={showSoftInputOnFocus}
       selection={controlledSelection}
       onTouchStart={handleTouchStart}
       onSelectionChange={handleSelectionChange}
@@ -216,6 +231,7 @@ const InlineTextInput = React.memo(({
   if (prevProps.scaledBaseSize !== nextProps.scaledBaseSize) return false;
   if (prevProps.fontFamily !== nextProps.fontFamily) return false;
   if (prevProps.controlledSelection !== nextProps.controlledSelection) return false;
+  if (prevProps.showSoftInputOnFocus !== nextProps.showSoftInputOnFocus) return false;
 
   const p = prevProps.formattedRuns ?? [];
   const n = nextProps.formattedRuns ?? [];
@@ -268,6 +284,8 @@ export const PptCanvas = ({
   isApplyingStyleRef: externalIsApplyingStyleRef,
   controlledSelection,
   setControlledSelection,
+  showSoftInputOnFocus,
+  setShowSoftInputOnFocus,
 }) => {
   const [resizingElement, setResizingElement] = useState(null);
   const localUserTouchRef = React.useRef(false);
@@ -515,6 +533,8 @@ export const PptCanvas = ({
                       stickyRangeRef={stickyRangeRef}
                       onChangeElement={onChangeElement}
                       onEndInlineEditing={onEndInlineEditing}
+                      showSoftInputOnFocus={showSoftInputOnFocus}
+                      setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                     />
                   ) : (
                     <Text

@@ -106,6 +106,8 @@ const PageCard = React.memo(({
   isApplyingStyleRef,
   controlledSelection,
   setControlledSelection,
+  showSoftInputOnFocus,
+  setShowSoftInputOnFocus,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -246,6 +248,8 @@ const PageCard = React.memo(({
         isApplyingStyleRef={isApplyingStyleRef}
         controlledSelection={controlledSelection}
         setControlledSelection={setControlledSelection}
+        showSoftInputOnFocus={showSoftInputOnFocus}
+        setShowSoftInputOnFocus={setShowSoftInputOnFocus}
       />
     </View>
   );
@@ -272,6 +276,7 @@ export const PptEditorModal = ({
   const inputRef = useRef(null);
   const isApplyingStyleRef = useRef(false);
   const [controlledSelection, setControlledSelection] = useState(undefined);
+  const [showSoftInputOnFocus, setShowSoftInputOnFocus] = useState(true);
 
   // Saved state per page e.g. { [pageId]: boolean }
   const [savedPages, setSavedPages] = useState({});
@@ -1229,6 +1234,7 @@ export const PptEditorModal = ({
                               if (!elemId) setEditingElementId(null);
                             }}
                             onStartInlineEditing={(elemId) => {
+                              setShowSoftInputOnFocus(true);
                               setSelectedPageId(slide.id);
                               setSelectedElementId(elemId);
                               setEditingElementId(elemId);
@@ -1257,6 +1263,8 @@ export const PptEditorModal = ({
                             isApplyingStyleRef={isApplyingStyleRef}
                             controlledSelection={controlledSelection}
                             setControlledSelection={setControlledSelection}
+                            showSoftInputOnFocus={showSoftInputOnFocus}
+                            setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                           />
 
                           {/* Page Divider between pages */}
@@ -1304,6 +1312,7 @@ export const PptEditorModal = ({
                   isApplyingStyleRef={isApplyingStyleRef}
                   controlledSelection={controlledSelection}
                   setControlledSelection={setControlledSelection}
+                  setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                 />
               )}
 

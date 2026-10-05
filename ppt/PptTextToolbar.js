@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ToastAndroid,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { KURDISH_FONTS, ENGLISH_FONTS } from './fonts';
 import {
@@ -196,6 +197,7 @@ export const PptTextToolbar = ({
   isApplyingStyleRef: externalIsApplyingStyleRef,
   controlledSelection: externalControlledSelection,
   setControlledSelection: externalSetControlledSelection,
+  setShowSoftInputOnFocus,
 }) => {
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
@@ -334,6 +336,21 @@ export const PptTextToolbar = ({
       pendingSelRef.current = { ...stickyRangeRef.current };
     } else if (selRef.current) {
       pendingSelRef.current = { ...selRef.current };
+    }
+
+    if (setShowSoftInputOnFocus) {
+      setShowSoftInputOnFocus(false);
+    }
+    Keyboard.dismiss();
+
+    const saved = stickyRangeRef.current;
+    if (saved && inputRef?.current) {
+      if (inputRef.current.focus) inputRef.current.focus();
+      if (typeof inputRef.current.setSelection === 'function') {
+        inputRef.current.setSelection(saved.start, saved.end);
+      } else if (inputRef.current.setNativeProps) {
+        inputRef.current.setNativeProps({ selection: saved });
+      }
     }
   };
 
@@ -583,6 +600,7 @@ export const PptTextToolbar = ({
       <View style={styles.tabHeaderRow}>
         <TouchableOpacity
           style={[styles.tabHeaderBtn, activeTab === 'text' && styles.tabHeaderBtnActive]}
+          onPressIn={handlePressIn}
           onPress={() => setActiveTab('text')}
         >
           <Text style={[styles.tabHeaderBtnText, activeTab === 'text' && styles.tabHeaderBtnTextActive]}>
@@ -592,6 +610,7 @@ export const PptTextToolbar = ({
 
         <TouchableOpacity
           style={[styles.tabHeaderBtn, activeTab === 'font' && styles.tabHeaderBtnActive]}
+          onPressIn={handlePressIn}
           onPress={() => setActiveTab('font')}
         >
           <Text style={[styles.tabHeaderBtnText, activeTab === 'font' && styles.tabHeaderBtnTextActive]}>
@@ -601,6 +620,7 @@ export const PptTextToolbar = ({
 
         <TouchableOpacity
           style={[styles.tabHeaderBtn, activeTab === 'color' && styles.tabHeaderBtnActive]}
+          onPressIn={handlePressIn}
           onPress={() => setActiveTab('color')}
         >
           <Text style={[styles.tabHeaderBtnText, activeTab === 'color' && styles.tabHeaderBtnTextActive]}>
@@ -828,6 +848,7 @@ export const PptTextToolbar = ({
                 styles.colorTargetBtn,
                 colorTarget === 'text' && styles.colorTargetBtnActive,
               ]}
+              onPressIn={handlePressIn}
               onPress={() => setColorTarget('text')}
             >
               <Text
@@ -846,6 +867,7 @@ export const PptTextToolbar = ({
                 styles.colorTargetBtn,
                 colorTarget === 'shadow' && styles.colorTargetBtnActive,
               ]}
+              onPressIn={handlePressIn}
               onPress={() => setColorTarget('shadow')}
             >
               <Text
@@ -873,6 +895,7 @@ export const PptTextToolbar = ({
                 styles.colorTargetBtn,
                 colorTarget === 'highlight' && styles.colorTargetBtnActive,
               ]}
+              onPressIn={handlePressIn}
               onPress={() => setColorTarget('highlight')}
             >
               <Text
