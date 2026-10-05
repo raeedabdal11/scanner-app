@@ -9,7 +9,6 @@ import {
   ToastAndroid,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { PptCropModal } from './PptCropModal';
 
 // Theme Colors for Border Picker Grid
 const BORDER_COLORS_GRID = [
@@ -28,7 +27,6 @@ export const PptImageToolbar = ({
   onClose,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'style' | 'crop' | 'border' | 'tools'
-  const [isCropModalVisible, setIsCropModalVisible] = useState(false);
 
   const isImageSelected = selectedElement && selectedElement.type === 'image';
 
@@ -97,7 +95,14 @@ export const PptImageToolbar = ({
     });
   };
 
-  // Crop Reset
+  // Crop Controls
+  const setCropSide = (side, delta) => {
+    const currentVal = currentCrop[side] || 0;
+    const newVal = Math.max(0, Math.min(0.4, Math.round((currentVal + delta) * 100) / 100));
+    const newCrop = { ...currentCrop, [side]: newVal };
+    updateImage({ crop: newCrop });
+  };
+
   const resetCrop = () => {
     updateImage({ crop: { top: 0, bottom: 0, left: 0, right: 0 } });
   };
@@ -142,10 +147,7 @@ export const PptImageToolbar = ({
 
             <TouchableOpacity
               style={[styles.tabHeaderBtn, activeSubTab === 'crop' && styles.tabHeaderBtnActive]}
-              onPress={() => {
-                setActiveSubTab('crop');
-                setIsCropModalVisible(true);
-              }}
+              onPress={() => setActiveSubTab('crop')}
             >
               <Ionicons name="crop-outline" size={15} color={activeSubTab === 'crop' ? '#ffffff' : '#aaaaaa'} />
               <Text style={[styles.tabHeaderBtnText, activeSubTab === 'crop' && styles.tabHeaderBtnTextActive]}>
@@ -286,17 +288,68 @@ export const PptImageToolbar = ({
       {/* SUB-TAB 3: CROP ("بڕین") */}
       {isImageSelected && activeSubTab === 'crop' && (
         <View style={styles.tabContentBox}>
-          <View style={styles.cropSubTabRow}>
-            <TouchableOpacity style={styles.openCropModalBtn} onPress={() => setIsCropModalVisible(true)}>
-              <Ionicons name="crop" size={18} color="#ffffff" />
-              <Text style={styles.openCropModalBtnText}>کردنەوەی بڕینی وێنە</Text>
-            </TouchableOpacity>
-
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
             <TouchableOpacity style={styles.resetCropBtn} onPress={resetCrop}>
               <Ionicons name="refresh-outline" size={14} color="#ffffff" />
               <Text style={styles.resetCropText}>بێ بڕین (Reset)</Text>
             </TouchableOpacity>
-          </View>
+
+            {/* Top Crop */}
+            <View style={styles.stepperBox}>
+              <Text style={styles.stepperLabel}>سەرەوە (Top):</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('top', -0.05)}>
+                  <Text style={styles.stepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepValText}>{`${Math.round((currentCrop.top || 0) * 100)}%`}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('top', 0.05)}>
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Bottom Crop */}
+            <View style={styles.stepperBox}>
+              <Text style={styles.stepperLabel}>خوارەوە (Bottom):</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('bottom', -0.05)}>
+                  <Text style={styles.stepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepValText}>{`${Math.round((currentCrop.bottom || 0) * 100)}%`}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('bottom', 0.05)}>
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Left Crop */}
+            <View style={styles.stepperBox}>
+              <Text style={styles.stepperLabel}>چەپ (Left):</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('left', -0.05)}>
+                  <Text style={styles.stepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepValText}>{`${Math.round((currentCrop.left || 0) * 100)}%`}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('left', 0.05)}>
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Right Crop */}
+            <View style={styles.stepperBox}>
+              <Text style={styles.stepperLabel}>ڕاست (Right):</Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('right', -0.05)}>
+                  <Text style={styles.stepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepValText}>{`${Math.round((currentCrop.right || 0) * 100)}%`}</Text>
+                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('right', 0.05)}>
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
         </View>
       )}
 
@@ -384,22 +437,6 @@ export const PptImageToolbar = ({
             </TouchableOpacity>
           </View>
         </View>
-      )}
-
-      {/* Visual Full-Screen Crop Modal */}
-      {isImageSelected && selectedElement?.uri && (
-        <PptCropModal
-          visible={isCropModalVisible}
-          imageUri={selectedElement.uri}
-          initialCrop={selectedElement.crop}
-          onApply={(newCrop) => {
-            updateImage({ crop: newCrop });
-            setIsCropModalVisible(false);
-          }}
-          onCancel={() => {
-            setIsCropModalVisible(false);
-          }}
-        />
       )}
     </View>
   );
@@ -529,38 +566,51 @@ const styles = StyleSheet.create({
   chipBtnTextActive: {
     color: '#ffffff',
   },
-  cropSubTabRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  openCropModalBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#8B3A2B',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 8,
-  },
-  openCropModalBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
   resetCropBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#3a3a3c',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
   resetCropText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
+  },
+  stepperBox: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepperLabel: {
+    color: '#aaaaaa',
+    fontSize: 10,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  stepBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  stepBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  stepValText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    minWidth: 32,
+    textAlign: 'center',
   },
   borderWidthRow: {
     marginBottom: 8,
