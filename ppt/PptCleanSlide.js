@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { SLIDE, measureElementLayout } from './pptFit';
-import { getElementRuns, splitRuns } from './formattedText';
+import { SLIDE, measureElementLayout, splitRuns } from './pptFit';
+import { getElementRuns } from './formattedText';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -51,6 +51,20 @@ export const PptCleanSlide = React.forwardRef(({
         const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
         const formattedRuns = getElementRuns(elem);
 
+        const rotation = elem.rotation || 0;
+        const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
+        const borderRadiusPct = elem.borderRadius || 0;
+        const borderWidth = elem.border?.width || 0;
+        const borderColor = elem.border?.color || 'transparent';
+        const crop = elem.crop || { top: 0, bottom: 0, left: 0, right: 0 };
+        const cropLeft = crop.left || 0;
+        const cropRight = crop.right || 0;
+        const cropTop = crop.top || 0;
+        const cropBottom = crop.bottom || 0;
+        const visibleW = Math.max(0.05, 1 - cropLeft - cropRight);
+        const visibleH = Math.max(0.05, 1 - cropTop - cropBottom);
+        const calculatedRadius = (borderRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
+
         return (
           <View
             key={elem.id}
@@ -62,6 +76,8 @@ export const PptCleanSlide = React.forwardRef(({
                 width: elemWidth,
                 height: elemHeight,
                 zIndex: elem.zIndex || 1,
+                transform: rotation ? [{ rotate: `${rotation}deg` }] : [],
+                opacity,
               },
             ]}
           >
@@ -149,12 +165,30 @@ export const PptCleanSlide = React.forwardRef(({
                 </Text>
               </View>
             ) : elem.type === 'image' && elem.uri ? (
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: elem.uri }}
-                  style={styles.image}
-                  resizeMode="cover"
-                />
+              <View
+                style={[
+                  styles.imageContainer,
+                  {
+                    borderRadius: calculatedRadius,
+                    borderWidth: borderWidth,
+                    borderColor: borderColor,
+                    overflow: 'hidden',
+                  },
+                ]}
+              >
+                <View style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+                  <Image
+                    source={{ uri: elem.uri }}
+                    style={{
+                      position: 'absolute',
+                      width: `${(1 / visibleW) * 100}%`,
+                      height: `${(1 / visibleH) * 100}%`,
+                      left: `${-(cropLeft / visibleW) * 100}%`,
+                      top: `${-(cropTop / visibleH) * 100}%`,
+                    }}
+                    resizeMode={elem.fit === 'fit' ? 'contain' : 'cover'}
+                  />
+                </View>
               </View>
             ) : null}
           </View>

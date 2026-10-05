@@ -16,12 +16,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { PptCanvas } from './PptCanvas';
 import { PptCleanSlide } from './PptCleanSlide';
 import { PptTextToolbar } from './PptTextToolbar';
+import { PptImageToolbar } from './PptImageToolbar';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
 import { exportPresentationToPptx } from './pptExporter';
@@ -686,19 +688,163 @@ export const PptEditorModal = ({
     setEditingElementId(null);
   };
 
+  // Process and Add Image to Slide (Convert to JPEG max 2000px)
+  const processAndAddImage = async (inputUri, pageId, rawW, rawH) => {
+    try {
+      let imgW = rawW || 800;
+      let imgH = rawH || 600;
+
+      const actions = [];
+      if (imgW > 2000 || imgH > 2000) {
+        if (imgW >= imgH) {
+          actions.push({ resize: { width: 2000 } });
+        } else {
+          actions.push({ resize: { height: 2000 } });
+        }
+      }
+
+      const manipulated = await manipulateAsync(
+        inputUri,
+        actions,
+        { compress: 0.85, format: SaveFormat.JPEG }
+      );
+
+      const finalUri = manipulated.uri;
+      if (manipulated.width) imgW = manipulated.width;
+      if (manipulated.height) imgH = manipulated.height;
+
+      const targetPage = presentation.slides.find((s) => s.id === pageId);
+      const is43 = presentation.aspectRatio === '4:3';
+      const slideAspect = is43 ? 4 / 3 : 16 / 9;
+      const imgAspect = imgW / imgH;
+
+      let initW = 45;
+      let initH = (initW / imgAspect) * slideAspect;
+
+      if (initH > 70) {
+        initH = 70;
+        initW = (initH * imgAspect) / slideAspect;
+      }
+
+      const newElem = {
+        id: `img_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+        type: 'image',
+        uri: finalUri,
+        x: Math.round((100 - initW) / 2),
+        y: Math.round((100 - initH) / 2),
+        width: Math.round(initW * 10) / 10,
+        height: Math.round(initH * 10) / 10,
+        aspectRatio: imgAspect,
+        rotation: 0,
+        fit: 'fill',
+        crop: { top: 0, bottom: 0, left: 0, right: 0 },
+        borderRadius: 0,
+        border: { color: 'transparent', width: 0 },
+        opacity: 1.0,
+        locked: false,
+        zIndex: ((targetPage?.elements || []).length || 1) + 1,
+      };
+
+      const newSlides = presentation.slides.map((s) => {
+        if (s.id !== pageId) return s;
+        return { ...s, elements: [...(s.elements || []), newElem] };
+      });
+
+      const newPres = { ...presentation, slides: newSlides };
+      pushState(newPres, pageId);
+      setSelectedPageId(pageId);
+      setSelectedElementId(newElem.id);
+    } catch (err) {
+      console.log('[PPT Editor] processAndAddImage error:', err);
+    }
+  };
+
+  const handlePickGalleryImages = async () => {
+    try {
+      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      if (!targetPageId) {
+        Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+        return;
+      }
+
+      const res = await ExpoImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 1.0,
+      });
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        for (const asset of res.assets) {
+          await processAndAddImage(asset.uri, targetPageId, asset.width, asset.height);
+        }
+      }
+    } catch (err) {
+      console.log('[PPT Editor] Gallery pick error:', err);
+      Alert.alert('هەڵە', 'کێشەیەک ڕوویدا لە دیاریکردنی وێنە: ' + (err.message || err));
+    }
+  };
+
+  const handlePickCameraImage = async () => {
+    try {
+      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      if (!targetPageId) {
+        Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+        return;
+      }
+
+      const perm = await ExpoImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('مۆڵەت', 'تکایە مۆڵەتی کامێرا بدە بۆ گرتنی وێنە.');
+        return;
+      }
+
+      const res = await ExpoImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 1.0,
+      });
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const asset = res.assets[0];
+        await processAndAddImage(asset.uri, targetPageId, asset.width, asset.height);
+      }
+    } catch (err) {
+      console.log('[PPT Editor] Camera capture error:', err);
+      Alert.alert('هەڵە', 'کێشەیەک ڕوویدا لە گرتنی وێنە: ' + (err.message || err));
+    }
+  };
+
   // Change Image Element Source
   const handleChangeImageElement = async (pageId, elem) => {
     try {
       const res = await ExpoImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 1.0,
       });
 
       if (!res.canceled && res.assets?.length > 0) {
+        const asset = res.assets[0];
+        let imgW = asset.width || 800;
+        let imgH = asset.height || 600;
+
+        const actions = [];
+        if (imgW > 2000 || imgH > 2000) {
+          if (imgW >= imgH) {
+            actions.push({ resize: { width: 2000 } });
+          } else {
+            actions.push({ resize: { height: 2000 } });
+          }
+        }
+
+        const manipulated = await manipulateAsync(
+          asset.uri,
+          actions,
+          { compress: 0.85, format: SaveFormat.JPEG }
+        );
+
         handleUpdateElement(pageId, {
           ...elem,
-          uri: res.assets[0].uri,
+          uri: manipulated.uri,
         });
       }
     } catch (err) {
@@ -1293,8 +1439,8 @@ export const PptEditorModal = ({
                 )}
               </KeyboardAvoidingView>
 
-              {/* Text Toolbar when text element is selected */}
-              {selectedElement && selectedElement.type === 'text' && (
+              {/* Contextual / Persistent Bottom Toolbar */}
+              {selectedElement && selectedElement.type === 'text' ? (
                 <PptTextToolbar
                   element={selectedElement}
                   onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
@@ -1313,6 +1459,19 @@ export const PptEditorModal = ({
                   controlledSelection={controlledSelection}
                   setControlledSelection={setControlledSelection}
                   setShowSoftInputOnFocus={setShowSoftInputOnFocus}
+                />
+              ) : (
+                <PptImageToolbar
+                  selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
+                  onPickGallery={handlePickGalleryImages}
+                  onPickCamera={handlePickCameraImage}
+                  onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                  onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
+                  onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
+                  onClose={() => {
+                    setSelectedElementId(null);
+                    setEditingElementId(null);
+                  }}
                 />
               )}
 

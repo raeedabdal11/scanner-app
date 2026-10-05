@@ -314,6 +314,7 @@ export const PptCanvas = ({
         isDragging = false;
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (element.locked) return;
         const dist = Math.hypot(gestureState.dx, gestureState.dy);
         if (dist > 8) {
           isDragging = true;
@@ -414,6 +415,12 @@ export const PptCanvas = ({
           newH = initialH + (initialY - newY);
         }
 
+        // For image elements on corner handles, maintain aspect ratio
+        if (element.type === 'image' && (handleKey === 'tl' || handleKey === 'tr' || handleKey === 'bl' || handleKey === 'br')) {
+          const aspect = element.aspectRatio || (initialW / initialH) || 1.0;
+          newH = Math.max(MIN_H, newW / aspect);
+        }
+
         const updated = {
           ...element,
           x: Math.round(newX * 10) / 10,
@@ -499,6 +506,20 @@ export const PptCanvas = ({
           const activeStickyRange = isEditing ? stickyRangeRef?.current : null;
           const displayRuns = getDisplayRunsWithSelection(formattedRuns, activeStickyRange);
 
+          const rotation = elem.rotation || 0;
+          const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
+          const borderRadiusPct = elem.borderRadius || 0;
+          const borderWidth = elem.border?.width || 0;
+          const borderColor = elem.border?.color || 'transparent';
+          const crop = elem.crop || { top: 0, bottom: 0, left: 0, right: 0 };
+          const cropLeft = crop.left || 0;
+          const cropRight = crop.right || 0;
+          const cropTop = crop.top || 0;
+          const cropBottom = crop.bottom || 0;
+          const visibleW = Math.max(0.05, 1 - cropLeft - cropRight);
+          const visibleH = Math.max(0.05, 1 - cropTop - cropBottom);
+          const calculatedRadius = (borderRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
+
           return (
             <View
               key={`elem_wrapper_${elem.id}`}
@@ -510,6 +531,8 @@ export const PptCanvas = ({
                   width: elemWidth,
                   height: elemHeight,
                   zIndex: elem.zIndex || 1,
+                  transform: rotation ? [{ rotate: `${rotation}deg` }] : [],
+                  opacity,
                 },
                 isSelected && styles.selectedWrapper,
               ]}
@@ -594,13 +617,31 @@ export const PptCanvas = ({
                   )}
                 </View>
               ) : (
-                <View style={styles.imageContainer}>
+                <View
+                  style={[
+                    styles.imageContainer,
+                    {
+                      borderRadius: calculatedRadius,
+                      borderWidth: borderWidth,
+                      borderColor: borderColor,
+                      overflow: 'hidden',
+                    },
+                  ]}
+                >
                   {elem.uri ? (
-                    <Image
-                      source={{ uri: elem.uri }}
-                      style={styles.image}
-                      resizeMode="cover"
-                    />
+                    <View style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+                      <Image
+                        source={{ uri: elem.uri }}
+                        style={{
+                          position: 'absolute',
+                          width: `${(1 / visibleW) * 100}%`,
+                          height: `${(1 / visibleH) * 100}%`,
+                          left: `${-(cropLeft / visibleW) * 100}%`,
+                          top: `${-(cropTop / visibleH) * 100}%`,
+                        }}
+                        resizeMode={elem.fit === 'fit' ? 'contain' : 'cover'}
+                      />
+                    </View>
                   ) : (
                     <TouchableOpacity
                       style={styles.imagePlaceholder}
@@ -612,6 +653,13 @@ export const PptCanvas = ({
                       </Text>
                     </TouchableOpacity>
                   )}
+                </View>
+              )}
+
+              {/* Lock badge if element is locked */}
+              {elem.locked && (
+                <View style={styles.lockBadge}>
+                  <Text style={{ fontSize: 10 }}>🔒</Text>
                 </View>
               )}
 
@@ -815,5 +863,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  lockBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    zIndex: 100,
   },
 });

@@ -519,6 +519,8 @@ export const exportPresentationToPptx = async (
     const slideRunSpecs = {};
     // Stores text box scaling / fit specifications per slide
     const slideTextElemSpecs = {};
+    // Stores image element specifications per slide
+    const slideImageElemSpecs = {};
 
     for (const pageData of targetPages) {
       // Use planPage to get computed font sizes & split slides if text overflows
@@ -530,6 +532,7 @@ export const exportPresentationToPptx = async (
         slideCount++;
         slideRunSpecs[slideCount] = [];
         slideTextElemSpecs[slideCount] = [];
+        slideImageElemSpecs[slideCount] = [];
 
         // Set slide background color
         if (slideData.background && slideData.background !== '#ffffff') {
@@ -698,6 +701,14 @@ export const exportPresentationToPptx = async (
               const base64Img = await prepareImageForPptx(elem.uri);
               if (!base64Img) continue;
 
+              slideImageElemSpecs[slideCount].push({
+                crop: elem.crop || { top: 0, bottom: 0, left: 0, right: 0 },
+                borderRadius: elem.borderRadius || 0,
+                border: elem.border || { color: 'transparent', width: 0 },
+                opacity: elem.opacity !== undefined ? elem.opacity : 1.0,
+                rotation: elem.rotation || 0,
+              });
+
               slide.addImage({
                 data: base64Img,
                 x: xIn,
@@ -705,7 +716,7 @@ export const exportPresentationToPptx = async (
                 w: wIn,
                 h: hIn,
                 sizing: {
-                  type: 'cover',
+                  type: elem.fit === 'fit' ? 'contain' : 'cover',
                   w: wIn,
                   h: hIn,
                 },
@@ -952,6 +963,129 @@ export const exportPresentationToPptx = async (
               mainPPr.setAttribute('algn', 'r');
             }
             modified = true;
+          }
+        }
+
+        // Process Picture elements <p:pic> in slide (crop, opacity, rotation, rounded corners, border)
+        const picNodes = Array.from(slideDoc.getElementsByTagName('p:pic'));
+        const imageElemSpecs = slideImageElemSpecs[slideNum] || [];
+
+        for (let pIdx = 0; pIdx < picNodes.length; pIdx++) {
+          const picNode = picNodes[pIdx];
+          const spec = imageElemSpecs[pIdx];
+          if (!spec) continue;
+
+          // 1. Crop & Opacity in <p:blipFill>
+          const blipFillNodes = picNode.getElementsByTagName('p:blipFill');
+          if (blipFillNodes.length > 0) {
+            const blipFill = blipFillNodes[0];
+
+            // Crop: <a:srcRect l="..." t="..." r="..." b="..."/>
+            const crop = spec.crop || {};
+            const lVal = Math.round((crop.left || 0) * 100000);
+            const tVal = Math.round((crop.top || 0) * 100000);
+            const rVal = Math.round((crop.right || 0) * 100000);
+            const bVal = Math.round((crop.bottom || 0) * 100000);
+
+            if (lVal > 0 || tVal > 0 || rVal > 0 || bVal > 0) {
+              let srcRectNodes = blipFill.getElementsByTagName('a:srcRect');
+              let srcRect = srcRectNodes.length > 0 ? srcRectNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srcRect');
+              srcRect.setAttribute('l', String(lVal));
+              srcRect.setAttribute('t', String(tVal));
+              srcRect.setAttribute('r', String(rVal));
+              srcRect.setAttribute('b', String(bVal));
+
+              if (srcRectNodes.length === 0) {
+                if (blipFill.firstChild) {
+                  blipFill.insertBefore(srcRect, blipFill.firstChild);
+                } else {
+                  blipFill.appendChild(srcRect);
+                }
+              }
+              modified = true;
+            }
+
+            // Opacity: <a:alphaModFix amt="..."/> inside <a:blip>
+            if (spec.opacity !== undefined && spec.opacity < 1.0) {
+              const blipNodes = blipFill.getElementsByTagName('a:blip');
+              if (blipNodes.length > 0) {
+                const blip = blipNodes[0];
+                let alphaNodes = blip.getElementsByTagName('a:alphaModFix');
+                let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alphaModFix');
+                const amtVal = Math.round(Math.max(0.1, Math.min(1.0, spec.opacity)) * 100000);
+                alphaNode.setAttribute('amt', String(amtVal));
+
+                if (alphaNodes.length === 0) {
+                  blip.appendChild(alphaNode);
+                }
+                modified = true;
+              }
+            }
+          }
+
+          // 2. Shape Properties <p:spPr> (Rotation, Geometry/Rounded Corners, Border)
+          const spPrNodes = picNode.getElementsByTagName('p:spPr');
+          if (spPrNodes.length > 0) {
+            const spPr = spPrNodes[0];
+
+            // Rotation: <a:xfrm rot="...">
+            if (spec.rotation) {
+              const xfrmNodes = spPr.getElementsByTagName('a:xfrm');
+              if (xfrmNodes.length > 0) {
+                const xfrm = xfrmNodes[0];
+                let rotDeg = ((spec.rotation % 360) + 360) % 360;
+                const rotVal = Math.round(rotDeg * 60000);
+                xfrm.setAttribute('rot', String(rotVal));
+                modified = true;
+              }
+            }
+
+            // Rounded Corners: <a:prstGeom prst="roundRect">
+            if (spec.borderRadius && spec.borderRadius > 0) {
+              let prstGeomNodes = spPr.getElementsByTagName('a:prstGeom');
+              if (prstGeomNodes.length > 0) {
+                const prstGeom = prstGeomNodes[0];
+                prstGeom.setAttribute('prst', 'roundRect');
+
+                let avLstNodes = prstGeom.getElementsByTagName('a:avLst');
+                let avLst = avLstNodes.length > 0 ? avLstNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:avLst');
+
+                let gdNodes = avLst.getElementsByTagName('a:gd');
+                let gdNode = gdNodes.length > 0 ? gdNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:gd');
+                gdNode.setAttribute('name', 'adj');
+
+                // DrawingML roundRect adj: 0 to 50000
+                const adjVal = Math.round((spec.borderRadius / 50) * 50000);
+                gdNode.setAttribute('fmla', `val ${adjVal}`);
+
+                if (gdNodes.length === 0) avLst.appendChild(gdNode);
+                if (avLstNodes.length === 0) prstGeom.appendChild(avLst);
+                modified = true;
+              }
+            }
+
+            // Border: <a:ln w="...">
+            if (spec.border && spec.border.width > 0 && spec.border.color && spec.border.color !== 'transparent') {
+              const parsedClr = parseColor(spec.border.color, '000000');
+              if (parsedClr) {
+                let lnNodes = spPr.getElementsByTagName('a:ln');
+                let lnNode = lnNodes.length > 0 ? lnNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:ln');
+                const emuWidth = Math.round(spec.border.width * 12700); // 1 pt = 12700 EMUs
+                lnNode.setAttribute('w', String(emuWidth));
+
+                let solidFillNodes = lnNode.getElementsByTagName('a:solidFill');
+                let solidFillNode = solidFillNodes.length > 0 ? solidFillNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
+
+                let srgbClrNodes = solidFillNode.getElementsByTagName('a:srgbClr');
+                let srgbClrNode = srgbClrNodes.length > 0 ? srgbClrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
+                srgbClrNode.setAttribute('val', parsedClr.hex);
+
+                if (srgbClrNodes.length === 0) solidFillNode.appendChild(srgbClrNode);
+                if (solidFillNodes.length === 0) lnNode.appendChild(solidFillNode);
+                if (lnNodes.length === 0) spPr.appendChild(lnNode);
+                modified = true;
+              }
+            }
           }
         }
 
