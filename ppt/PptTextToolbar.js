@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -183,7 +183,7 @@ const SPECTRUM_COLORS_GRID = [
   ['#b02a1e', '#d97706', '#b45309', '#15803d', '#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6b21a8', '#831843'],
 ];
 
-export const PptTextToolbar = ({
+export const PptTextToolbar = forwardRef(({
   element,
   onChangeElement,
   onClose,
@@ -198,12 +198,36 @@ export const PptTextToolbar = ({
   controlledSelection: externalControlledSelection,
   setControlledSelection: externalSetControlledSelection,
   setShowSoftInputOnFocus,
-}) => {
+  onRequestClose,
+}, ref) => {
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
   const [editTextModal, setEditTextModal] = useState(false);
   const [tempText, setTempText] = useState(element?.text || '');
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+
+  // Expose back navigation handlers via ref
+  useImperativeHandle(ref, () => ({
+    closeSubModal: () => {
+      if (fontModalVisible) {
+        setFontModalVisible(false);
+        return 'font modal';
+      }
+      if (editTextModal) {
+        setEditTextModal(false);
+        return 'text edit modal';
+      }
+      return null;
+    },
+    closeTabPanel: () => {
+      if (activeTab !== 'text') {
+        setActiveTab('text');
+        setColorTarget('text');
+        return 'text toolbar tab';
+      }
+      return null;
+    },
+  }), [fontModalVisible, editTextModal, activeTab]);
 
   const localSelRef = useRef(null);
   const localPendingSelRef = useRef(null);
@@ -1160,7 +1184,12 @@ export const PptTextToolbar = ({
       )}
 
       {/* Edit Text Modal */}
-      <Modal visible={editTextModal} transparent animationType="slide">
+      <Modal
+        visible={editTextModal}
+        transparent
+        animationType="slide"
+        onRequestClose={onRequestClose || (() => setEditTextModal(false))}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>نوسینی دەق و تەحدیدکردن ✍️</Text>
@@ -1306,7 +1335,12 @@ export const PptTextToolbar = ({
       </Modal>
 
       {/* Font Selector Bottom Sheet */}
-      <Modal visible={fontModalVisible} transparent animationType="slide">
+      <Modal
+        visible={fontModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={onRequestClose || handleCloseFontModal}
+      >
         <TouchableOpacity
           style={styles.bottomSheetOverlay}
           activeOpacity={1}
@@ -1444,7 +1478,7 @@ export const PptTextToolbar = ({
       </Modal>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   toolbarContainer: {

@@ -12,7 +12,7 @@ import { getElementRuns } from './formattedText';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily }) => {
+export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, onRequestClose }) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   if (!presentation || !presentation.slides || presentation.slides.length === 0) {
@@ -39,7 +39,12 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily }) 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onRequestClose || onClose}
+    >
       <View style={styles.overlay}>
 
         {/* Top Header */}

@@ -286,6 +286,7 @@ export const PptCanvas = ({
   setControlledSelection,
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
+  onCanvasTap,
 }) => {
   const [resizingElement, setResizingElement] = useState(null);
   const localUserTouchRef = React.useRef(false);
@@ -460,8 +461,12 @@ export const PptCanvas = ({
           { width: canvasWidth, height: canvasHeight, backgroundColor: slide.background || '#ffffff' },
         ]}
         onPress={() => {
-          onSelectElement(null);
-          if (onEndInlineEditing) onEndInlineEditing();
+          if (onCanvasTap) {
+            onCanvasTap();
+          } else {
+            onSelectElement(null);
+            if (onEndInlineEditing) onEndInlineEditing();
+          }
         }}
       >
         {elements.map((elem) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ const BORDER_COLORS_GRID = [
   '#ff3b30', '#ff9500', '#34c759', '#007aff', '#5856d6', '#af52de', '#8e8e93', '#3a3a3c',
 ];
 
-export const PptImageToolbar = ({
+export const PptImageToolbar = forwardRef(({
   selectedElement,
   onPickGallery,
   onPickCamera,
@@ -25,8 +25,20 @@ export const PptImageToolbar = ({
   onDuplicateElement,
   onDeleteElement,
   onClose,
-}) => {
+}, ref) => {
   const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'style' | 'crop' | 'border' | 'tools'
+
+  // Expose back navigation handlers via ref
+  useImperativeHandle(ref, () => ({
+    closeSubModal: () => null,
+    closeTabPanel: () => {
+      if (activeSubTab !== 'insert') {
+        setActiveSubTab('insert');
+        return 'image toolbar tab (' + activeSubTab + ')';
+      }
+      return null;
+    },
+  }), [activeSubTab]);
 
   const isImageSelected = selectedElement && selectedElement.type === 'image';
 
@@ -440,7 +452,7 @@ export const PptImageToolbar = ({
       )}
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   toolbarContainer: {

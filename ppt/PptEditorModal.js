@@ -13,6 +13,7 @@ import {
   ToastAndroid,
   Animated,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoImagePicker from 'expo-image-picker';
@@ -110,6 +111,7 @@ const PageCard = React.memo(({
   setControlledSelection,
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
+  onCanvasTap,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -252,6 +254,7 @@ const PageCard = React.memo(({
         setControlledSelection={setControlledSelection}
         showSoftInputOnFocus={showSoftInputOnFocus}
         setShowSoftInputOnFocus={setShowSoftInputOnFocus}
+        onCanvasTap={onCanvasTap}
       />
     </View>
   );
@@ -299,6 +302,9 @@ export const PptEditorModal = ({
   const [currentOffscreenSlide, setCurrentOffscreenSlide] = useState(null);
   const offscreenSlideRef = useRef(null);
   const [createdDoc, setCreatedDoc] = useState(null);
+
+  const textToolbarRef = useRef(null);
+  const imageToolbarRef = useRef(null);
 
   const scrollViewRef = useRef(null);
 
@@ -424,95 +430,155 @@ export const PptEditorModal = ({
     }
   };
 
-  // BackHandler for Android Hardware Back Button
-  useEffect(() => {
-    if (!visible) return;
-
-    const onBackPress = () => {
-      if (editingElementId !== null) {
-        setEditingElementId(null);
-        return true;
-      }
-      if (exportModalVisible) {
-        setExportModalVisible(false);
-        return true;
-      }
-      if (layoutPickerVisible) {
-        setLayoutPickerVisible(false);
-        return true;
-      }
-      if (previewVisible) {
-        setPreviewVisible(false);
-        return true;
-      }
-      if (selectedElementId !== null) {
-        setSelectedElementId(null);
-        return true;
-      }
-      if (bgPickerPageId !== null) {
-        setBgPickerPageId(null);
-        return true;
-      }
-
-      Alert.alert(
-        'پاوەرپۆینت',
-        'ئایا دەتەوێت لە پاوەرپۆینت بچیتە دەرەوە؟ کارەکەت پاشەکەوت کراوە',
-        [
-          { text: 'نەخێر', style: 'cancel' },
-          { text: 'بەڵێ', onPress: () => onClose() },
-        ],
-        { cancelable: true }
-      );
-      return true;
-    };
-
-    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => subscription.remove();
-  }, [
-    visible,
+  const backStateRef = useRef({});
+  backStateRef.current = {
     editingElementId,
     exportModalVisible,
     layoutPickerVisible,
     previewVisible,
     selectedElementId,
     bgPickerPageId,
+    createdDoc,
     onClose,
-  ]);
+    textToolbarRef,
+    imageToolbarRef,
+    inputRef,
+  };
 
-  const handleTopClose = () => {
-    if (editingElementId !== null) {
-      setEditingElementId(null);
-      return;
+  const lastBackHandledTimeRef = useRef(0);
+
+  const handleBack = React.useCallback((isCanvasTap = false) => {
+    const now = Date.now();
+    if (!isCanvasTap && now - lastBackHandledTimeRef.current < 300) {
+      return true;
     }
+    lastBackHandledTimeRef.current = now;
+
+    const {
+      editingElementId,
+      exportModalVisible,
+      layoutPickerVisible,
+      previewVisible,
+      selectedElementId,
+      bgPickerPageId,
+      createdDoc,
+      onClose,
+      textToolbarRef,
+      imageToolbarRef,
+      inputRef,
+    } = backStateRef.current;
+
+    // 1 (2a). Any open sub-panel / sheet / picker / dialog
     if (exportModalVisible) {
       setExportModalVisible(false);
-      return;
+      console.log('[Back] handled: sub-modal / sheet (exportModal)');
+      return true;
     }
     if (layoutPickerVisible) {
       setLayoutPickerVisible(false);
-      return;
+      console.log('[Back] handled: sub-modal / sheet (layoutPicker)');
+      return true;
     }
     if (previewVisible) {
       setPreviewVisible(false);
-      return;
-    }
-    if (selectedElementId !== null) {
-      setSelectedElementId(null);
-      return;
+      console.log('[Back] handled: sub-modal / sheet (previewModal)');
+      return true;
     }
     if (bgPickerPageId !== null) {
       setBgPickerPageId(null);
-      return;
+      console.log('[Back] handled: sub-modal / picker (bgPicker)');
+      return true;
+    }
+    if (createdDoc !== null) {
+      setCreatedDoc(null);
+      console.log('[Back] handled: sub-modal / alert (exportResult)');
+      return true;
+    }
+    const textSubModal = textToolbarRef.current?.closeSubModal?.();
+    if (textSubModal) {
+      console.log('[Back] handled: sub-modal / picker (' + textSubModal + ')');
+      return true;
+    }
+    const imageSubModal = imageToolbarRef.current?.closeSubModal?.();
+    if (imageSubModal) {
+      console.log('[Back] handled: sub-modal / picker (' + imageSubModal + ')');
+      return true;
     }
 
+    // 2 (2b). A TextInput is being edited: Keyboard.dismiss() and blur, keep text
+    if (editingElementId !== null) {
+      if (inputRef.current?.blur) {
+        inputRef.current.blur();
+      }
+      Keyboard.dismiss();
+      setEditingElementId(null);
+      console.log('[Back] handled: text input blur');
+      return true;
+    }
+
+    // 3 (2c). An element (image/text box) is selected: deselect it
+    if (selectedElementId !== null) {
+      // If a toolbar tab/panel is open, close it back to default toolbar first
+      const textTab = textToolbarRef.current?.closeTabPanel?.();
+      if (textTab) {
+        console.log('[Back] handled: toolbar tab/panel (' + textTab + ')');
+        return true;
+      }
+      const imageTab = imageToolbarRef.current?.closeTabPanel?.();
+      if (imageTab) {
+        console.log('[Back] handled: toolbar tab/panel (' + imageTab + ')');
+        return true;
+      }
+
+      setSelectedElementId(null);
+      console.log('[Back] handled: element deselect');
+      return true;
+    }
+
+    // 4 (2d). A toolbar tab/panel is open (e.g. "زیادکردن", crop, shape/style panel): close back to default toolbar
+    const textTab = textToolbarRef.current?.closeTabPanel?.();
+    if (textTab) {
+      console.log('[Back] handled: toolbar tab/panel (' + textTab + ')');
+      return true;
+    }
+    const imageTab = imageToolbarRef.current?.closeTabPanel?.();
+    if (imageTab) {
+      console.log('[Back] handled: toolbar tab/panel (' + imageTab + ')');
+      return true;
+    }
+
+    // 5 (2e). Otherwise: call the editor's existing close/exit handler (same as X button)
+    if (isCanvasTap) {
+      return false;
+    }
+
+    console.log('[Back] handled: exit confirmation handler');
     Alert.alert(
       'پاوەرپۆینت',
       'ئایا دەتەوێت لە پاوەرپۆینت بچیتە دەرەوە؟ کارەکەت پاشەکەوت کراوە',
       [
         { text: 'نەخێر', style: 'cancel' },
         { text: 'بەڵێ', onPress: () => onClose() },
-      ]
+      ],
+      { cancelable: true }
     );
+    return true;
+  }, []);
+
+  // BackHandler for Android Hardware Back Button
+  useEffect(() => {
+    if (!visible) return;
+
+    const onBackPress = () => {
+      return handleBack(false);
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [visible, handleBack]);
+
+  const handleTopClose = () => {
+    handleBack(false);
   };
 
   // Add Page (Appends directly BELOW last page in continuous scroll and auto-scrolls down)
@@ -1151,7 +1217,12 @@ export const PptEditorModal = ({
   const totalLiveSlides = countSlides(presentation.slides);
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => handleBack(false)}
+    >
       <View style={styles.overlay}>
         <View style={styles.container}>
 
@@ -1484,6 +1555,7 @@ export const PptEditorModal = ({
                             setControlledSelection={setControlledSelection}
                             showSoftInputOnFocus={showSoftInputOnFocus}
                             setShowSoftInputOnFocus={setShowSoftInputOnFocus}
+                            onCanvasTap={() => handleBack(true)}
                           />
 
                           {/* Page Divider between pages */}
@@ -1515,6 +1587,7 @@ export const PptEditorModal = ({
               {/* Contextual / Persistent Bottom Toolbar */}
               {selectedElement && selectedElement.type === 'text' ? (
                 <PptTextToolbar
+                  ref={textToolbarRef}
                   element={selectedElement}
                   onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
                   onClose={() => {
@@ -1532,9 +1605,11 @@ export const PptEditorModal = ({
                   controlledSelection={controlledSelection}
                   setControlledSelection={setControlledSelection}
                   setShowSoftInputOnFocus={setShowSoftInputOnFocus}
+                  onRequestClose={() => handleBack(false)}
                 />
               ) : (
                 <PptImageToolbar
+                  ref={imageToolbarRef}
                   selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
                   onPickGallery={handlePickGalleryImages}
                   onPickCamera={handlePickCameraImage}
@@ -1545,6 +1620,7 @@ export const PptEditorModal = ({
                     setSelectedElementId(null);
                     setEditingElementId(null);
                   }}
+                  onRequestClose={() => handleBack(false)}
                 />
               )}
 
@@ -1563,10 +1639,16 @@ export const PptEditorModal = ({
             presentation={presentation}
             onClose={() => setPreviewVisible(false)}
             fontFamily={vazirmatnFont}
+            onRequestClose={() => handleBack(false)}
           />
 
           {/* PowerPoint Preview Before Export Modal */}
-          <Modal visible={exportModalVisible} transparent animationType="slide">
+          <Modal
+            visible={exportModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => handleBack(false)}
+          >
             <View style={styles.exportSheetOverlay}>
               <TouchableOpacity
                 style={styles.exportBackdrop}
