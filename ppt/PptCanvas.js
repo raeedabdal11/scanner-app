@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,70 @@ const RESIZE_HANDLES = [
   { key: 'br', style: { right: -16, bottom: -16 } },
 ];
 
+function useRenderWhy(name, props) {
+  const prevRef = useRef(null);
+  useEffect(() => {
+    if (prevRef.current) {
+      const changed = [];
+      for (const key in props) {
+        if (prevRef.current[key] !== props[key]) {
+          changed.push(key);
+        }
+      }
+      if (changed.length > 0) {
+        console.log(`[RENDER-WHY] ${name} changed: ${changed.join(', ')}`);
+      } else {
+        console.log(`[RENDER-WHY] ${name} re-rendered with identical props`);
+      }
+    } else {
+      console.log(`[RENDER-WHY] ${name} mounted`);
+    }
+    prevRef.current = props;
+  });
+}
+
+function renderStyledTextChildren(formattedRuns, scaledBaseSize, fontFamily, elem) {
+  const runs = formattedRuns ?? [];
+  return runs.map((run, rIdx) => {
+    const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+    const runScaledFontSize = scaledBaseSize * runScale;
+    const runLineHeight = runScaledFontSize * 1.35;
+    const scriptRuns = splitRuns(
+      run.text || '',
+      run.kurdishFont || run.kuFont || elem?.kurdishFont || 'Tahoma',
+      run.englishFont || run.enFont || elem?.englishFont || 'Calibri'
+    );
+    const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
+    const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
+    const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem?.textShadowOffset || elem?.shadowOffset || { width: 2, height: 2 };
+    const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem?.textShadowRadius !== undefined ? elem.textShadowRadius : (elem?.shadowRadius !== undefined ? elem.shadowRadius : 3)));
+
+    return (
+      <Text
+        key={`trun_${rIdx}`}
+        style={{
+          fontSize: runScaledFontSize,
+          lineHeight: runLineHeight,
+          fontWeight: run.bold ? 'bold' : elem?.fontWeight || 'normal',
+          fontStyle: run.italic ? 'italic' : elem?.fontStyle || 'normal',
+          textDecorationLine: run.underline ? 'underline' : elem?.textDecorationLine || 'none',
+          color: run.color || '#1c1c1e',
+          backgroundColor: runHighlight,
+          textShadowColor: runShadow,
+          textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
+          textShadowRadius: runShadow ? runShadowRadius : 0,
+        }}
+      >
+        {(scriptRuns ?? []).map((sRun, sIdx) => (
+          <Text key={`tsrun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+            {sRun.text}
+          </Text>
+        ))}
+      </Text>
+    );
+  });
+}
+
 const InlineTextInput = React.memo(({
   elem,
   inputRef,
@@ -41,140 +105,144 @@ const InlineTextInput = React.memo(({
   onEndInlineEditing,
 }) => {
   console.log('[RENDER] TextInput');
-
-  const memoizedStyledChildren = useMemo(() => {
-    return (formattedRuns ?? []).map((run, rIdx) => {
-      const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
-      const runScaledFontSize = scaledBaseSize * runScale;
-      const runLineHeight = runScaledFontSize * 1.35;
-      const scriptRuns = splitRuns(
-        run.text || '',
-        run.kurdishFont || run.kuFont || elem.kurdishFont || 'Tahoma',
-        run.englishFont || run.enFont || elem.englishFont || 'Calibri'
-      );
-      const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? (run.highlight || run.highlightColor) : undefined;
-      const runShadow = (run.shadowColor || run.shadow || run.textShadowColor) && (run.shadowColor || run.shadow || run.textShadowColor) !== 'transparent' ? (run.shadowColor || run.shadow || run.textShadowColor) : undefined;
-      const runShadowOffset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
-      const runShadowRadius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
-
-      return (
-        <Text
-          key={`trun_${rIdx}`}
-          style={{
-            fontSize: runScaledFontSize,
-            lineHeight: runLineHeight,
-            fontWeight: run.bold ? 'bold' : elem.fontWeight || 'normal',
-            fontStyle: run.italic ? 'italic' : elem.fontStyle || 'normal',
-            textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
-            color: run.color || '#1c1c1e',
-            backgroundColor: runHighlight,
-            textShadowColor: runShadow,
-            textShadowOffset: runShadow ? runShadowOffset : { width: 0, height: 0 },
-            textShadowRadius: runShadow ? runShadowRadius : 0,
-          }}
-        >
-          {(scriptRuns ?? []).map((sRun, sIdx) => (
-            <Text key={`tsrun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
-              {sRun.text}
-            </Text>
-          ))}
-        </Text>
-      );
-    });
-  }, [
-    formattedRuns,
+  useRenderWhy('TextInput', {
+    elemId: elem?.id,
+    elemText: elem?.text,
     scaledBaseSize,
     fontFamily,
-    elem.fontWeight,
-    elem.fontStyle,
-    elem.textDecorationLine,
-    elem.kurdishFont,
-    elem.englishFont,
-    elem.textShadowOffset,
-    elem.shadowOffset,
-    elem.textShadowRadius,
-    elem.shadowRadius,
-  ]);
+    controlledSelection,
+    formattedRunsLength: formattedRuns?.length,
+  });
+
+  const onChangeElementRef = useRef(onChangeElement);
+  onChangeElementRef.current = onChangeElement;
+
+  const onEndInlineEditingRef = useRef(onEndInlineEditing);
+  onEndInlineEditingRef.current = onEndInlineEditing;
+
+  const handleTouchStart = useCallback(() => {
+    if (userTouchRef) userTouchRef.current = true;
+    if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
+    touchTimeoutRef.current = setTimeout(() => {
+      if (userTouchRef) userTouchRef.current = false;
+    }, 500);
+
+    if (externalIsApplyingStyleRef?.current) {
+      externalIsApplyingStyleRef.current = false;
+      if (setControlledSelection && controlledSelection !== undefined) {
+        setControlledSelection(undefined);
+      }
+      console.log('[GUARD] off (user touch)');
+    }
+  }, [userTouchRef, touchTimeoutRef, externalIsApplyingStyleRef, setControlledSelection, controlledSelection]);
+
+  const handleSelectionChange = useCallback((e) => {
+    const sel = e.nativeEvent.selection;
+    const isGuardActive = externalIsApplyingStyleRef?.current;
+    const saved = stickyRangeRef?.current;
+
+    if (isGuardActive) {
+      const textLen = (elem?.text || '').length;
+      const isCollapsedAtEnd = sel.start === sel.end && sel.start === textLen;
+      const matchesSaved = saved && sel.start === saved.start && sel.end === saved.end;
+
+      if (!userTouchRef?.current && (matchesSaved || isCollapsedAtEnd)) {
+        console.log('[SEL] ignored', sel);
+        return;
+      }
+
+      externalIsApplyingStyleRef.current = false;
+      if (setControlledSelection && controlledSelection !== undefined) {
+        setControlledSelection(undefined);
+      }
+      console.log('[GUARD] off (user selection)');
+    }
+
+    console.log('[SEL] user', sel);
+    if (stickyRangeRef) stickyRangeRef.current = sel;
+  }, [elem?.text, externalIsApplyingStyleRef, stickyRangeRef, userTouchRef, setControlledSelection, controlledSelection]);
+
+  const handleChangeText = useCallback((text) => {
+    if (externalIsApplyingStyleRef?.current) {
+      return;
+    }
+    const cursorPos = stickyRangeRef?.current?.start ?? text.length;
+    if (stickyRangeRef) stickyRangeRef.current = { start: cursorPos, end: cursorPos };
+    if (text === elem?.text) return;
+    const updated = updateTextWithRuns(elem, text);
+    if (onChangeElementRef.current) onChangeElementRef.current(updated);
+  }, [elem, externalIsApplyingStyleRef, stickyRangeRef]);
+
+  const handleBlur = useCallback(() => {
+    if (onEndInlineEditingRef.current) onEndInlineEditingRef.current();
+  }, []);
+
+  const inputStyle = useMemo(() => ({
+    flex: 1,
+    fontSize: scaledBaseSize,
+    fontWeight: elem?.fontWeight || 'normal',
+    fontStyle: elem?.fontStyle || 'normal',
+    textDecorationLine: elem?.textDecorationLine || 'none',
+    textAlign: elem?.textAlign || 'right',
+    writingDirection: elem?.writingDirection || 'rtl',
+    lineHeight: scaledBaseSize * (elem?.lineSpacing || 1.35),
+    fontFamily: elem?.kurdishFont || elem?.englishFont || fontFamily || undefined,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    borderRadius: 4,
+    margin: 0,
+    textAlignVertical: 'top',
+  }), [scaledBaseSize, elem?.fontWeight, elem?.fontStyle, elem?.textDecorationLine, elem?.textAlign, elem?.writingDirection, elem?.lineSpacing, elem?.kurdishFont, elem?.englishFont, fontFamily]);
 
   return (
     <TextInput
+      key={`native_input_${elem?.id}`}
       ref={inputRef}
-      style={{
-        flex: 1,
-        fontSize: scaledBaseSize,
-        fontWeight: elem.fontWeight || 'normal',
-        fontStyle: elem.fontStyle || 'normal',
-        textDecorationLine: elem.textDecorationLine || 'none',
-        textAlign: elem.textAlign || 'right',
-        writingDirection: elem.writingDirection || 'rtl',
-        lineHeight: scaledBaseSize * (elem.lineSpacing || 1.35),
-        fontFamily: elem.kurdishFont || elem.englishFont || fontFamily || undefined,
-        paddingHorizontal: 6,
-        paddingVertical: 6,
-        borderRadius: 4,
-        margin: 0,
-        textAlignVertical: 'top',
-      }}
+      style={inputStyle}
       multiline={true}
       autoFocus={true}
       selection={controlledSelection}
-      onTouchStart={() => {
-        if (userTouchRef) userTouchRef.current = true;
-        if (touchTimeoutRef.current) clearTimeout(touchTimeoutRef.current);
-        touchTimeoutRef.current = setTimeout(() => {
-          if (userTouchRef) userTouchRef.current = false;
-        }, 500);
-
-        if (externalIsApplyingStyleRef?.current) {
-          externalIsApplyingStyleRef.current = false;
-          if (setControlledSelection && controlledSelection !== undefined) {
-            setControlledSelection(undefined);
-          }
-          console.log('[GUARD] off (user touch)');
-        }
-      }}
-      onSelectionChange={(e) => {
-        const sel = e.nativeEvent.selection;
-        const isGuardActive = externalIsApplyingStyleRef?.current;
-        const saved = stickyRangeRef?.current;
-
-        if (isGuardActive) {
-          const textLen = (elem?.text || '').length;
-          const isCollapsedAtEnd = sel.start === sel.end && sel.start === textLen;
-          const matchesSaved = saved && sel.start === saved.start && sel.end === saved.end;
-
-          if (!userTouchRef?.current && (matchesSaved || isCollapsedAtEnd)) {
-            console.log('[SEL] ignored', sel);
-            return;
-          }
-
-          externalIsApplyingStyleRef.current = false;
-          if (setControlledSelection && controlledSelection !== undefined) {
-            setControlledSelection(undefined);
-          }
-          console.log('[GUARD] off (user selection)');
-        }
-
-        console.log('[SEL] user', sel);
-        if (stickyRangeRef) stickyRangeRef.current = sel;
-      }}
-      onChangeText={(text) => {
-        if (externalIsApplyingStyleRef?.current) {
-          return;
-        }
-        const cursorPos = stickyRangeRef?.current?.start ?? text.length;
-        if (stickyRangeRef) stickyRangeRef.current = { start: cursorPos, end: cursorPos };
-        if (text === elem.text) return;
-        const updated = updateTextWithRuns(elem, text);
-        onChangeElement(updated);
-      }}
-      onBlur={() => {
-        if (onEndInlineEditing) onEndInlineEditing();
-      }}
+      onTouchStart={handleTouchStart}
+      onSelectionChange={handleSelectionChange}
+      onChangeText={handleChangeText}
+      onBlur={handleBlur}
     >
-      {memoizedStyledChildren}
+      {renderStyledTextChildren(formattedRuns, scaledBaseSize, fontFamily, elem)}
     </TextInput>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.elem?.id !== nextProps.elem?.id) return false;
+  if (prevProps.elem?.text !== nextProps.elem?.text) return false;
+  if (prevProps.scaledBaseSize !== nextProps.scaledBaseSize) return false;
+  if (prevProps.fontFamily !== nextProps.fontFamily) return false;
+  if (prevProps.controlledSelection !== nextProps.controlledSelection) return false;
+
+  const p = prevProps.formattedRuns ?? [];
+  const n = nextProps.formattedRuns ?? [];
+  if (p.length !== n.length) return false;
+
+  for (let i = 0; i < p.length; i++) {
+    const pr = p[i];
+    const nr = n[i];
+    if (
+      pr.text !== nr.text ||
+      pr.bold !== nr.bold ||
+      pr.italic !== nr.italic ||
+      pr.underline !== nr.underline ||
+      pr.color !== nr.color ||
+      pr.highlight !== nr.highlight ||
+      pr.highlightColor !== nr.highlightColor ||
+      pr.sizeScale !== nr.sizeScale ||
+      pr.kuFont !== nr.kuFont ||
+      pr.enFont !== nr.enFont ||
+      pr.kurdishFont !== nr.kurdishFont ||
+      pr.englishFont !== nr.englishFont
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 });
 
 export const PptCanvas = ({
@@ -415,7 +483,7 @@ export const PptCanvas = ({
 
           return (
             <View
-              key={elem.id}
+              key={`elem_wrapper_${elem.id}`}
               style={[
                 styles.elementWrapper,
                 {
@@ -433,6 +501,7 @@ export const PptCanvas = ({
                 <View style={styles.textContainer}>
                   {isEditing ? (
                     <InlineTextInput
+                      key={`inline_input_${elem.id}`}
                       elem={elem}
                       inputRef={inputRef}
                       scaledBaseSize={scaledBaseSize}

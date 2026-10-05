@@ -76,7 +76,7 @@ const SPECTRUM_BG_COLORS = [
 ];
 
 // Single Page Card Component for Continuous Document Scroll
-const PageCard = ({
+const PageCard = React.memo(({
   slide,
   index,
   totalPages,
@@ -249,7 +249,7 @@ const PageCard = ({
       />
     </View>
   );
-};
+});
 
 export const PptEditorModal = ({
   visible,
@@ -1212,6 +1212,7 @@ export const PptEditorModal = ({
                           )}
 
                           <PageCard
+                            key={`page_card_${slide.id}`}
                             slide={slide}
                             index={index}
                             totalPages={presentation.slides.length}

@@ -22,6 +22,51 @@ import { applyStyle, wordRangeAt } from './richText';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+function useRenderWhy(name, props) {
+  const prevRef = useRef(null);
+  useEffect(() => {
+    if (prevRef.current) {
+      const changed = [];
+      for (const key in props) {
+        if (prevRef.current[key] !== props[key]) {
+          changed.push(key);
+        }
+      }
+      if (changed.length > 0) {
+        console.log(`[RENDER-WHY] ${name} changed: ${changed.join(', ')}`);
+      } else {
+        console.log(`[RENDER-WHY] ${name} re-rendered with identical props`);
+      }
+    } else {
+      console.log(`[RENDER-WHY] ${name} mounted`);
+    }
+    prevRef.current = props;
+  });
+}
+
+function renderStyledModalTextChildren(runs) {
+  const safeRuns = runs ?? [];
+  return safeRuns.map((r, i) => {
+    const hasOwnHighlight = (r.highlight || r.highlightColor) && (r.highlight || r.highlightColor) !== 'transparent';
+    const runHighlight = hasOwnHighlight ? (r.highlight || r.highlightColor) : undefined;
+
+    return (
+      <Text
+        key={`modal_trun_${i}`}
+        style={{
+          fontWeight: r.bold ? 'bold' : 'normal',
+          fontStyle: r.italic ? 'italic' : 'normal',
+          textDecorationLine: r.underline ? 'underline' : 'none',
+          color: r.color || '#1c1c1e',
+          backgroundColor: runHighlight,
+        }}
+      >
+        {r.text}
+      </Text>
+    );
+  });
+}
+
 function parseShadowColor(shadowColorStr) {
   if (!shadowColorStr || shadowColorStr === 'transparent' || shadowColorStr === 'none') {
     return { baseColor: '#000000', opacity: 0.6 };
@@ -265,29 +310,6 @@ export const PptTextToolbar = ({
 
   const runs = getElementRuns(element) || [];
   const baseSize = Math.round(element.computedFontSize || element.fontSize || 18);
-
-  const memoizedModalChildren = useMemo(() => {
-    console.log('[RENDER] Modal TextInput children');
-    return (runs ?? []).map((r, i) => {
-      const hasOwnHighlight = (r.highlight || r.highlightColor) && (r.highlight || r.highlightColor) !== 'transparent';
-      const runHighlight = hasOwnHighlight ? (r.highlight || r.highlightColor) : undefined;
-
-      return (
-        <Text
-          key={i}
-          style={{
-            fontWeight: r.bold ? 'bold' : 'normal',
-            fontStyle: r.italic ? 'italic' : 'normal',
-            textDecorationLine: r.underline ? 'underline' : 'none',
-            color: r.color || '#1c1c1e',
-            backgroundColor: runHighlight,
-          }}
-        >
-          {r.text}
-        </Text>
-      );
-    });
-  }, [runs]);
 
   const setRuns = (newRuns) => {
     const plain = newRuns.map((r) => r.text).join('');
@@ -1180,6 +1202,7 @@ export const PptTextToolbar = ({
             </ScrollView>
 
             <TextInput
+              key={`modal_input_${element?.id}`}
               ref={modalInputRef}
               selection={controlledSelection}
               style={[styles.modalInput, { color: undefined }]}
@@ -1229,7 +1252,7 @@ export const PptTextToolbar = ({
               placeholderTextColor="#777"
               textAlign={element.writingDirection === 'ltr' ? 'left' : 'right'}
             >
-              {memoizedModalChildren}
+              {renderStyledModalTextChildren(runs)}
             </TextInput>
 
             <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 10, textAlign: 'right' }}>
