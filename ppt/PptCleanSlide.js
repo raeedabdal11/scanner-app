@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { SLIDE, measureElementLayout, splitRuns } from './pptFit';
 import { getElementRuns } from './formattedText';
 
@@ -223,3 +224,192 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 });
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export async function renderSlideToHtml(slide, width = 960, height = 540, fontFamily = 'Tahoma', slideIndex = 0) {
+  const canvasWidth = width;
+  const canvasHeight = height;
+
+  const elements = [...(slide?.elements || [])].sort(
+    (a, b) => (a.zIndex || 1) - (b.zIndex || 1)
+  );
+
+  let embeddedImageCount = 0;
+  const elementHtmls = [];
+
+  for (const elem of elements) {
+    const uncroppedLeft = (elem.x / 100) * canvasWidth;
+    const uncroppedTop = (elem.y / 100) * canvasHeight;
+    const uncroppedWidth = (elem.width / 100) * canvasWidth;
+
+    let effectiveHeight = elem.height;
+    if (elem.type === 'text' && elem.text && elem.text.trim()) {
+      const computedPt = elem.computedFontSize || elem.fontSize || 18;
+      const layoutMeas = measureElementLayout(elem, computedPt);
+      const neededPercent = Math.ceil((layoutMeas.totalHeightPt / SLIDE.heightPt) * 100);
+      if (neededPercent > elem.height) {
+        effectiveHeight = Math.min(96 - (uncroppedTop / canvasHeight) * 100, neededPercent + 2);
+      }
+    }
+
+    const uncroppedHeight = (effectiveHeight / 100) * canvasHeight;
+
+    const rotation = elem.rotation || 0;
+    const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
+    const zIndex = elem.zIndex || 1;
+    const borderRadiusPct = elem.borderRadius || 0;
+    const borderWidth = elem.border?.width || 0;
+    const borderColor = elem.border?.color || 'transparent';
+
+    if (elem.type === 'text') {
+      const computedPt = elem.computedFontSize || elem.fontSize || 18;
+      const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
+      const formattedRuns = getElementRuns(elem);
+
+      const runsHtml = formattedRuns.map((run) => {
+        const runScale = run.sizeScale !== undefined ? run.sizeScale : 1.0;
+        const runFontSize = scaledBaseSize * runScale;
+        const scriptRuns = splitRuns(
+          run.text || '',
+          run.kurdishFont || run.kuFont || elem.kurdishFont || fontFamily || 'Tahoma',
+          run.englishFont || run.enFont || elem.englishFont || fontFamily || 'Calibri'
+        );
+        const runHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent' ? run.highlight || run.highlightColor : undefined;
+        const shadowColorStr = run.shadowColor || run.shadow || run.textShadowColor || elem.shadowColor || elem.shadow || elem.textShadowColor;
+        const runShadow = shadowColorStr && shadowColorStr !== 'transparent' && shadowColorStr !== 'none' ? shadowColorStr : undefined;
+        const offset = run.textShadowOffset || run.shadowOffset || elem.textShadowOffset || elem.shadowOffset || { width: 2, height: 2 };
+        const radius = run.textShadowRadius !== undefined ? run.textShadowRadius : (run.shadowRadius !== undefined ? run.shadowRadius : (elem.textShadowRadius !== undefined ? elem.textShadowRadius : (elem.shadowRadius !== undefined ? elem.shadowRadius : 3)));
+        const textShadowCss = runShadow ? `${offset.width || 2}pt ${offset.height || 2}pt ${radius}pt ${runShadow}` : 'none';
+
+        return scriptRuns.map((sRun) => `
+          <span style="
+            font-size: ${runFontSize.toFixed(2)}pt;
+            font-weight: ${run.bold ? 'bold' : elem.fontWeight || 'normal'};
+            font-style: ${run.italic ? 'italic' : elem.fontStyle || 'normal'};
+            text-decoration: ${run.underline ? 'underline' : elem.textDecorationLine || 'none'};
+            color: ${run.color || '#1c1c1e'};
+            ${runHighlight ? `background-color: ${runHighlight};` : ''}
+            ${runShadow ? `text-shadow: ${textShadowCss};` : ''}
+            font-family: '${sRun.fontFamily}', sans-serif;
+          ">${escapeHtml(sRun.text)}</span>
+        `).join('');
+      }).join('');
+
+      elementHtmls.push(`
+        <div style="
+          position: absolute;
+          left: ${uncroppedLeft.toFixed(2)}pt;
+          top: ${uncroppedTop.toFixed(2)}pt;
+          width: ${uncroppedWidth.toFixed(2)}pt;
+          height: ${uncroppedHeight.toFixed(2)}pt;
+          z-index: ${zIndex};
+          transform: rotate(${rotation}deg);
+          opacity: ${opacity};
+          padding: 2pt;
+          box-sizing: border-box;
+        ">
+          <div style="
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 6pt;
+            box-sizing: border-box;
+            text-align: ${elem.textAlign || 'right'};
+            direction: ${elem.writingDirection || 'rtl'};
+            line-height: ${(elem.lineSpacing || 1.35)};
+            word-break: break-word;
+            white-space: pre-wrap;
+          ">
+            ${runsHtml}
+          </div>
+        </div>
+      `);
+    } else if (elem.type === 'image' && elem.uri) {
+      const crop = elem.crop || { top: 0, bottom: 0, left: 0, right: 0 };
+      const cropLeft = crop.left || 0;
+      const cropRight = crop.right || 0;
+      const cropTop = crop.top || 0;
+      const cropBottom = crop.bottom || 0;
+      const visibleW = Math.max(0.05, 1 - cropLeft - cropRight);
+      const visibleH = Math.max(0.05, 1 - cropTop - cropBottom);
+
+      const left = uncroppedLeft + cropLeft * uncroppedWidth;
+      const top = uncroppedTop + cropTop * uncroppedHeight;
+      const elemWidth = uncroppedWidth * visibleW;
+      const elemHeight = uncroppedHeight * visibleH;
+
+      const calculatedRadius = (borderRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
+      const fit = elem.fit === 'fit' ? 'contain' : 'cover';
+
+      let base64Uri = null;
+      if (elem.uri.startsWith('data:')) {
+        base64Uri = elem.uri;
+      } else {
+        try {
+          const rawBase64 = await FileSystem.readAsStringAsync(elem.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          base64Uri = `data:image/jpeg;base64,${rawBase64}`;
+        } catch (err) {
+          console.log('[PDF Export] Failed to read image as Base64:', elem.uri, err?.message || err);
+        }
+      }
+
+      if (base64Uri) {
+        embeddedImageCount++;
+        elementHtmls.push(`
+          <div style="
+            position: absolute;
+            left: ${left.toFixed(2)}pt;
+            top: ${top.toFixed(2)}pt;
+            width: ${elemWidth.toFixed(2)}pt;
+            height: ${elemHeight.toFixed(2)}pt;
+            z-index: ${zIndex};
+            transform: rotate(${rotation}deg);
+            opacity: ${opacity};
+            border-radius: ${calculatedRadius.toFixed(2)}pt;
+            border: ${borderWidth}pt solid ${borderColor};
+            overflow: hidden;
+            box-sizing: border-box;
+          ">
+            <div style="
+              position: relative;
+              width: 100%;
+              height: 100%;
+              overflow: hidden;
+            ">
+              <img src="${base64Uri}" style="
+                position: absolute;
+                width: ${((1 / visibleW) * 100).toFixed(2)}%;
+                height: ${((1 / visibleH) * 100).toFixed(2)}%;
+                left: ${(-(cropLeft / visibleW) * 100).toFixed(2)}%;
+                top: ${(-(cropTop / visibleH) * 100).toFixed(2)}%;
+                object-fit: ${fit};
+              " />
+            </div>
+          </div>
+        `);
+      }
+    }
+  }
+
+  console.log(`[PDF Export] Embedded ${embeddedImageCount} images for slide ${slideIndex + 1}`);
+
+  return `
+    <div class="slide-page" style="background-color: ${slide?.background || '#ffffff'};">
+      ${elementHtmls.join('')}
+    </div>
+  `;
+}
+

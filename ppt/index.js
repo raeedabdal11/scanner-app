@@ -1,5 +1,5 @@
 export { PptEditorModal } from './PptEditorModal';
-export { PptCleanSlide } from './PptCleanSlide';
+export { PptCleanSlide, renderSlideToHtml } from './PptCleanSlide';
 export { exportPresentationToPptx } from './pptExporter';
 export { savePptDraft, loadPptDraft, clearPptDraft, createDefaultPresentation } from './pptDraftStorage';
 export { LAYOUTS, CATEGORIES } from './layouts';

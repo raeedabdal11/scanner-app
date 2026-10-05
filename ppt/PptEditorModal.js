@@ -21,7 +21,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { PptCanvas } from './PptCanvas';
-import { PptCleanSlide } from './PptCleanSlide';
+import { PptCleanSlide, renderSlideToHtml } from './PptCleanSlide';
 import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
@@ -958,30 +958,17 @@ export const PptEditorModal = ({
 
       setExportProgress({ current: 0, total: allSlidesToRender.length });
 
-      const capturedImageUris = [];
-
-      for (let i = 0; i < allSlidesToRender.length; i++) {
-        const slideObj = allSlidesToRender[i];
-        setCurrentOffscreenSlide(slideObj);
-        setExportProgress({ current: i + 1, total: allSlidesToRender.length });
-
-        await new Promise((resolve) => setTimeout(resolve, 180));
-
-        if (offscreenSlideRef.current) {
-          const imageUri = await captureRef(offscreenSlideRef, {
-            format: 'png',
-            quality: 1.0,
-            result: 'data-uri',
-          });
-          capturedImageUris.push(imageUri);
-        }
-      }
-
-      setCurrentOffscreenSlide(null);
-
       const is43 = presentation.aspectRatio === '4:3';
       const widthPt = 960;
       const heightPt = is43 ? 720 : 540;
+
+      const slideHtmls = [];
+      for (let i = 0; i < allSlidesToRender.length; i++) {
+        const slideObj = allSlidesToRender[i];
+        setExportProgress({ current: i + 1, total: allSlidesToRender.length });
+        const slideHtml = await renderSlideToHtml(slideObj, widthPt, heightPt, vazirmatnFont, i);
+        slideHtmls.push(slideHtml);
+      }
 
       const htmlContent = `
 <!DOCTYPE html>
@@ -1003,30 +990,23 @@ export const PptEditorModal = ({
     margin: 0;
     padding: 0;
     background-color: #ffffff;
+    font-family: sans-serif;
   }
   .slide-page {
+    position: relative;
     width: ${widthPt}pt;
     height: ${heightPt}pt;
     page-break-after: always;
     page-break-inside: avoid;
-    display: flex;
-    justify-content: center;
-    align-items: center;
     overflow: hidden;
-    background-color: #ffffff;
   }
   .slide-page:last-child {
     page-break-after: auto;
   }
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
 </style>
 </head>
 <body>
-  ${capturedImageUris.map((uri) => `<div class="slide-page"><img src="${uri}" /></div>`).join('')}
+  ${slideHtmls.join('')}
 </body>
 </html>
       `;
