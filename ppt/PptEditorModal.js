@@ -770,12 +770,105 @@ export const PptEditorModal = ({
       const res = await ExpoImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
+        selectionLimit: 10,
         quality: 1.0,
       });
 
       if (!res.canceled && res.assets && res.assets.length > 0) {
-        for (const asset of res.assets) {
-          await processAndAddImage(asset.uri, targetPageId, asset.width, asset.height);
+        const returnedCount = res.assets.length;
+        const newElementsToInsert = [];
+        let addedCount = 0;
+
+        const targetPage = presentation.slides.find((s) => s.id === targetPageId);
+        const initialZIndex = ((targetPage?.elements || []).length || 0) + 1;
+        const is43 = presentation.aspectRatio === '4:3';
+        const slideAspect = is43 ? 4 / 3 : 16 / 9;
+
+        for (let i = 0; i < res.assets.length; i++) {
+          const asset = res.assets[i];
+          try {
+            let imgW = asset.width || 800;
+            let imgH = asset.height || 600;
+
+            const actions = [];
+            if (imgW > 2000 || imgH > 2000) {
+              if (imgW >= imgH) {
+                actions.push({ resize: { width: 2000 } });
+              } else {
+                actions.push({ resize: { height: 2000 } });
+              }
+            }
+
+            const manipulated = await manipulateAsync(
+              asset.uri,
+              actions,
+              { compress: 0.85, format: SaveFormat.JPEG }
+            );
+
+            const finalUri = manipulated.uri;
+            if (manipulated.width) imgW = manipulated.width;
+            if (manipulated.height) imgH = manipulated.height;
+
+            const imgAspect = imgH ? imgW / imgH : 1.33;
+
+            let initW = 45;
+            let initH = (initW / imgAspect) * slideAspect;
+
+            if (initH > 70) {
+              initH = 70;
+              initW = (initH * imgAspect) / slideAspect;
+            }
+
+            const baseX = (100 - initW) / 2;
+            const baseY = (100 - initH) / 2;
+
+            const maxAllowedX = Math.max(0, 100 - initW);
+            const maxAllowedY = Math.max(0, 100 - initH);
+
+            let posX = baseX + (i * 5);
+            let posY = baseY + (i * 5);
+
+            posX = Math.max(0, Math.min(posX, maxAllowedX));
+            posY = Math.max(0, Math.min(posY, maxAllowedY));
+
+            const newElem = {
+              id: `img_${Date.now()}_${i}_${Math.random().toString().slice(2, 6)}`,
+              type: 'image',
+              uri: finalUri,
+              x: Math.round(posX * 10) / 10,
+              y: Math.round(posY * 10) / 10,
+              width: Math.round(initW * 10) / 10,
+              height: Math.round(initH * 10) / 10,
+              aspectRatio: imgAspect,
+              rotation: 0,
+              fit: 'fill',
+              crop: { top: 0, bottom: 0, left: 0, right: 0 },
+              borderRadius: 0,
+              border: { color: 'transparent', width: 0 },
+              opacity: 1.0,
+              locked: false,
+              zIndex: initialZIndex + i,
+            };
+
+            newElementsToInsert.push(newElem);
+            addedCount++;
+          } catch (assetErr) {
+            console.log('[PPT Editor] Error processing gallery image asset:', assetErr);
+          }
+        }
+
+        console.log(`[PPT Editor] Gallery picker returned ${returnedCount} assets, added ${addedCount} images.`);
+
+        if (newElementsToInsert.length > 0) {
+          const newSlides = presentation.slides.map((s) => {
+            if (s.id !== targetPageId) return s;
+            return { ...s, elements: [...(s.elements || []), ...newElementsToInsert] };
+          });
+
+          const newPres = { ...presentation, slides: newSlides };
+          pushState(newPres, targetPageId);
+          setSelectedPageId(targetPageId);
+          setSelectedElementId(newElementsToInsert[newElementsToInsert.length - 1].id);
         }
       }
     } catch (err) {
