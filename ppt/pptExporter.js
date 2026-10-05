@@ -179,6 +179,13 @@ const TAG_ORDER = {
   extlst: 130,
 };
 
+const WORD_TO_DRAWINGML_UNDERLINE = {
+  single: 'sng',
+  double: 'dbl',
+  thick: 'heavy',
+  dash: 'dash',
+};
+
 function getCleanTagName(node) {
   const name = node.localName || node.tagName || node.nodeName || '';
   return name.replace(/^[^:]+:/, '').toLowerCase();
@@ -300,6 +307,175 @@ export async function validatePptxZip(zip) {
   }
 
   return { valid: true };
+}
+
+/**
+ * Performs self-check on generated PPTX package:
+ * - File starts with bytes 50 4B 03 04
+ * - No ZIP entry ends with "/"
+ * - [Content_Types].xml is the first entry
+ * - Every <Override> PartName exists, and every relationship Target exists
+ * - No references to notesSlides/notesMasters remain when notes were removed
+ * Logs "[PPTX-CHECK] OK" or the exact problem.
+ */
+export async function performPptxSelfCheck(zip, uint8Array, hasNotes = false) {
+  const errors = [];
+
+  // 1. Check header bytes
+  if (!uint8Array || uint8Array.length < 4) {
+    errors.push('File buffer is empty or too short');
+  } else {
+    const b0 = uint8Array[0].toString(16).padStart(2, '0').toUpperCase();
+    const b1 = uint8Array[1].toString(16).padStart(2, '0').toUpperCase();
+    const b2 = uint8Array[2].toString(16).padStart(2, '0').toUpperCase();
+    const b3 = uint8Array[3].toString(16).padStart(2, '0').toUpperCase();
+    const header = `${b0} ${b1} ${b2} ${b3}`;
+    if (header !== '50 4B 03 04') {
+      errors.push(`Invalid ZIP header: ${header} (expected 50 4B 03 04)`);
+    }
+  }
+
+  const zipPaths = Object.keys(zip.files);
+
+  // 2. Check no entry ends with '/'
+  for (const path of zipPaths) {
+    if (path.endsWith('/')) {
+      errors.push(`ZIP entry ends with '/': ${path}`);
+    }
+  }
+
+  // 3. Check [Content_Types].xml is first entry
+  if (zipPaths.length === 0 || zipPaths[0] !== '[Content_Types].xml') {
+    errors.push(`First ZIP entry is '${zipPaths[0]}', expected '[Content_Types].xml'`);
+  }
+
+  // 4. Check <Override> PartNames and relationship Targets
+  const parser = new DOMParser({
+    errorHandler: { warning: () => {}, error: () => {}, fatalError: () => {} },
+  });
+
+  const ctFile = zip.file('[Content_Types].xml');
+  if (!ctFile) {
+    errors.push('[Content_Types].xml missing from package');
+  } else {
+    const ctXml = await ctFile.async('text');
+    const ctDoc = parser.parseFromString(ctXml, 'text/xml');
+    const overrides = Array.from(ctDoc.getElementsByTagName('Override'));
+    for (const ov of overrides) {
+      const pn = ov.getAttribute('PartName');
+      if (pn) {
+        const normPn = pn.startsWith('/') ? pn.slice(1) : pn;
+        if (!zip.file(normPn)) {
+          errors.push(`Override PartName does not exist in ZIP: ${pn}`);
+        }
+      }
+    }
+  }
+
+  // Check relationship targets in all .rels files
+  const relsFiles = zipPaths.filter((p) => p.endsWith('.rels'));
+  for (const relsPath of relsFiles) {
+    const relsContent = await zip.file(relsPath).async('text');
+    const relsDoc = parser.parseFromString(relsContent, 'text/xml');
+    const relElems = Array.from(relsDoc.getElementsByTagName('Relationship'));
+
+    let dirPath = '';
+    const relsIdx = relsPath.lastIndexOf('/_rels/');
+    if (relsIdx !== -1) {
+      dirPath = relsPath.substring(0, relsIdx);
+    } else if (relsPath.startsWith('_rels/')) {
+      dirPath = '';
+    }
+
+    for (const rel of relElems) {
+      const targetMode = rel.getAttribute('TargetMode');
+      if (targetMode === 'External') continue;
+
+      const target = rel.getAttribute('Target');
+      if (!target) continue;
+
+      let targetPath = '';
+      if (target.startsWith('/')) {
+        targetPath = target.slice(1);
+      } else if (dirPath) {
+        const parts = (dirPath + '/' + target).split('/');
+        const stack = [];
+        for (const p of parts) {
+          if (!p || p === '.') continue;
+          if (p === '..') {
+            if (stack.length > 0) stack.pop();
+          } else {
+            stack.push(p);
+          }
+        }
+        targetPath = stack.join('/');
+      } else {
+        targetPath = target;
+      }
+
+      if (!zip.file(targetPath)) {
+        errors.push(`Relationship Target in '${relsPath}' does not exist: '${target}' (resolved: '${targetPath}')`);
+      }
+    }
+  }
+
+  // 5. Check no references to notesSlides/notesMasters remain when notes removed
+  if (!hasNotes) {
+    for (const path of zipPaths) {
+      if (path.includes('notesSlides') || path.includes('notesMasters')) {
+        errors.push(`ZIP still contains notes entry when notes removed: ${path}`);
+      }
+    }
+
+    if (ctFile) {
+      const ctXml = await ctFile.async('text');
+      if (ctXml.includes('notesSlides') || ctXml.includes('notesMasters')) {
+        errors.push('[Content_Types].xml still references notesSlides/notesMasters when notes removed');
+      }
+    }
+
+    const presRelsFile = zip.file('ppt/_rels/presentation.xml.rels');
+    if (presRelsFile) {
+      const presRelsXml = await presRelsFile.async('text');
+      if (presRelsXml.includes('notesMaster') || presRelsXml.includes('notesMasters')) {
+        errors.push('ppt/_rels/presentation.xml.rels still references notesMaster when notes removed');
+      }
+    }
+
+    const presFile = zip.file('ppt/presentation.xml');
+    if (presFile) {
+      const presXml = await presFile.async('text');
+      if (presXml.includes('notesMasterIdLst')) {
+        errors.push('ppt/presentation.xml still references notesMasterIdLst when notes removed');
+      }
+    }
+
+    const slideRelsFiles = zipPaths.filter((p) => /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/i.test(p));
+    for (const sRelsPath of slideRelsFiles) {
+      const sRelsXml = await zip.file(sRelsPath).async('text');
+      if (sRelsXml.includes('notesSlide')) {
+        errors.push(`${sRelsPath} still references notesSlide when notes removed`);
+      }
+    }
+  }
+
+  // 6. Check no u="single" anywhere in slide XML
+  const slideFiles = zipPaths.filter((p) => /^ppt\/slides\/slide\d+\.xml$/i.test(p));
+  for (const sPath of slideFiles) {
+    const sXml = await zip.file(sPath).async('text');
+    if (sXml.includes('u="single"')) {
+      errors.push(`Slide XML '${sPath}' contains invalid u="single" attribute`);
+    }
+  }
+
+  if (errors.length === 0) {
+    console.log('[PPTX-CHECK] OK');
+    return { ok: true, errors: [] };
+  } else {
+    const problemMsg = errors.join('; ');
+    console.log(`[PPTX-CHECK] Error: ${problemMsg}`);
+    return { ok: false, errors, problemMsg };
+  }
 }
 
 /**
@@ -469,8 +645,9 @@ export const exportPresentationToPptx = async (
                   fontFace: sRun.fontFamily,
                   bold: runBold,
                   italic: runItalic,
-                  underline: runUnderline ? { style: 'single' } : false,
+                  underline: runUnderline ? { style: 'sng' } : false,
                   color: runColorObj ? runColorObj.hex : '1C1C1E',
+                  lang: 'ar-IQ',
                 };
 
                 pptxRuns.push({
@@ -498,9 +675,10 @@ export const exportPresentationToPptx = async (
               fontSize: fontSize,
               bold: isBold,
               italic: isItalic,
-              underline: isUnderline ? { style: 'single' } : false,
+              underline: isUnderline ? { style: 'sng' } : false,
               align: align,
               rtl: true,
+              lang: 'ar-IQ',
               lineSpacingMultiple: 1.35,
               margin: 0,
               fontFace: primaryFont,
@@ -574,12 +752,142 @@ export const exportPresentationToPptx = async (
     }
 
     let finalUint8Array = rawUint8Array;
+    let finalZip = null;
+
+    // Check whether any target page has speaker notes
+    const hasNotes = targetPages.some(
+      (p) => typeof p.notes === 'string' && p.notes.trim().length > 0
+    );
 
     try {
       const JSZip = require('jszip');
       const zip = await JSZip.loadAsync(rawUint8Array, { createFolders: false });
       const parser = new DOMParser();
 
+      // =========================================================================
+      // 1. REMOVE EMPTY NOTES (if no slide has speaker notes)
+      // =========================================================================
+      if (!hasNotes) {
+        // a) Remove all files under ppt/notesSlides/ and ppt/notesMasters/ (including _rels)
+        const notesPaths = Object.keys(zip.files).filter(
+          (p) => p.startsWith('ppt/notesSlides/') || p.startsWith('ppt/notesMasters/')
+        );
+        for (const np of notesPaths) {
+          zip.remove(np);
+        }
+
+        // b) Remove notes Override entries in [Content_Types].xml
+        const contentTypesFile = zip.file('[Content_Types].xml');
+        if (contentTypesFile) {
+          const ctXml = await contentTypesFile.async('text');
+          const ctDoc = parser.parseFromString(ctXml, 'text/xml');
+          const overrideElems = Array.from(ctDoc.getElementsByTagName('Override'));
+
+          for (const overrideElem of overrideElems) {
+            const pn = overrideElem.getAttribute('PartName');
+            if (pn) {
+              const normPn = pn.startsWith('/') ? pn.slice(1).toLowerCase() : pn.toLowerCase();
+              if (normPn.startsWith('ppt/notesslides/') || normPn.startsWith('ppt/notesmasters/')) {
+                if (overrideElem.parentNode) {
+                  overrideElem.parentNode.removeChild(overrideElem);
+                }
+              }
+            }
+          }
+          zip.file('[Content_Types].xml', new XMLSerializer().serializeToString(ctDoc));
+        }
+
+        // c) Remove notesMaster relationship in ppt/_rels/presentation.xml.rels
+        const presRelsFile = zip.file('ppt/_rels/presentation.xml.rels');
+        if (presRelsFile) {
+          const presRelsXml = await presRelsFile.async('text');
+          const presRelsDoc = parser.parseFromString(presRelsXml, 'text/xml');
+          const rels = Array.from(presRelsDoc.getElementsByTagName('Relationship'));
+          let relsModified = false;
+          for (const rel of rels) {
+            const type = rel.getAttribute('Type') || '';
+            const target = rel.getAttribute('Target') || '';
+            if (type.includes('notesMaster') || target.includes('notesMasters') || target.includes('notesMaster')) {
+              if (rel.parentNode) {
+                rel.parentNode.removeChild(rel);
+                relsModified = true;
+              }
+            }
+          }
+          if (relsModified) {
+            zip.file('ppt/_rels/presentation.xml.rels', new XMLSerializer().serializeToString(presRelsDoc));
+          }
+        }
+
+        // d) Remove <p:notesMasterIdLst> in ppt/presentation.xml
+        const presFile = zip.file('ppt/presentation.xml');
+        if (presFile) {
+          const presXml = await presFile.async('text');
+          const presDoc = parser.parseFromString(presXml, 'text/xml');
+          const lsts = Array.from(presDoc.getElementsByTagName('*')).filter(
+            (el) => el.localName === 'notesMasterIdLst' || el.tagName === 'p:notesMasterIdLst'
+          );
+          let presModified = false;
+          for (const lst of lsts) {
+            if (lst.parentNode) {
+              lst.parentNode.removeChild(lst);
+              presModified = true;
+            }
+          }
+          if (presModified) {
+            zip.file('ppt/presentation.xml', new XMLSerializer().serializeToString(presDoc));
+          }
+        }
+
+        // e) Remove notesSlide relationship in every ppt/slides/_rels/slideN.xml.rels
+        const slideRelsPaths = Object.keys(zip.files).filter((p) =>
+          /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/i.test(p)
+        );
+        for (const sRelsPath of slideRelsPaths) {
+          const sRelsXml = await zip.file(sRelsPath).async('text');
+          const sRelsDoc = parser.parseFromString(sRelsXml, 'text/xml');
+          const rels = Array.from(sRelsDoc.getElementsByTagName('Relationship'));
+          let sRelsModified = false;
+          for (const rel of rels) {
+            const type = rel.getAttribute('Type') || '';
+            const target = rel.getAttribute('Target') || '';
+            if (type.includes('notesSlide') || target.includes('notesSlide') || target.includes('notesSlides')) {
+              if (rel.parentNode) {
+                rel.parentNode.removeChild(rel);
+                sRelsModified = true;
+              }
+            }
+          }
+          if (sRelsModified) {
+            zip.file(sRelsPath, new XMLSerializer().serializeToString(sRelsDoc));
+          }
+        }
+
+        // f) Update docProps/app.xml <Notes> to 0
+        const appPropsFile = zip.file('docProps/app.xml');
+        if (appPropsFile) {
+          const appPropsXml = await appPropsFile.async('text');
+          const appPropsDoc = parser.parseFromString(appPropsXml, 'text/xml');
+          const notesElems = Array.from(appPropsDoc.getElementsByTagName('*')).filter(
+            (el) => el.localName === 'Notes' || el.tagName === 'Notes'
+          );
+          let appModified = false;
+          for (const nEl of notesElems) {
+            nEl.textContent = '0';
+            appModified = true;
+          }
+          if (appModified) {
+            zip.file('docProps/app.xml', new XMLSerializer().serializeToString(appPropsDoc));
+          }
+        }
+      }
+
+      // Regex for Arabic/Kurdish script detection
+      const IS_ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+      // =========================================================================
+      // 2. PROCESS SLIDES (RTL, Remove Empty Runs, Styles & <a:rPr> Child Orders)
+      // =========================================================================
       for (let slideNum = 1; slideNum <= slideCount; slideNum++) {
         const runSpecs = slideRunSpecs[slideNum] || [];
         const slideFileName = `ppt/slides/slide${slideNum}.xml`;
@@ -590,24 +898,60 @@ export const exportPresentationToPptx = async (
         const slideDoc = parser.parseFromString(xmlText, 'text/xml');
         let modified = false;
 
-        // Clean up duplicate <a:pPr> elements inserted by pptxgenjs inside paragraphs
-        const pNodes = slideDoc.getElementsByTagName('a:p');
+        // Process paragraphs in slide
+        const pNodes = Array.from(slideDoc.getElementsByTagName('a:p'));
         for (let pIdx = 0; pIdx < pNodes.length; pIdx++) {
           const pNode = pNodes[pIdx];
+
+          // Clean up duplicate <a:pPr> elements inserted by pptxgenjs inside paragraphs
           let firstPPrSeen = false;
-          const pChildren = [];
-          for (let j = 0; j < pNode.childNodes.length; j++) {
-            pChildren.push(pNode.childNodes[j]);
-          }
+          let mainPPr = null;
+          const pChildren = Array.from(pNode.childNodes);
+
           for (const child of pChildren) {
             if (child.nodeType === 1 && (child.localName === 'pPr' || child.nodeName === 'a:pPr')) {
               if (!firstPPrSeen) {
                 firstPPrSeen = true;
+                mainPPr = child;
               } else {
                 pNode.removeChild(child);
                 modified = true;
               }
             }
+          }
+
+          // Remove any empty text runs (<a:r> with missing or empty <a:t></a:t>)
+          const rChildren = Array.from(pNode.getElementsByTagName('a:r'));
+          for (const rNode of rChildren) {
+            const tNodes = rNode.getElementsByTagName('a:t');
+            const tText = tNodes.length > 0 ? (tNodes[0].textContent || '') : '';
+            if (tNodes.length === 0 || tText === '') {
+              if (rNode.parentNode) {
+                rNode.parentNode.removeChild(rNode);
+                modified = true;
+              }
+            }
+          }
+
+          // Proper RTL for Kurdish/Arabic: set rtl="1" on <a:pPr> (keep algn="r")
+          const pText = pNode.textContent || '';
+          const hasArabicText = IS_ARABIC_REGEX.test(pText);
+
+          if (hasArabicText) {
+            if (!mainPPr) {
+              mainPPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:pPr');
+              if (pNode.firstChild) {
+                pNode.insertBefore(mainPPr, pNode.firstChild);
+              } else {
+                pNode.appendChild(mainPPr);
+              }
+              modified = true;
+            }
+            mainPPr.setAttribute('rtl', '1');
+            if (!mainPPr.hasAttribute('algn')) {
+              mainPPr.setAttribute('algn', 'r');
+            }
+            modified = true;
           }
         }
 
@@ -664,7 +1008,7 @@ export const exportPresentationToPptx = async (
           modified = true;
         }
 
-        // Process text run nodes
+        // Process remaining text run nodes
         const runNodes = slideDoc.getElementsByTagName('a:r');
         let specIdx = 0;
 
@@ -672,31 +1016,6 @@ export const exportPresentationToPptx = async (
           const runNode = runNodes[i];
           const tNodes = runNode.getElementsByTagName('a:t');
           const runText = tNodes.length > 0 ? (tNodes[0].textContent || '') : '';
-
-          if (specIdx >= runSpecs.length) break;
-
-          let spec = runSpecs[specIdx];
-
-          // Match sequentially with specIdx advance
-          if (spec && (spec.text === runText || (runText && spec.text && (spec.text.startsWith(runText) || runText.startsWith(spec.text))))) {
-            if (spec.text === runText || runText.length >= spec.text.length) {
-              specIdx++;
-            }
-          } else {
-            // Fallback match if indices desynced
-            const foundIdx = runSpecs.findIndex(
-              (s, idx) => idx >= specIdx && (s.text === runText || (runText && s.text && (s.text.includes(runText) || runText.includes(s.text))))
-            );
-            if (foundIdx !== -1) {
-              specIdx = foundIdx;
-              spec = runSpecs[specIdx];
-              specIdx++;
-            } else {
-              continue;
-            }
-          }
-
-          if (!spec) continue;
 
           // Find or create <a:rPr> using DrawingML namespace
           let rPrNodes = runNode.getElementsByTagName('a:rPr');
@@ -710,84 +1029,132 @@ export const exportPresentationToPptx = async (
             } else {
               runNode.appendChild(rPrNode);
             }
+            modified = true;
           }
 
-          // 1. Text Color (<a:solidFill>)
-          if (spec.color && spec.color.hex) {
-            let solidFillNodes = rPrNode.getElementsByTagName('a:solidFill');
-            let solidFillNode = solidFillNodes.length > 0 ? solidFillNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
-            let clrNodes = solidFillNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
-            clrNode.setAttribute('val', spec.color.hex);
+          // Set lang="ar-IQ" altLang="en-US" on <a:rPr> for Kurdish/Arabic runs
+          const pParent = runNode.parentNode;
+          const pText = pParent ? (pParent.textContent || '') : '';
+          if (IS_ARABIC_REGEX.test(runText) || IS_ARABIC_REGEX.test(pText)) {
+            rPrNode.setAttribute('lang', 'ar-IQ');
+            rPrNode.setAttribute('altLang', 'en-US');
+            modified = true;
+          }
 
-            if (spec.color.alpha !== null && spec.color.alpha !== undefined) {
-              let alphaNodes = clrNode.getElementsByTagName('a:alpha');
-              let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
-              alphaNode.setAttribute('val', String(spec.color.alpha));
-              if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
+          if (specIdx < runSpecs.length) {
+            let spec = runSpecs[specIdx];
+
+            // Match sequentially with specIdx advance
+            if (spec && (spec.text === runText || (runText && spec.text && (spec.text.startsWith(runText) || runText.startsWith(spec.text))))) {
+              if (spec.text === runText || runText.length >= spec.text.length) {
+                specIdx++;
+              }
+            } else {
+              // Fallback match if indices desynced
+              const foundIdx = runSpecs.findIndex(
+                (s, idx) => idx >= specIdx && (s.text === runText || (runText && s.text && (s.text.includes(runText) || runText.includes(s.text))))
+              );
+              if (foundIdx !== -1) {
+                specIdx = foundIdx;
+                spec = runSpecs[specIdx];
+                specIdx++;
+              } else {
+                spec = null;
+              }
             }
 
-            if (clrNodes.length === 0) solidFillNode.appendChild(clrNode);
-            if (solidFillNodes.length === 0) rPrNode.appendChild(solidFillNode);
-            modified = true;
-          }
+            if (spec) {
+              // 1. Text Color (<a:solidFill>)
+              if (spec.color && spec.color.hex) {
+                let solidFillNodes = rPrNode.getElementsByTagName('a:solidFill');
+                let solidFillNode = solidFillNodes.length > 0 ? solidFillNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
+                let clrNodes = solidFillNode.getElementsByTagName('a:srgbClr');
+                let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
+                clrNode.setAttribute('val', spec.color.hex);
 
-          // 2. Text Shadow (<a:effectLst>)
-          if (!debugOptions.noShadow && spec.shadow && spec.shadow.hex) {
-            let effNodes = rPrNode.getElementsByTagName('a:effectLst');
-            let effNode = effNodes.length > 0 ? effNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:effectLst');
-            let shdwNodes = effNode.getElementsByTagName('a:outerShdw');
-            let shdwNode = shdwNodes.length > 0 ? shdwNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:outerShdw');
+                if (spec.color.alpha !== null && spec.color.alpha !== undefined) {
+                  let alphaNodes = clrNode.getElementsByTagName('a:alpha');
+                  let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
+                  alphaNode.setAttribute('val', String(spec.color.alpha));
+                  if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
+                }
 
-            shdwNode.setAttribute('blurRad', String(spec.shadow.blurRad !== undefined ? spec.shadow.blurRad : 38100));
-            shdwNode.setAttribute('dist', String(spec.shadow.dist !== undefined ? spec.shadow.dist : 35921));
-            shdwNode.setAttribute('dir', String(spec.shadow.dir !== undefined ? spec.shadow.dir : 2700000));
-            shdwNode.setAttribute('algn', 'ctr');
-            shdwNode.setAttribute('rotWithShape', '0');
+                if (clrNodes.length === 0) solidFillNode.appendChild(clrNode);
+                if (solidFillNodes.length === 0) rPrNode.appendChild(solidFillNode);
+                modified = true;
+              }
 
-            let clrNodes = shdwNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
-            clrNode.setAttribute('val', spec.shadow.hex);
+              // 2. Text Shadow (<a:effectLst>)
+              if (!debugOptions.noShadow && spec.shadow && spec.shadow.hex) {
+                let effNodes = rPrNode.getElementsByTagName('a:effectLst');
+                let effNode = effNodes.length > 0 ? effNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:effectLst');
+                let shdwNodes = effNode.getElementsByTagName('a:outerShdw');
+                let shdwNode = shdwNodes.length > 0 ? shdwNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:outerShdw');
 
-            const shadowAlpha = spec.shadow.alpha !== null && spec.shadow.alpha !== undefined ? spec.shadow.alpha : 60000;
-            let alphaNodes = clrNode.getElementsByTagName('a:alpha');
-            let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
-            alphaNode.setAttribute('val', String(shadowAlpha));
-            if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
+                shdwNode.setAttribute('blurRad', String(spec.shadow.blurRad !== undefined ? spec.shadow.blurRad : 38100));
+                shdwNode.setAttribute('dist', String(spec.shadow.dist !== undefined ? spec.shadow.dist : 35921));
+                shdwNode.setAttribute('dir', String(spec.shadow.dir !== undefined ? spec.shadow.dir : 2700000));
+                shdwNode.setAttribute('algn', 'ctr');
+                shdwNode.setAttribute('rotWithShape', '0');
 
-            if (clrNodes.length === 0) shdwNode.appendChild(clrNode);
-            if (shdwNodes.length === 0) effNode.appendChild(shdwNode);
-            if (effNodes.length === 0) rPrNode.appendChild(effNode);
-            modified = true;
-          } else {
-            let effNodes = rPrNode.getElementsByTagName('a:effectLst');
-            if (effNodes.length > 0) {
-              rPrNode.removeChild(effNodes[0]);
-              modified = true;
-            }
-          }
+                let clrNodes = shdwNode.getElementsByTagName('a:srgbClr');
+                let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
+                clrNode.setAttribute('val', spec.shadow.hex);
 
-          // 3. Text Highlight (<a:highlight>)
-          if (!debugOptions.noHighlight && spec.highlight && spec.highlight.hex) {
-            let hlNodes = rPrNode.getElementsByTagName('a:highlight');
-            let hlNode = hlNodes.length > 0 ? hlNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:highlight');
-            let clrNodes = hlNode.getElementsByTagName('a:srgbClr');
-            let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
-            clrNode.setAttribute('val', spec.highlight.hex);
+                const shadowAlpha = spec.shadow.alpha !== null && spec.shadow.alpha !== undefined ? spec.shadow.alpha : 60000;
+                let alphaNodes = clrNode.getElementsByTagName('a:alpha');
+                let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
+                alphaNode.setAttribute('val', String(shadowAlpha));
+                if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
 
-            if (clrNodes.length === 0) hlNode.appendChild(clrNode);
-            if (hlNodes.length === 0) rPrNode.appendChild(hlNode);
-            modified = true;
-          } else {
-            let hlNodes = rPrNode.getElementsByTagName('a:highlight');
-            if (hlNodes.length > 0) {
-              rPrNode.removeChild(hlNodes[0]);
-              modified = true;
+                if (clrNodes.length === 0) shdwNode.appendChild(clrNode);
+                if (shdwNodes.length === 0) effNode.appendChild(shdwNode);
+                if (effNodes.length === 0) rPrNode.appendChild(effNode);
+                modified = true;
+              } else {
+                let effNodes = rPrNode.getElementsByTagName('a:effectLst');
+                if (effNodes.length > 0) {
+                  rPrNode.removeChild(effNodes[0]);
+                  modified = true;
+                }
+              }
+
+              // 3. Text Highlight (<a:highlight>)
+              if (!debugOptions.noHighlight && spec.highlight && spec.highlight.hex) {
+                let hlNodes = rPrNode.getElementsByTagName('a:highlight');
+                let hlNode = hlNodes.length > 0 ? hlNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:highlight');
+                let clrNodes = hlNode.getElementsByTagName('a:srgbClr');
+                let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
+                clrNode.setAttribute('val', spec.highlight.hex);
+
+                if (clrNodes.length === 0) hlNode.appendChild(clrNode);
+                if (hlNodes.length === 0) rPrNode.appendChild(hlNode);
+                modified = true;
+              } else {
+                let hlNodes = rPrNode.getElementsByTagName('a:highlight');
+                if (hlNodes.length > 0) {
+                  rPrNode.removeChild(hlNodes[0]);
+                  modified = true;
+                }
+              }
             }
           }
 
           // Reorder child element nodes according to strict OOXML Schema
           reorderRPrChildren(rPrNode);
+        }
+
+        // Safety net: map any Word-style underline values on XML elements to valid DrawingML values
+        const elemsWithU = slideDoc.getElementsByTagName('*');
+        for (let eIdx = 0; eIdx < elemsWithU.length; eIdx++) {
+          const el = elemsWithU[eIdx];
+          if (el.hasAttribute('u')) {
+            const uVal = el.getAttribute('u');
+            if (WORD_TO_DRAWINGML_UNDERLINE[uVal]) {
+              el.setAttribute('u', WORD_TO_DRAWINGML_UNDERLINE[uVal]);
+              modified = true;
+            }
+          }
         }
 
         if (modified) {
@@ -824,7 +1191,7 @@ export const exportPresentationToPptx = async (
 
       const allFilePaths = Object.keys(zip.files).filter((path) => {
         const entry = zip.files[path];
-        return entry && !entry.dir;
+        return entry && !entry.dir && !path.endsWith('/');
       });
 
       // Add files in order: "[Content_Types].xml" first, then "_rels/.rels", then all other files
@@ -846,6 +1213,7 @@ export const exportPresentationToPptx = async (
         newZip.file(path, content, { createFolders: false });
       }
 
+      finalZip = newZip;
       const validation = await validatePptxZip(newZip);
       if (validation.valid) {
         finalUint8Array = await newZip.generateAsync({
@@ -862,6 +1230,15 @@ export const exportPresentationToPptx = async (
     } catch (zipErr) {
       console.log('[PPTX] Post-processing error, falling back to raw output:', zipErr);
       finalUint8Array = rawUint8Array;
+    }
+
+    // Perform self-check validation after generating
+    try {
+      if (finalZip) {
+        await performPptxSelfCheck(finalZip, finalUint8Array, hasNotes);
+      }
+    } catch (checkErr) {
+      console.log(`[PPTX-CHECK] Error: ${checkErr.message}`);
     }
 
     const now = new Date();
