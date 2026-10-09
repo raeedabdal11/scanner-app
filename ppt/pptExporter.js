@@ -761,10 +761,10 @@ export const exportPresentationToPptx = async (
             });
 
             try {
-              let pptxShapeType = pptx.shapes.RECTANGLE;
+              let pptxShapeType = shapeType || pptx.shapes.RECTANGLE;
               if (shapeType === 'roundRect') pptxShapeType = pptx.shapes.ROUNDED_RECTANGLE;
               else if (shapeType === 'ellipse') pptxShapeType = pptx.shapes.OVAL;
-              else if (isLineOrArrow) pptxShapeType = pptx.shapes.LINE;
+              else if (shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow') pptxShapeType = pptx.shapes.LINE;
 
               const shapeOpts = {
                 x: xIn,
@@ -1230,10 +1230,10 @@ export const exportPresentationToPptx = async (
             let prstGeomNodes = spPr.getElementsByTagName('a:prstGeom');
             let prstGeom = prstGeomNodes.length > 0 ? prstGeomNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:prstGeom');
 
-            let prstName = 'rect';
-            if (shapeType === 'roundRect') prstName = 'roundRect';
-            else if (shapeType === 'ellipse') prstName = 'ellipse';
-            else if (isLineOrArrow) prstName = 'line';
+            let prstName = shapeType || 'rect';
+            if (shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow') {
+              prstName = 'line';
+            }
 
             prstGeom.setAttribute('prst', prstName);
 

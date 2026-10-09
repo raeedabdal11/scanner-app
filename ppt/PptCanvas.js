@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
 import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from './formattedText';
+import { renderSvgShape } from './shapeCatalog';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -636,7 +637,7 @@ export const PptCanvas = ({
                   )}
                 </View>
               ) : elem.type === 'shape' ? (
-                <React.Fragment>
+                <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
                   {(() => {
                     const shapeType = elem.shapeType || 'rect';
                     const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
@@ -644,7 +645,6 @@ export const PptCanvas = ({
                     const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
                     const outlineWidth = outline.width || 0;
                     const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
-                    const shapeRadius = (cornerRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
 
                     const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / SLIDE.widthPt);
                     const textColor = elem.textColor || '#000000';
@@ -665,121 +665,37 @@ export const PptCanvas = ({
                       </Text>
                     ) : null;
 
-                    if (shapeType === 'rect') {
-                      return (
-                        <View
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            backgroundColor: fill,
-                            borderWidth: outlineWidth,
-                            borderColor: outlineColor,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            overflow: 'hidden',
-                            padding: 4,
-                          }}
-                        >
-                          {shapeTextElement}
-                        </View>
-                      );
-                    } else if (shapeType === 'roundRect') {
-                      return (
-                        <View
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            backgroundColor: fill,
-                            borderRadius: shapeRadius,
-                            borderWidth: outlineWidth,
-                            borderColor: outlineColor,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            overflow: 'hidden',
-                            padding: 4,
-                          }}
-                        >
-                          {shapeTextElement}
-                        </View>
-                      );
-                    } else if (shapeType === 'ellipse') {
-                      return (
-                        <View
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            backgroundColor: fill,
-                            borderRadius: 9999,
-                            borderWidth: outlineWidth,
-                            borderColor: outlineColor,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            overflow: 'hidden',
-                            padding: 4,
-                          }}
-                        >
-                          {shapeTextElement}
-                        </View>
-                      );
-                    } else if (shapeType === 'line') {
-                      const lineThickness = outlineWidth || 2;
-                      const lineColor = outline.color || '#000000';
-                      return (
-                        <View
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                          }}
-                        >
+                    return (
+                      <React.Fragment>
+                        {renderSvgShape({
+                          shapeType: shapeType,
+                          fill: fill,
+                          outlineColor: outlineColor,
+                          outlineWidth: outlineWidth,
+                          cornerRadius: cornerRadiusPct,
+                          svgWidth: '100%',
+                          svgHeight: '100%',
+                        })}
+                        {shapeTextElement && (
                           <View
                             style={{
-                              width: '100%',
-                              height: lineThickness,
-                              backgroundColor: lineColor,
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              padding: 4,
                             }}
-                          />
-                        </View>
-                      );
-                    } else if (shapeType === 'arrow') {
-                      const lineThickness = outlineWidth || 2;
-                      const lineColor = outline.color || '#000000';
-                      const headSize = Math.max(8, lineThickness * 3);
-                      return (
-                        <View
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <View
-                            style={{
-                              flex: 1,
-                              height: lineThickness,
-                              backgroundColor: lineColor,
-                            }}
-                          />
-                          <View
-                            style={{
-                              width: 0,
-                              height: 0,
-                              borderTopWidth: headSize / 2,
-                              borderBottomWidth: headSize / 2,
-                              borderLeftWidth: headSize,
-                              borderTopColor: 'transparent',
-                              borderBottomColor: 'transparent',
-                              borderLeftColor: lineColor,
-                            }}
-                          />
-                        </View>
-                      );
-                    }
-                    return null;
+                          >
+                            {shapeTextElement}
+                          </View>
+                        )}
+                      </React.Fragment>
+                    );
                   })()}
-                </React.Fragment>
+                </View>
               ) : (
                 <View
                   style={[

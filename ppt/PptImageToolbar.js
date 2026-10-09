@@ -23,6 +23,7 @@ export const PptImageToolbar = forwardRef(({
   onPickGallery,
   onPickCamera,
   onAddShape,
+  onOpenShapePicker,
   onChangeElement,
   onDuplicateElement,
   onDeleteElement,
@@ -258,8 +259,33 @@ export const PptImageToolbar = forwardRef(({
           {/* Small Panel for Shapes Options */}
           {showShapesPanel && (
             <View style={styles.shapesPanelBox}>
-              <Text style={styles.shapesPanelTitle}>شێوەیەک هەڵبژێرە:</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.shapesPanelTitle}>شێوەیەک هەڵبژێرە:</Text>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a84ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onOpenShapePicker) onOpenShapePicker();
+                  }}
+                >
+                  <Ionicons name="grid-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>لیستی گشتی...</Text>
+                </TouchableOpacity>
+              </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shapesRow}>
+                <TouchableOpacity
+                  style={[styles.shapeOptionBtn, { backgroundColor: '#0a84ff', borderWidth: 0 }]}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onOpenShapePicker) onOpenShapePicker();
+                  }}
+                >
+                  <Ionicons name="grid-outline" size={18} color="#ffffff" />
+                  <Text style={[styles.shapeOptionText, { color: '#ffffff', fontWeight: 'bold' }]}>
+                    هەموو شێوەکان
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={styles.shapeOptionBtn}
                   onPress={() => {
@@ -316,6 +342,28 @@ export const PptImageToolbar = forwardRef(({
                     <View style={styles.shapeIconArrowHead} />
                   </View>
                   <Text style={styles.shapeOptionText}>تیر</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('star5');
+                  }}
+                >
+                  <Ionicons name="star" size={18} color="#ffd60a" />
+                  <Text style={styles.shapeOptionText}>ئەستێرە</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('heart');
+                  }}
+                >
+                  <Ionicons name="heart" size={18} color="#ff3b30" />
+                  <Text style={styles.shapeOptionText}>دڵ</Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>

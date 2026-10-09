@@ -23,6 +23,7 @@ export const PptShapeToolbar = forwardRef(({
   onChangeElement,
   onDuplicateElement,
   onDeleteElement,
+  onOpenShapePicker,
   onClose,
 }, ref) => {
   const [activeSubTab, setActiveSubTab] = useState('fill'); // 'fill' | 'text' | 'outline' | 'style' | 'tools'
@@ -191,6 +192,18 @@ export const PptShapeToolbar = forwardRef(({
           <Ionicons name="build-outline" size={15} color={activeSubTab === 'tools' ? '#ffffff' : '#aaaaaa'} />
           <Text style={[styles.tabHeaderBtnText, activeSubTab === 'tools' && styles.tabHeaderBtnTextActive]}>
             ئامرازەکان
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabHeaderBtn, { backgroundColor: '#0a84ff', paddingHorizontal: 8 }]}
+          onPress={() => {
+            if (onOpenShapePicker) onOpenShapePicker('change');
+          }}
+        >
+          <Ionicons name="shapes-outline" size={15} color="#ffffff" />
+          <Text style={[styles.tabHeaderBtnText, { color: '#ffffff', fontWeight: 'bold' }]}>
+            گۆڕینی شێوە
           </Text>
         </TouchableOpacity>
       </View>

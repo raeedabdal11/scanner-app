@@ -28,6 +28,7 @@ import { PptImageToolbar } from './PptImageToolbar';
 import { PptShapeToolbar } from './PptShapeToolbar';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
+import { PptShapePickerModal } from './PptShapePickerModal';
 import { exportPresentationToPptx } from './pptExporter';
 import { planPage, countSlides } from './pptFit';
 import {
@@ -296,6 +297,8 @@ export const PptEditorModal = ({
   // Modals & Subpanels
   const [layoutPickerVisible, setLayoutPickerVisible] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [shapePickerVisible, setShapePickerVisible] = useState(false);
+  const [shapePickerMode, setShapePickerMode] = useState('add'); // 'add' | 'change'
   const [bgPickerPageId, setBgPickerPageId] = useState(null);
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const [selectedExportPageIds, setSelectedExportPageIds] = useState([]);
@@ -488,6 +491,11 @@ export const PptEditorModal = ({
     if (previewVisible) {
       setPreviewVisible(false);
       console.log('[Back] handled: sub-modal / sheet (previewModal)');
+      return true;
+    }
+    if (shapePickerVisible) {
+      setShapePickerVisible(false);
+      console.log('[Back] handled: sub-modal / sheet (shapePickerModal)');
       return true;
     }
     if (bgPickerPageId !== null) {
@@ -902,6 +910,19 @@ export const PptEditorModal = ({
       setSelectedElementId(newElem.id);
     } catch (err) {
       console.log('[PPT Editor] handleAddShape error:', err);
+    }
+  };
+
+  const handleOpenShapePicker = (mode = 'add') => {
+    setShapePickerMode(mode);
+    setShapePickerVisible(true);
+  };
+
+  const handleSelectShapeFromPicker = (shapeType) => {
+    if (shapePickerMode === 'change' && selectedElement && selectedElement.type === 'shape') {
+      handleUpdateElement(selectedPageId, { ...selectedElement, shapeType });
+    } else {
+      handleAddShape(shapeType);
     }
   };
 
@@ -1695,6 +1716,7 @@ export const PptEditorModal = ({
                   onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
                   onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
                   onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
+                  onOpenShapePicker={(mode) => handleOpenShapePicker(mode)}
                   onClose={() => {
                     setSelectedElementId(null);
                     setEditingElementId(null);
@@ -1708,6 +1730,7 @@ export const PptEditorModal = ({
                   onPickGallery={handlePickGalleryImages}
                   onPickCamera={handlePickCameraImage}
                   onAddShape={handleAddShape}
+                  onOpenShapePicker={() => handleOpenShapePicker('add')}
                   onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
                   onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
                   onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
@@ -1723,6 +1746,13 @@ export const PptEditorModal = ({
           )}
 
           {/* Sub Modals */}
+          <PptShapePickerModal
+            visible={shapePickerVisible}
+            onClose={() => setShapePickerVisible(false)}
+            onSelectShape={handleSelectShapeFromPicker}
+            title={shapePickerMode === 'change' ? 'گۆڕینی شێوە' : 'شێوەکانی پاورپۆینت'}
+          />
+
           <PptLayoutPickerModal
             visible={layoutPickerVisible}
             onClose={() => setLayoutPickerVisible(false)}

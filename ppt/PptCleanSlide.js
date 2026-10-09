@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SLIDE, measureElementLayout, splitRuns } from './pptFit';
 import { getElementRuns } from './formattedText';
+import { renderSvgShape, SHAPE_MAP } from './shapeCatalog';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -166,7 +167,7 @@ export const PptCleanSlide = React.forwardRef(({
                 </Text>
               </View>
             ) : elem.type === 'shape' ? (
-              <React.Fragment>
+              <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
                 {(() => {
                   const shapeType = elem.shapeType || 'rect';
                   const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
@@ -174,7 +175,6 @@ export const PptCleanSlide = React.forwardRef(({
                   const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
                   const outlineWidth = outline.width || 0;
                   const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
-                  const shapeRadius = (cornerRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
 
                   const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / SLIDE.widthPt);
                   const textColor = elem.textColor || '#000000';
@@ -195,84 +195,37 @@ export const PptCleanSlide = React.forwardRef(({
                     </Text>
                   ) : null;
 
-                  if (shapeType === 'rect') {
-                    return (
-                      <View
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          backgroundColor: fill,
-                          borderWidth: outlineWidth,
-                          borderColor: outlineColor,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          overflow: 'hidden',
-                          padding: 2,
-                        }}
-                      >
-                        {shapeTextElement}
-                      </View>
-                    );
-                  } else if (shapeType === 'roundRect') {
-                    return (
-                      <View
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          backgroundColor: fill,
-                          borderRadius: shapeRadius,
-                          borderWidth: outlineWidth,
-                          borderColor: outlineColor,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          overflow: 'hidden',
-                          padding: 2,
-                        }}
-                      >
-                        {shapeTextElement}
-                      </View>
-                    );
-                  } else if (shapeType === 'ellipse') {
-                    return (
-                      <View
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          backgroundColor: fill,
-                          borderRadius: 9999,
-                          borderWidth: outlineWidth,
-                          borderColor: outlineColor,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          overflow: 'hidden',
-                          padding: 2,
-                        }}
-                      >
-                        {shapeTextElement}
-                      </View>
-                    );
-                  } else if (shapeType === 'line') {
-                    const lineThickness = outlineWidth || 2;
-                    const lineColor = outline.color || '#000000';
-                    return (
-                      <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                        <View style={{ width: '100%', height: lineThickness, backgroundColor: lineColor }} />
-                      </View>
-                    );
-                  } else if (shapeType === 'arrow') {
-                    const lineThickness = outlineWidth || 2;
-                    const lineColor = outline.color || '#000000';
-                    const headSize = Math.max(8, lineThickness * 3);
-                    return (
-                      <View style={{ width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ flex: 1, height: lineThickness, backgroundColor: lineColor }} />
-                        <View style={{ width: 0, height: 0, borderTopWidth: headSize / 2, borderBottomWidth: headSize / 2, borderLeftWidth: headSize, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: lineColor }} />
-                      </View>
-                    );
-                  }
-                  return null;
+                  return (
+                    <React.Fragment>
+                      {renderSvgShape({
+                        shapeType: shapeType,
+                        fill: fill,
+                        outlineColor: outlineColor,
+                        outlineWidth: outlineWidth,
+                        cornerRadius: cornerRadiusPct,
+                        svgWidth: '100%',
+                        svgHeight: '100%',
+                      })}
+                      {shapeTextElement && (
+                        <View
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            padding: 2,
+                          }}
+                        >
+                          {shapeTextElement}
+                        </View>
+                      )}
+                    </React.Fragment>
+                  );
                 })()}
-              </React.Fragment>
+              </View>
             ) : elem.type === 'image' && elem.uri ? (
               <View
                 style={[
@@ -466,99 +419,64 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
         ">${escapeHtml(elem.text)}</span>
       ` : '';
 
-      if (shapeType === 'rect') {
+      let svgPathD = SHAPE_MAP[shapeType]?.path;
+      if (shapeType === 'line') {
         shapeContentHtml = `
-          <div style="
-            width: 100%;
-            height: 100%;
-            background-color: ${fill};
-            border: ${outlineWidth}pt solid ${outlineColor};
-            box-sizing: border-box;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            overflow: hidden;
-            padding: 4pt;
-          " dir="rtl">${shapeTextHtml}</div>
+          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+            <line x1="0" y1="50" x2="100" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+          </svg>
+        `;
+      } else if (shapeType === 'arrow') {
+        shapeContentHtml = `
+          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+            <line x1="0" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+            <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
+          </svg>
+        `;
+      } else if (shapeType === 'doubleArrow') {
+        shapeContentHtml = `
+          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+            <path d="M 20,25 L 0,50 L 20,75 Z" fill="${outlineColor || '#000000'}" />
+            <line x1="20" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+            <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
+          </svg>
+        `;
+      } else if (shapeType === 'rect') {
+        shapeContentHtml = `
+          <div style="width: 100%; height: 100%; position: relative;">
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+              <rect x="1" y="1" width="98" height="98" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
+          </div>
         `;
       } else if (shapeType === 'roundRect') {
-        const shapeRadius = (cornerRadiusPct / 100) * (Math.min(uncroppedWidth, uncroppedHeight) / 2);
+        const rx = Math.max(2, Math.min(40, cornerRadiusPct));
         shapeContentHtml = `
-          <div style="
-            width: 100%;
-            height: 100%;
-            background-color: ${fill};
-            border-radius: ${shapeRadius.toFixed(2)}pt;
-            border: ${outlineWidth}pt solid ${outlineColor};
-            box-sizing: border-box;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            overflow: hidden;
-            padding: 4pt;
-          " dir="rtl">${shapeTextHtml}</div>
+          <div style="width: 100%; height: 100%; position: relative;">
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+              <rect x="1" y="1" width="98" height="98" rx="${rx}" ry="${rx}" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
+          </div>
         `;
       } else if (shapeType === 'ellipse') {
         shapeContentHtml = `
-          <div style="
-            width: 100%;
-            height: 100%;
-            background-color: ${fill};
-            border-radius: 50%;
-            border: ${outlineWidth}pt solid ${outlineColor};
-            box-sizing: border-box;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            overflow: hidden;
-            padding: 4pt;
-          " dir="rtl">${shapeTextHtml}</div>
-        `;
-      } else if (shapeType === 'line') {
-        const lineThickness = outlineWidth || 2;
-        const lineColor = outline.color || '#000000';
-        shapeContentHtml = `
-          <div style="
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          ">
-            <div style="
-              width: 100%;
-              height: ${lineThickness}pt;
-              background-color: ${lineColor};
-            "></div>
+          <div style="width: 100%; height: 100%; position: relative;">
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+              <ellipse cx="50" cy="50" rx="48" ry="48" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
           </div>
         `;
-      } else if (shapeType === 'arrow') {
-        const lineThickness = outlineWidth || 2;
-        const lineColor = outline.color || '#000000';
-        const headSize = Math.max(8, lineThickness * 3);
+      } else {
+        const pathD = svgPathD || 'M 0,0 L 100,0 L 100,100 L 0,100 Z';
         shapeContentHtml = `
-          <div style="
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            flex-direction: row;
-          ">
-            <div style="
-              flex: 1;
-              height: ${lineThickness}pt;
-              background-color: ${lineColor};
-            "></div>
-            <div style="
-              width: 0;
-              height: 0;
-              border-top: ${(headSize / 2).toFixed(2)}pt solid transparent;
-              border-bottom: ${(headSize / 2).toFixed(2)}pt solid transparent;
-              border-left: ${headSize.toFixed(2)}pt solid ${lineColor};
-            "></div>
+          <div style="width: 100%; height: 100%; position: relative;">
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+              <path d="${pathD}" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
           </div>
         `;
       }
