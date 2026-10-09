@@ -632,8 +632,11 @@ export default function App() {
       y: (signingLayout.height / 2) - 50,
       width: 150,
       height: 100,
+      baseWidth: 150,
+      baseHeight: 100,
       rotation: 0,
-      color: lastChosenColor
+      color: lastChosenColor,
+      opacity: 1.0,
     };
     setSignatures(prev => [...prev, newSig]);
     setSignatureModalVisible(false);
@@ -915,6 +918,7 @@ export default function App() {
                     top: sig.y,
                     width: sig.width,
                     height: sig.height,
+                    opacity: sig.opacity !== undefined ? sig.opacity : 1.0,
                     borderWidth: isSelected ? 2 : 1,
                     borderColor: isSelected ? '#007AFF' : 'rgba(0,122,255,0.4)',
                     backgroundColor: isSelected ? 'rgba(0,122,255,0.05)' : 'transparent',
@@ -1029,31 +1033,96 @@ export default function App() {
 
               {activePanel === 'size' && (
                 <View style={styles.panelContainer}>
-                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>قەبارە (Size):</Text>
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>
+                    قەبارە و گۆڕینی پێوەر (Resize / Scale):
+                  </Text>
+                  <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 8}}>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          const aspect = targetSig.width / targetSig.height;
+                          const newW = Math.max(40, targetSig.width - 25);
+                          const newH = Math.max(25, newW / aspect);
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➖ بچووککردنەوە</Text>
+                    </TouchableOpacity>
+
+                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>
+                      {Math.round((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.width || 150)}px
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          const aspect = targetSig.width / targetSig.height;
+                          const newW = targetSig.width + 25;
+                          const newH = newW / aspect;
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➕ گەورەکردنەوە</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 6}}>
+                    {[
+                      { label: '50%', factor: 0.5 },
+                      { label: '75%', factor: 0.75 },
+                      { label: '100%', factor: 1.0 },
+                      { label: '125%', factor: 1.25 },
+                      { label: '150%', factor: 1.5 },
+                      { label: '200%', factor: 2.0 },
+                    ].map(item => (
+                      <TouchableOpacity
+                        key={`sig_scale_${item.label}`}
+                        style={styles.panelBtn}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const baseW = targetSig.baseWidth || 150;
+                            const baseH = targetSig.baseHeight || 100;
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: Math.round(baseW * item.factor), height: Math.round(baseH * item.factor) } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>{item.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {activePanel === 'opacity' && (
+                <View style={styles.panelContainer}>
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>
+                    ڕوونی (Opacity): {Math.round(((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.opacity ?? 1.0) * 100)}%
+                  </Text>
                   <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
-                    <TouchableOpacity
-                      style={styles.panelBtn}
-                      onPress={() => {
-                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
-                        if (targetSig) {
-                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: Math.max(60, s.width - 25), height: Math.max(40, s.height - 18) } : s));
-                        }
-                      }}
-                    >
-                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 18}}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={{color: '#fff'}}>بچووک / گەورە</Text>
-                    <TouchableOpacity
-                      style={styles.panelBtn}
-                      onPress={() => {
-                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
-                        if (targetSig) {
-                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: s.width + 25, height: s.height + 18 } : s));
-                        }
-                      }}
-                    >
-                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 18}}>+</Text>
-                    </TouchableOpacity>
+                    {[0.2, 0.4, 0.6, 0.8, 1.0].map(val => (
+                      <TouchableOpacity
+                        key={`sig_op_${val}`}
+                        style={[
+                          styles.panelBtn,
+                          ((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.opacity ?? 1.0) === val && {backgroundColor: '#007AFF'}
+                        ]}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, opacity: val } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold'}}>{Math.round(val * 100)}%</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 </View>
               )}
@@ -1078,6 +1147,10 @@ export default function App() {
                 <TouchableOpacity style={styles.toolBarItem} onPress={() => setActivePanel(activePanel === 'size' ? null : 'size')}>
                   <Text style={{fontSize: 20}}>📏</Text>
                   <Text style={styles.toolBarText}>قەبارە</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolBarItem} onPress={() => setActivePanel(activePanel === 'opacity' ? null : 'opacity')}>
+                  <Text style={{fontSize: 20}}>💧</Text>
+                  <Text style={styles.toolBarText}>ڕوونی</Text>
                 </TouchableOpacity>
               </View>
             </View>

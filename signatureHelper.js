@@ -259,6 +259,7 @@ export async function mergeSignatures(baseImageUri, placedSignatures, displayW, 
       const sigW = sigImg.width;
       const sigH = sigImg.height;
       const sigAspect = sigW / sigH;
+      const sigOpacity = sig.opacity !== undefined ? sig.opacity : 1.0;
 
       const targetX = sig.x * sx;
       const targetY = sig.y * sy;
@@ -276,7 +277,7 @@ export async function mergeSignatures(baseImageUri, placedSignatures, displayW, 
           const srcX = Math.floor((x / targetW) * sigW);
 
           const srcIdx = (srcY * sigW + srcX) * 4;
-          const sa = sigRgba[srcIdx + 3] / 255;
+          const sa = (sigRgba[srcIdx + 3] / 255) * sigOpacity;
           if (sa <= 0.01) continue;
 
           const destIdx = (destY * W + destX) * 4;

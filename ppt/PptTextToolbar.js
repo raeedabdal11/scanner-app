@@ -20,6 +20,7 @@ import {
   getDisplayRunsWithSelection,
 } from './formattedText';
 import { applyStyle, wordRangeAt } from './richText';
+import PptSlider from './PptSlider';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -722,6 +723,27 @@ export const PptTextToolbar = forwardRef(({
               )}
             </View>
 
+            {/* Smooth Font / Element Scale Slider */}
+            <View style={{ width: '100%', marginTop: 6, marginBottom: 4 }}>
+              <PptSlider
+                label="گەورەکردن و بچووککردن (Resize / Scale)"
+                unit="pt"
+                min={12}
+                max={60}
+                step={1}
+                value={baseSize}
+                onChange={(newSize) => {
+                  console.log('[PptTextToolbar] Text Scale slider newSize=', newSize, 'element.fontSize=', element.fontSize);
+                  const { color: _c, ...elemWithoutColor } = element;
+                  onChangeElement({
+                    ...elemWithoutColor,
+                    fontSize: newSize,
+                    fontMode: 'manual',
+                  });
+                }}
+              />
+            </View>
+
             <View style={styles.alignGroup}>
               <TouchableOpacity
                 style={[styles.alignBtn, align === 'right' && styles.alignBtnActive]}
@@ -941,6 +963,30 @@ export const PptTextToolbar = forwardRef(({
                 )}
               </View>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.colorTargetBtn,
+                colorTarget === 'opacity' && styles.colorTargetBtnActive,
+              ]}
+              onPressIn={handlePressIn}
+              onPress={() => setColorTarget('opacity')}
+            >
+              <Text
+                style={[
+                  styles.colorTargetText,
+                  colorTarget === 'opacity' && styles.colorTargetTextActive,
+                ]}
+              >
+                💧 ڕوونی
+              </Text>
+              <View
+                style={[
+                  styles.miniDot,
+                  { backgroundColor: '#34c759' },
+                ]}
+              />
+            </TouchableOpacity>
           </View>
 
           <ScrollView
@@ -948,6 +994,48 @@ export const PptTextToolbar = forwardRef(({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="always"
           >
+            {colorTarget === 'opacity' && (
+              <View style={styles.shadowControlPanel}>
+                <PptSlider
+                  label="ڕوونی دەق (Opacity)"
+                  unit="%"
+                  min={10}
+                  max={100}
+                  step={1}
+                  value={Math.round((element.opacity !== undefined ? element.opacity : 1.0) * 100)}
+                  onChange={(val) => {
+                    const clamped = Math.max(0.1, Math.min(1.0, val / 100));
+                    console.log('[PptTextToolbar] Text Opacity slider val=', val, 'clampedOpacity=', clamped, 'element.opacity=', element.opacity);
+                    onChangeElement({
+                      ...element,
+                      opacity: clamped,
+                    });
+                  }}
+                />
+                <Text style={[styles.sectionTitle, { marginTop: 10 }]}>پێشەنگەکانی ڕوونی (Opacity Presets):</Text>
+                <View style={styles.presetRow}>
+                  {[0.25, 0.50, 0.75, 1.0].map((val) => (
+                    <TouchableOpacity
+                      key={`op_preset_${val}`}
+                      style={[
+                        styles.presetBtn,
+                        (element.opacity !== undefined ? element.opacity : 1.0) === val && { backgroundColor: '#8B3A2B' },
+                      ]}
+                      onPressIn={handlePressIn}
+                      onPress={() => {
+                        onChangeElement({
+                          ...element,
+                          opacity: val,
+                        });
+                      }}
+                    >
+                      <Text style={styles.presetBtnText}>{`${Math.round(val * 100)}%`}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {colorTarget === 'shadow' && (
               <View style={styles.shadowControlPanel}>
                 {/* Quick Presets */}
@@ -979,70 +1067,43 @@ export const PptTextToolbar = forwardRef(({
                 {/* Controls: Size, Blur, Opacity */}
                 <View style={styles.shadowControlsBox}>
                   {/* 1. Size / Offset */}
-                  <View style={styles.shadowControlRow}>
-                    <Text style={styles.shadowControlLabel}>قەبارە / دووری (Size):</Text>
-                    <View style={styles.stepperContainer}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowOffset(-1)}
-                      >
-                        <Text style={styles.stepperBtnText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.stepperValText}>{shadowParams.offset}</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowOffset(1)}
-                      >
-                        <Text style={styles.stepperBtnText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <PptSlider
+                    label="قەبارە / دووری (Size)"
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={shadowParams.offset}
+                    onChange={(val) => {
+                      console.log('[PptTextToolbar] Shadow Size slider val=', val);
+                      applyShadowPatch(val, shadowParams.blur, shadowParams.opacity, shadowParams.baseColor);
+                    }}
+                  />
 
                   {/* 2. Blur / Softness */}
-                  <View style={styles.shadowControlRow}>
-                    <Text style={styles.shadowControlLabel}>لێڵی / نەرمی (Blur):</Text>
-                    <View style={styles.stepperContainer}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowBlur(-1)}
-                      >
-                        <Text style={styles.stepperBtnText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.stepperValText}>{shadowParams.blur}</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowBlur(1)}
-                      >
-                        <Text style={styles.stepperBtnText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <PptSlider
+                    label="لێڵی / نەرمی (Blur)"
+                    min={0}
+                    max={15}
+                    step={1}
+                    value={shadowParams.blur}
+                    onChange={(val) => {
+                      console.log('[PptTextToolbar] Shadow Blur slider val=', val);
+                      applyShadowPatch(shadowParams.offset, val, shadowParams.opacity, shadowParams.baseColor);
+                    }}
+                  />
 
                   {/* 3. Darkness / Opacity */}
-                  <View style={styles.shadowControlRow}>
-                    <Text style={styles.shadowControlLabel}>تۆخی / ڕووناکی (Darkness):</Text>
-                    <View style={styles.stepperContainer}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowOpacity(-0.1)}
-                      >
-                        <Text style={styles.stepperBtnText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.stepperValText}>{`${Math.round(shadowParams.opacity * 100)}%`}</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPressIn={handlePressIn}
-                        onPress={() => changeShadowOpacity(0.1)}
-                      >
-                        <Text style={styles.stepperBtnText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                  <PptSlider
+                    label="تۆخی / ڕووناکی (Darkness)"
+                    unit="%"
+                    min={10}
+                    max={100}
+                    step={1}
+                    value={Math.round(shadowParams.opacity * 100)}
+                    onChange={(val) =>
+                      applyShadowPatch(shadowParams.offset, shadowParams.blur, val / 100, shadowParams.baseColor)
+                    }
+                  />
                 </View>
 
                 {/* Remove shadow button */}

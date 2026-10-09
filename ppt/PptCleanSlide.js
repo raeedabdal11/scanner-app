@@ -165,6 +165,114 @@ export const PptCleanSlide = React.forwardRef(({
                   })}
                 </Text>
               </View>
+            ) : elem.type === 'shape' ? (
+              <React.Fragment>
+                {(() => {
+                  const shapeType = elem.shapeType || 'rect';
+                  const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
+                  const outline = elem.outline || { color: '#000000', width: 2 };
+                  const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
+                  const outlineWidth = outline.width || 0;
+                  const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
+                  const shapeRadius = (cornerRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
+
+                  const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / SLIDE.widthPt);
+                  const textColor = elem.textColor || '#000000';
+                  const isBold = !!elem.bold;
+
+                  const shapeTextElement = elem.text ? (
+                    <Text
+                      style={{
+                        color: textColor,
+                        fontSize: shapeFontSize,
+                        fontWeight: isBold ? 'bold' : 'normal',
+                        fontFamily: fontFamily || 'Tahoma',
+                        textAlign: 'center',
+                        writingDirection: 'rtl',
+                      }}
+                    >
+                      {elem.text}
+                    </Text>
+                  ) : null;
+
+                  if (shapeType === 'rect') {
+                    return (
+                      <View
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: fill,
+                          borderWidth: outlineWidth,
+                          borderColor: outlineColor,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          overflow: 'hidden',
+                          padding: 2,
+                        }}
+                      >
+                        {shapeTextElement}
+                      </View>
+                    );
+                  } else if (shapeType === 'roundRect') {
+                    return (
+                      <View
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: fill,
+                          borderRadius: shapeRadius,
+                          borderWidth: outlineWidth,
+                          borderColor: outlineColor,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          overflow: 'hidden',
+                          padding: 2,
+                        }}
+                      >
+                        {shapeTextElement}
+                      </View>
+                    );
+                  } else if (shapeType === 'ellipse') {
+                    return (
+                      <View
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: fill,
+                          borderRadius: 9999,
+                          borderWidth: outlineWidth,
+                          borderColor: outlineColor,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          overflow: 'hidden',
+                          padding: 2,
+                        }}
+                      >
+                        {shapeTextElement}
+                      </View>
+                    );
+                  } else if (shapeType === 'line') {
+                    const lineThickness = outlineWidth || 2;
+                    const lineColor = outline.color || '#000000';
+                    return (
+                      <View style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                        <View style={{ width: '100%', height: lineThickness, backgroundColor: lineColor }} />
+                      </View>
+                    );
+                  } else if (shapeType === 'arrow') {
+                    const lineThickness = outlineWidth || 2;
+                    const lineColor = outline.color || '#000000';
+                    const headSize = Math.max(8, lineThickness * 3);
+                    return (
+                      <View style={{ width: '100%', height: '100%', flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ flex: 1, height: lineThickness, backgroundColor: lineColor }} />
+                        <View style={{ width: 0, height: 0, borderTopWidth: headSize / 2, borderBottomWidth: headSize / 2, borderLeftWidth: headSize, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: lineColor }} />
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
+              </React.Fragment>
             ) : elem.type === 'image' && elem.uri ? (
               <View
                 style={[
@@ -333,6 +441,141 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
           ">
             ${runsHtml}
           </div>
+        </div>
+      `);
+    } else if (elem.type === 'shape') {
+      const shapeType = elem.shapeType || 'rect';
+      const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
+      const outline = elem.outline || { color: '#000000', width: 2 };
+      const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
+      const outlineWidth = outline.width || 0;
+      const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
+
+      let shapeContentHtml = '';
+
+      const shapeTextHtml = elem.text ? `
+        <span style="
+          color: ${elem.textColor || '#000000'};
+          font-size: ${(elem.fontSize || 16).toFixed(2)}pt;
+          font-weight: ${elem.bold ? 'bold' : 'normal'};
+          font-family: 'Tahoma', sans-serif;
+          word-break: break-word;
+          white-space: pre-wrap;
+          text-align: center;
+          width: 100%;
+        ">${escapeHtml(elem.text)}</span>
+      ` : '';
+
+      if (shapeType === 'rect') {
+        shapeContentHtml = `
+          <div style="
+            width: 100%;
+            height: 100%;
+            background-color: ${fill};
+            border: ${outlineWidth}pt solid ${outlineColor};
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+            padding: 4pt;
+          " dir="rtl">${shapeTextHtml}</div>
+        `;
+      } else if (shapeType === 'roundRect') {
+        const shapeRadius = (cornerRadiusPct / 100) * (Math.min(uncroppedWidth, uncroppedHeight) / 2);
+        shapeContentHtml = `
+          <div style="
+            width: 100%;
+            height: 100%;
+            background-color: ${fill};
+            border-radius: ${shapeRadius.toFixed(2)}pt;
+            border: ${outlineWidth}pt solid ${outlineColor};
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+            padding: 4pt;
+          " dir="rtl">${shapeTextHtml}</div>
+        `;
+      } else if (shapeType === 'ellipse') {
+        shapeContentHtml = `
+          <div style="
+            width: 100%;
+            height: 100%;
+            background-color: ${fill};
+            border-radius: 50%;
+            border: ${outlineWidth}pt solid ${outlineColor};
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+            padding: 4pt;
+          " dir="rtl">${shapeTextHtml}</div>
+        `;
+      } else if (shapeType === 'line') {
+        const lineThickness = outlineWidth || 2;
+        const lineColor = outline.color || '#000000';
+        shapeContentHtml = `
+          <div style="
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <div style="
+              width: 100%;
+              height: ${lineThickness}pt;
+              background-color: ${lineColor};
+            "></div>
+          </div>
+        `;
+      } else if (shapeType === 'arrow') {
+        const lineThickness = outlineWidth || 2;
+        const lineColor = outline.color || '#000000';
+        const headSize = Math.max(8, lineThickness * 3);
+        shapeContentHtml = `
+          <div style="
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            flex-direction: row;
+          ">
+            <div style="
+              flex: 1;
+              height: ${lineThickness}pt;
+              background-color: ${lineColor};
+            "></div>
+            <div style="
+              width: 0;
+              height: 0;
+              border-top: ${(headSize / 2).toFixed(2)}pt solid transparent;
+              border-bottom: ${(headSize / 2).toFixed(2)}pt solid transparent;
+              border-left: ${headSize.toFixed(2)}pt solid ${lineColor};
+            "></div>
+          </div>
+        `;
+      }
+
+      elementHtmls.push(`
+        <div style="
+          position: absolute;
+          left: ${uncroppedLeft.toFixed(2)}pt;
+          top: ${uncroppedTop.toFixed(2)}pt;
+          width: ${uncroppedWidth.toFixed(2)}pt;
+          height: ${uncroppedHeight.toFixed(2)}pt;
+          z-index: ${zIndex};
+          transform: rotate(${rotation}deg);
+          opacity: ${opacity};
+          box-sizing: border-box;
+        ">
+          ${shapeContentHtml}
         </div>
       `);
     } else if (elem.type === 'image' && elem.uri) {

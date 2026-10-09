@@ -287,11 +287,13 @@ export const PptCanvas = ({
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
   onCanvasTap,
+  onShapeDoubleTap,
 }) => {
   const [resizingElement, setResizingElement] = useState(null);
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
   const touchTimeoutRef = React.useRef(null);
+  const lastShapeTapRef = React.useRef({ id: null, time: 0 });
 
   const is43 = aspectRatio === '4:3';
   const canvasWidth = SCREEN_WIDTH - 24;
@@ -350,6 +352,18 @@ export const PptCanvas = ({
             onStartInlineEditing(element.id);
           } else if (element.type === 'image' && !element.uri) {
             onChangeImageElement(element);
+          } else if (element.type === 'shape') {
+            const shapeType = element.shapeType || 'rect';
+            if (shapeType !== 'line' && shapeType !== 'arrow') {
+              const now = Date.now();
+              const lastTap = lastShapeTapRef.current;
+              if (lastTap.id === element.id && (now - lastTap.time) < 300) {
+                if (onShapeDoubleTap) {
+                  onShapeDoubleTap(element);
+                }
+              }
+              lastShapeTapRef.current = { id: element.id, time: now };
+            }
           }
         }
       },
@@ -621,6 +635,151 @@ export const PptCanvas = ({
                     </Text>
                   )}
                 </View>
+              ) : elem.type === 'shape' ? (
+                <React.Fragment>
+                  {(() => {
+                    const shapeType = elem.shapeType || 'rect';
+                    const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
+                    const outline = elem.outline || { color: '#000000', width: 2 };
+                    const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
+                    const outlineWidth = outline.width || 0;
+                    const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
+                    const shapeRadius = (cornerRadiusPct / 100) * (Math.min(elemWidth, elemHeight) / 2);
+
+                    const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / SLIDE.widthPt);
+                    const textColor = elem.textColor || '#000000';
+                    const isBold = !!elem.bold;
+
+                    const shapeTextElement = elem.text ? (
+                      <Text
+                        style={{
+                          color: textColor,
+                          fontSize: shapeFontSize,
+                          fontWeight: isBold ? 'bold' : 'normal',
+                          fontFamily: 'Tahoma',
+                          textAlign: 'center',
+                          writingDirection: 'rtl',
+                        }}
+                      >
+                        {elem.text}
+                      </Text>
+                    ) : null;
+
+                    if (shapeType === 'rect') {
+                      return (
+                        <View
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            backgroundColor: fill,
+                            borderWidth: outlineWidth,
+                            borderColor: outlineColor,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            overflow: 'hidden',
+                            padding: 4,
+                          }}
+                        >
+                          {shapeTextElement}
+                        </View>
+                      );
+                    } else if (shapeType === 'roundRect') {
+                      return (
+                        <View
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            backgroundColor: fill,
+                            borderRadius: shapeRadius,
+                            borderWidth: outlineWidth,
+                            borderColor: outlineColor,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            overflow: 'hidden',
+                            padding: 4,
+                          }}
+                        >
+                          {shapeTextElement}
+                        </View>
+                      );
+                    } else if (shapeType === 'ellipse') {
+                      return (
+                        <View
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            backgroundColor: fill,
+                            borderRadius: 9999,
+                            borderWidth: outlineWidth,
+                            borderColor: outlineColor,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            overflow: 'hidden',
+                            padding: 4,
+                          }}
+                        >
+                          {shapeTextElement}
+                        </View>
+                      );
+                    } else if (shapeType === 'line') {
+                      const lineThickness = outlineWidth || 2;
+                      const lineColor = outline.color || '#000000';
+                      return (
+                        <View
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: '100%',
+                              height: lineThickness,
+                              backgroundColor: lineColor,
+                            }}
+                          />
+                        </View>
+                      );
+                    } else if (shapeType === 'arrow') {
+                      const lineThickness = outlineWidth || 2;
+                      const lineColor = outline.color || '#000000';
+                      const headSize = Math.max(8, lineThickness * 3);
+                      return (
+                        <View
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <View
+                            style={{
+                              flex: 1,
+                              height: lineThickness,
+                              backgroundColor: lineColor,
+                            }}
+                          />
+                          <View
+                            style={{
+                              width: 0,
+                              height: 0,
+                              borderTopWidth: headSize / 2,
+                              borderBottomWidth: headSize / 2,
+                              borderLeftWidth: headSize,
+                              borderTopColor: 'transparent',
+                              borderBottomColor: 'transparent',
+                              borderLeftColor: lineColor,
+                            }}
+                          />
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
+                </React.Fragment>
               ) : (
                 <View
                   style={[

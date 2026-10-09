@@ -25,6 +25,7 @@ import { PptCanvas } from './PptCanvas';
 import { PptCleanSlide, renderSlideToHtml } from './PptCleanSlide';
 import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
+import { PptShapeToolbar } from './PptShapeToolbar';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
 import { exportPresentationToPptx } from './pptExporter';
@@ -112,6 +113,7 @@ const PageCard = React.memo(({
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
   onCanvasTap,
+  onShapeDoubleTap,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -255,6 +257,7 @@ const PageCard = React.memo(({
         showSoftInputOnFocus={showSoftInputOnFocus}
         setShowSoftInputOnFocus={setShowSoftInputOnFocus}
         onCanvasTap={onCanvasTap}
+        onShapeDoubleTap={onShapeDoubleTap}
       />
     </View>
   );
@@ -305,6 +308,7 @@ export const PptEditorModal = ({
 
   const textToolbarRef = useRef(null);
   const imageToolbarRef = useRef(null);
+  const shapeToolbarRef = useRef(null);
 
   const scrollViewRef = useRef(null);
 
@@ -442,6 +446,7 @@ export const PptEditorModal = ({
     onClose,
     textToolbarRef,
     imageToolbarRef,
+    shapeToolbarRef,
     inputRef,
   };
 
@@ -465,6 +470,7 @@ export const PptEditorModal = ({
       onClose,
       textToolbarRef,
       imageToolbarRef,
+      shapeToolbarRef,
       inputRef,
     } = backStateRef.current;
 
@@ -504,6 +510,11 @@ export const PptEditorModal = ({
       console.log('[Back] handled: sub-modal / picker (' + imageSubModal + ')');
       return true;
     }
+    const shapeSubModal = shapeToolbarRef.current?.closeSubModal?.();
+    if (shapeSubModal) {
+      console.log('[Back] handled: sub-modal / picker (' + shapeSubModal + ')');
+      return true;
+    }
 
     // 2 (2b). A TextInput is being edited: Keyboard.dismiss() and blur, keep text
     if (editingElementId !== null) {
@@ -529,6 +540,11 @@ export const PptEditorModal = ({
         console.log('[Back] handled: toolbar tab/panel (' + imageTab + ')');
         return true;
       }
+      const shapeTab = shapeToolbarRef.current?.closeTabPanel?.();
+      if (shapeTab) {
+        console.log('[Back] handled: toolbar tab/panel (' + shapeTab + ')');
+        return true;
+      }
 
       setSelectedElementId(null);
       console.log('[Back] handled: element deselect');
@@ -544,6 +560,11 @@ export const PptEditorModal = ({
     const imageTab = imageToolbarRef.current?.closeTabPanel?.();
     if (imageTab) {
       console.log('[Back] handled: toolbar tab/panel (' + imageTab + ')');
+      return true;
+    }
+    const shapeTab = shapeToolbarRef.current?.closeTabPanel?.();
+    if (shapeTab) {
+      console.log('[Back] handled: toolbar tab/panel (' + shapeTab + ')');
       return true;
     }
 
@@ -754,6 +775,15 @@ export const PptEditorModal = ({
     setEditingElementId(null);
   };
 
+  // Double tap on shape -> Select shape & open "نووسین" tab
+  const handleShapeDoubleTap = (pageId, elem) => {
+    setSelectedPageId(pageId);
+    setSelectedElementId(elem.id);
+    setTimeout(() => {
+      shapeToolbarRef.current?.openTextTabAndFocus?.();
+    }, 50);
+  };
+
   // Process and Add Image to Slide (Convert to JPEG max 2000px)
   const processAndAddImage = async (inputUri, pageId, rawW, rawH) => {
     try {
@@ -822,6 +852,56 @@ export const PptEditorModal = ({
       setSelectedElementId(newElem.id);
     } catch (err) {
       console.log('[PPT Editor] processAndAddImage error:', err);
+    }
+  };
+
+  // Add Shape to Slide
+  const handleAddShape = (shapeType) => {
+    try {
+      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      if (!targetPageId) {
+        Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+        return;
+      }
+
+      const targetPage = presentation.slides.find((s) => s.id === targetPageId);
+      const initialZIndex = ((targetPage?.elements || []).length || 0) + 1;
+
+      const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow';
+      const w = 30;
+      const h = isLineOrArrow ? 6 : 20;
+
+      const newElem = {
+        id: `shape_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+        type: 'shape',
+        shapeType: shapeType, // 'rect' | 'roundRect' | 'ellipse' | 'line' | 'arrow'
+        x: Math.round((100 - w) / 2),
+        y: Math.round((100 - h) / 2),
+        width: w,
+        height: h,
+        rotation: 0,
+        fill: isLineOrArrow ? 'none' : '#1f497d',
+        outline: {
+          color: '#000000',
+          width: 2,
+        },
+        opacity: 1.0,
+        cornerRadius: shapeType === 'roundRect' ? 20 : 0,
+        locked: false,
+        zIndex: initialZIndex,
+      };
+
+      const newSlides = presentation.slides.map((s) => {
+        if (s.id !== targetPageId) return s;
+        return { ...s, elements: [...(s.elements || []), newElem] };
+      });
+
+      const newPres = { ...presentation, slides: newSlides };
+      pushState(newPres, targetPageId);
+      setSelectedPageId(targetPageId);
+      setSelectedElementId(newElem.id);
+    } catch (err) {
+      console.log('[PPT Editor] handleAddShape error:', err);
     }
   };
 
@@ -1556,6 +1636,7 @@ export const PptEditorModal = ({
                             showSoftInputOnFocus={showSoftInputOnFocus}
                             setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                             onCanvasTap={() => handleBack(true)}
+                            onShapeDoubleTap={(elem) => handleShapeDoubleTap(slide.id, elem)}
                           />
 
                           {/* Page Divider between pages */}
@@ -1607,12 +1688,26 @@ export const PptEditorModal = ({
                   setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                   onRequestClose={() => handleBack(false)}
                 />
+              ) : selectedElement && selectedElement.type === 'shape' ? (
+                <PptShapeToolbar
+                  ref={shapeToolbarRef}
+                  selectedElement={selectedElement}
+                  onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                  onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
+                  onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
+                  onClose={() => {
+                    setSelectedElementId(null);
+                    setEditingElementId(null);
+                  }}
+                  onRequestClose={() => handleBack(false)}
+                />
               ) : (
                 <PptImageToolbar
                   ref={imageToolbarRef}
                   selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
                   onPickGallery={handlePickGalleryImages}
                   onPickCamera={handlePickCameraImage}
+                  onAddShape={handleAddShape}
                   onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
                   onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
                   onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}

@@ -9,6 +9,7 @@ import {
   ToastAndroid,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import PptSlider from './PptSlider';
 
 // Theme Colors for Border Picker Grid
 const BORDER_COLORS_GRID = [
@@ -21,24 +22,36 @@ export const PptImageToolbar = forwardRef(({
   selectedElement,
   onPickGallery,
   onPickCamera,
+  onAddShape,
   onChangeElement,
   onDuplicateElement,
   onDeleteElement,
   onClose,
 }, ref) => {
   const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'style' | 'crop' | 'border' | 'tools'
+  const [showShapesPanel, setShowShapesPanel] = useState(false);
 
   // Expose back navigation handlers via ref
   useImperativeHandle(ref, () => ({
-    closeSubModal: () => null,
+    closeSubModal: () => {
+      if (showShapesPanel) {
+        setShowShapesPanel(false);
+        return 'shapes panel';
+      }
+      return null;
+    },
     closeTabPanel: () => {
+      if (showShapesPanel) {
+        setShowShapesPanel(false);
+        return 'shapes panel';
+      }
       if (activeSubTab !== 'insert') {
         setActiveSubTab('insert');
         return 'image toolbar tab (' + activeSubTab + ')';
       }
       return null;
     },
-  }), [activeSubTab]);
+  }), [activeSubTab, showShapesPanel]);
 
   const isImageSelected = selectedElement && selectedElement.type === 'image';
 
@@ -68,12 +81,14 @@ export const PptImageToolbar = forwardRef(({
   // Opacity Change
   const changeOpacity = (val) => {
     const clamped = Math.max(0.1, Math.min(1.0, Math.round(val * 100) / 100));
+    console.log('[PptImageToolbar] changeOpacity rawVal=', val, 'clampedOpacity=', clamped, 'currentElement.opacity=', selectedElement?.opacity);
     updateImage({ opacity: clamped });
   };
 
   // Border Radius Change
   const changeRadius = (rad) => {
     const clamped = Math.max(0, Math.min(50, rad));
+    console.log('[PptImageToolbar] changeRadius rawRad=', rad, 'clampedRadius=', clamped, 'currentElement.borderRadius=', selectedElement?.borderRadius);
     updateImage({ borderRadius: clamped });
   };
 
@@ -90,6 +105,7 @@ export const PptImageToolbar = forwardRef(({
 
   // Border Width & Color
   const setBorderWidth = (w) => {
+    console.log('[PptImageToolbar] setBorderWidth rawWidth=', w, 'currentElement.border=', selectedElement?.border);
     updateImage({
       border: {
         color: currentBorderColor,
@@ -193,25 +209,102 @@ export const PptImageToolbar = forwardRef(({
       {/* SUB-TAB 1: INSERT MODE ("زیادکردن") */}
       {activeSubTab === 'insert' && (
         <View style={styles.tabContentBox}>
-          <Text style={styles.sectionTitle}>زیادکردنی وێنەی نوێ بۆ سڵاید:</Text>
+          <Text style={styles.sectionTitle}>زیادکردنی وێنە و شێوەکان بۆ سڵاید:</Text>
           <View style={styles.insertButtonsRow}>
             <TouchableOpacity style={styles.insertActionBtn} onPress={onPickGallery}>
-              <Ionicons name="images-outline" size={20} color="#ffffff" />
-              <Text style={styles.insertActionBtnText}>گەلەری (چەند دانە)</Text>
+              <Ionicons name="images-outline" size={18} color="#ffffff" />
+              <Text style={styles.insertActionBtnText}>گەلەری</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.insertActionBtn, { backgroundColor: '#1f497d' }]} onPress={onPickCamera}>
-              <Ionicons name="camera-outline" size={20} color="#ffffff" />
+              <Ionicons name="camera-outline" size={18} color="#ffffff" />
               <Text style={styles.insertActionBtnText}>کامێرا</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.insertActionBtn,
+                { backgroundColor: showShapesPanel ? '#8B3A2B' : '#2c2c2e', borderWidth: 1, borderColor: '#3a3a3c' },
+              ]}
+              onPress={() => setShowShapesPanel(!showShapesPanel)}
+            >
+              <Ionicons name="shapes-outline" size={18} color="#ffffff" />
+              <Text style={styles.insertActionBtnText}>شێوەکان</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Small Panel for Shapes Options */}
+          {showShapesPanel && (
+            <View style={styles.shapesPanelBox}>
+              <Text style={styles.shapesPanelTitle}>شێوەیەک هەڵبژێرە:</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shapesRow}>
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('rect');
+                  }}
+                >
+                  <View style={styles.shapeIconRect} />
+                  <Text style={styles.shapeOptionText}>چوارگۆشە</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('roundRect');
+                  }}
+                >
+                  <View style={styles.shapeIconRoundRect} />
+                  <Text style={styles.shapeOptionText}>چوارگۆشەی خڕ</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('ellipse');
+                  }}
+                >
+                  <View style={styles.shapeIconEllipse} />
+                  <Text style={styles.shapeOptionText}>بازنە</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('line');
+                  }}
+                >
+                  <View style={styles.shapeIconLine} />
+                  <Text style={styles.shapeOptionText}>هێڵ</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.shapeOptionBtn}
+                  onPress={() => {
+                    setShowShapesPanel(false);
+                    if (onAddShape) onAddShape('arrow');
+                  }}
+                >
+                  <View style={styles.shapeIconArrowRow}>
+                    <View style={styles.shapeIconLinePart} />
+                    <View style={styles.shapeIconArrowHead} />
+                  </View>
+                  <Text style={styles.shapeOptionText}>تیر</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
         </View>
       )}
 
       {/* SUB-TAB 2: STYLE & OPACITY & ROTATION ("شێواز و گۆشە") */}
       {isImageSelected && activeSubTab === 'style' && (
         <View style={styles.tabContentBox}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
+          <View style={[styles.scrollContentRow, { flexWrap: 'wrap' }]}>
             {/* 1. Fit / Fill Toggle */}
             <View style={styles.controlGroup}>
               <Text style={styles.groupLabel}>شێوازی پێشاندان:</Text>
@@ -237,40 +330,50 @@ export const PptImageToolbar = forwardRef(({
             </View>
 
             {/* 2. Rounded Corners (0 - 50%) */}
-            <View style={styles.controlGroup}>
-              <Text style={styles.groupLabel}>گۆشەی خڕ (Corners):</Text>
-              <View style={styles.chipRow}>
-                {[0, 10, 25, 50].map((r) => (
-                  <TouchableOpacity
-                    key={`rad_${r}`}
-                    style={[styles.chipBtn, currentRadius === r && styles.chipBtnActive]}
-                    onPress={() => changeRadius(r)}
-                  >
-                    <Text style={[styles.chipBtnText, currentRadius === r && styles.chipBtnTextActive]}>
-                      {`${r}%`}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+            <PptSlider
+              label="گۆشەی خڕ (Corners)"
+              unit="%"
+              min={0}
+              max={50}
+              step={1}
+              value={currentRadius}
+              onChange={changeRadius}
+              style={{ width: 180 }}
+            />
 
             {/* 3. Opacity (10 - 100%) */}
-            <View style={styles.controlGroup}>
-              <Text style={styles.groupLabel}>ڕوونی (Opacity):</Text>
-              <View style={styles.chipRow}>
-                {[1.0, 0.8, 0.6, 0.4, 0.2, 0.1].map((op) => (
-                  <TouchableOpacity
-                    key={`op_${op}`}
-                    style={[styles.chipBtn, Math.abs(currentOpacity - op) < 0.05 && styles.chipBtnActive]}
-                    onPress={() => changeOpacity(op)}
-                  >
-                    <Text style={[styles.chipBtnText, Math.abs(currentOpacity - op) < 0.05 && styles.chipBtnTextActive]}>
-                      {`${Math.round(op * 100)}%`}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+            <PptSlider
+              label="ڕوونی (Opacity)"
+              unit="%"
+              min={10}
+              max={100}
+              step={1}
+              value={Math.round(currentOpacity * 100)}
+              onChange={(val) => changeOpacity(val / 100)}
+              style={{ width: 180 }}
+            />
+
+            {/* 4. Image Scale / Size Slider (10 - 100%) */}
+            <PptSlider
+              label="قەبارەی وێنە (Scale)"
+              unit="%"
+              min={10}
+              max={100}
+              step={1}
+              value={Math.round(selectedElement?.width || 50)}
+              onChange={(newWidth) => {
+                const currentW = selectedElement?.width || 50;
+                const currentH = selectedElement?.height || 30;
+                const aspect = currentW / Math.max(1, currentH);
+                const newH = Math.max(5, newWidth / aspect);
+                console.log('[PptImageToolbar] Image Scale slider val=', newWidth, 'newWidth=', newWidth, 'newH=', newH, 'currentElement.width=', selectedElement?.width);
+                updateImage({
+                  width: newWidth,
+                  height: Math.round(newH * 10) / 10,
+                });
+              }}
+              style={{ width: 180 }}
+            />
 
             {/* 4. Rotation */}
             <View style={styles.controlGroup}>
@@ -293,7 +396,7 @@ export const PptImageToolbar = forwardRef(({
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
+          </View>
         </View>
       )}
 
@@ -369,20 +472,15 @@ export const PptImageToolbar = forwardRef(({
       {isImageSelected && activeSubTab === 'border' && (
         <View style={styles.tabContentBox}>
           <View style={styles.borderWidthRow}>
-            <Text style={styles.groupLabel}>ئەستووری چوارچێوە:</Text>
-            <View style={styles.chipRow}>
-              {[0, 1, 2, 4, 6, 8].map((w) => (
-                <TouchableOpacity
-                  key={`bw_${w}`}
-                  style={[styles.chipBtn, currentBorderWidth === w && styles.chipBtnActive]}
-                  onPress={() => setBorderWidth(w)}
-                >
-                  <Text style={[styles.chipBtnText, currentBorderWidth === w && styles.chipBtnTextActive]}>
-                    {w === 0 ? 'بێ چوارچێوە' : `${w}px`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <PptSlider
+              label="ئەستووری چوارچێوە"
+              unit="px"
+              min={0}
+              max={20}
+              step={1}
+              value={currentBorderWidth}
+              onChange={setBorderWidth}
+            />
           </View>
 
           {currentBorderWidth > 0 && (
@@ -669,5 +767,91 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  shapesPanelBox: {
+    marginTop: 10,
+    backgroundColor: '#141416',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  shapesPanelTitle: {
+    color: '#8B3A2B',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  shapesRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  shapeOptionBtn: {
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    minWidth: 70,
+  },
+  shapeOptionText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  shapeIconRect: {
+    width: 20,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    backgroundColor: '#1f497d',
+  },
+  shapeIconRoundRect: {
+    width: 20,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    borderRadius: 4,
+    backgroundColor: '#1f497d',
+  },
+  shapeIconEllipse: {
+    width: 20,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    borderRadius: 10,
+    backgroundColor: '#1f497d',
+  },
+  shapeIconLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: '#ffffff',
+    marginVertical: 6,
+  },
+  shapeIconArrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 22,
+    height: 14,
+  },
+  shapeIconLinePart: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#ffffff',
+  },
+  shapeIconArrowHead: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 6,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#ffffff',
   },
 });
