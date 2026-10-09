@@ -124,10 +124,32 @@ export const PptImageToolbar = forwardRef(({
   };
 
   // Crop Controls
-  const setCropSide = (side, delta) => {
-    const currentVal = currentCrop[side] || 0;
-    const newVal = Math.max(0, Math.min(0.4, Math.round((currentVal + delta) * 100) / 100));
-    const newCrop = { ...currentCrop, [side]: newVal };
+  const handleCropChange = (side, newPctVal) => {
+    const topPct = Math.round((currentCrop.top || 0) * 100);
+    const bottomPct = Math.round((currentCrop.bottom || 0) * 100);
+    const leftPct = Math.round((currentCrop.left || 0) * 100);
+    const rightPct = Math.round((currentCrop.right || 0) * 100);
+
+    let clampedPct = Math.max(0, Math.min(45, newPctVal));
+
+    if (side === 'top') {
+      const maxAllowed = Math.min(45, 90 - bottomPct);
+      clampedPct = Math.max(0, Math.min(clampedPct, maxAllowed));
+    } else if (side === 'bottom') {
+      const maxAllowed = Math.min(45, 90 - topPct);
+      clampedPct = Math.max(0, Math.min(clampedPct, maxAllowed));
+    } else if (side === 'left') {
+      const maxAllowed = Math.min(45, 90 - rightPct);
+      clampedPct = Math.max(0, Math.min(clampedPct, maxAllowed));
+    } else if (side === 'right') {
+      const maxAllowed = Math.min(45, 90 - leftPct);
+      clampedPct = Math.max(0, Math.min(clampedPct, maxAllowed));
+    }
+
+    const newCrop = {
+      ...currentCrop,
+      [side]: Math.round(clampedPct) / 100,
+    };
     updateImage({ crop: newCrop });
   };
 
@@ -403,66 +425,58 @@ export const PptImageToolbar = forwardRef(({
       {/* SUB-TAB 3: CROP ("بڕین") */}
       {isImageSelected && activeSubTab === 'crop' && (
         <View style={styles.tabContentBox}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
-            <TouchableOpacity style={styles.resetCropBtn} onPress={resetCrop}>
-              <Ionicons name="refresh-outline" size={14} color="#ffffff" />
-              <Text style={styles.resetCropText}>بێ بڕین (Reset)</Text>
-            </TouchableOpacity>
-
-            {/* Top Crop */}
-            <View style={styles.stepperBox}>
-              <Text style={styles.stepperLabel}>سەرەوە (Top):</Text>
-              <View style={styles.stepperRow}>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('top', -0.05)}>
-                  <Text style={styles.stepBtnText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepValText}>{`${Math.round((currentCrop.top || 0) * 100)}%`}</Text>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('top', 0.05)}>
-                  <Text style={styles.stepBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            contentContainerStyle={styles.cropVerticalContainer}
+          >
+            <View style={styles.cropHeaderRow}>
+              <TouchableOpacity style={styles.resetCropBtn} onPress={resetCrop}>
+                <Ionicons name="refresh-outline" size={14} color="#ffffff" />
+                <Text style={styles.resetCropText}>بێ برین (Reset)</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Bottom Crop */}
-            <View style={styles.stepperBox}>
-              <Text style={styles.stepperLabel}>خوارەوە (Bottom):</Text>
-              <View style={styles.stepperRow}>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('bottom', -0.05)}>
-                  <Text style={styles.stepBtnText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepValText}>{`${Math.round((currentCrop.bottom || 0) * 100)}%`}</Text>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('bottom', 0.05)}>
-                  <Text style={styles.stepBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <View style={styles.cropSlidersList}>
+              <PptSlider
+                label="سەرەوە (Top)"
+                unit="%"
+                min={0}
+                max={45}
+                step={1}
+                value={Math.round((currentCrop.top || 0) * 100)}
+                onChange={(val) => handleCropChange('top', val)}
+              />
 
-            {/* Left Crop */}
-            <View style={styles.stepperBox}>
-              <Text style={styles.stepperLabel}>چەپ (Left):</Text>
-              <View style={styles.stepperRow}>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('left', -0.05)}>
-                  <Text style={styles.stepBtnText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepValText}>{`${Math.round((currentCrop.left || 0) * 100)}%`}</Text>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('left', 0.05)}>
-                  <Text style={styles.stepBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              <PptSlider
+                label="خوارەوە (Bottom)"
+                unit="%"
+                min={0}
+                max={45}
+                step={1}
+                value={Math.round((currentCrop.bottom || 0) * 100)}
+                onChange={(val) => handleCropChange('bottom', val)}
+              />
 
-            {/* Right Crop */}
-            <View style={styles.stepperBox}>
-              <Text style={styles.stepperLabel}>ڕاست (Right):</Text>
-              <View style={styles.stepperRow}>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('right', -0.05)}>
-                  <Text style={styles.stepBtnText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.stepValText}>{`${Math.round((currentCrop.right || 0) * 100)}%`}</Text>
-                <TouchableOpacity style={styles.stepBtn} onPress={() => setCropSide('right', 0.05)}>
-                  <Text style={styles.stepBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
+              <PptSlider
+                label="چەپ (Left)"
+                unit="%"
+                min={0}
+                max={45}
+                step={1}
+                value={Math.round((currentCrop.left || 0) * 100)}
+                onChange={(val) => handleCropChange('left', val)}
+              />
+
+              <PptSlider
+                label="ڕاست (Right)"
+                unit="%"
+                min={0}
+                max={45}
+                step={1}
+                value={Math.round((currentCrop.right || 0) * 100)}
+                onChange={(val) => handleCropChange('right', val)}
+              />
             </View>
           </ScrollView>
         </View>
@@ -676,51 +690,33 @@ const styles = StyleSheet.create({
   chipBtnTextActive: {
     color: '#ffffff',
   },
+  cropVerticalContainer: {
+    paddingVertical: 4,
+    gap: 8,
+  },
+  cropHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  cropSlidersList: {
+    gap: 6,
+  },
   resetCropBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#3a3a3c',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    gap: 4,
+    gap: 6,
+    alignSelf: 'flex-start',
   },
   resetCropText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 'bold',
-  },
-  stepperBox: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  stepperLabel: {
-    color: '#aaaaaa',
-    fontSize: 10,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2c2c2e',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  stepBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  stepBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  stepValText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    minWidth: 32,
-    textAlign: 'center',
   },
   borderWidthRow: {
     marginBottom: 8,
