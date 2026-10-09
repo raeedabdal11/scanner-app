@@ -264,7 +264,7 @@ export async function mergeSignatures(baseImageUri, placedSignatures, displayW, 
       const targetX = sig.x * sx;
       const targetY = sig.y * sy;
       const targetW = sig.width * sx;
-      const targetH = targetW / sigAspect; // Maintain exact aspect ratio to prevent stretching
+      const targetH = sig.height * sy; // Support independent horizontal and vertical (height) scaling
 
       for (let y = 0; y < targetH; y++) {
         const destY = Math.floor(targetY + y);

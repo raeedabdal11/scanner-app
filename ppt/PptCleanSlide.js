@@ -79,7 +79,7 @@ export const PptCleanSlide = React.forwardRef(({
                 height: elemHeight,
                 zIndex: elem.zIndex || 1,
                 transform: rotation ? [{ rotate: `${rotation}deg` }] : [],
-                opacity,
+                opacity: elem.type === 'shape' ? 1 : opacity,
               },
             ]}
           >
@@ -197,15 +197,17 @@ export const PptCleanSlide = React.forwardRef(({
 
                   return (
                     <React.Fragment>
-                      {renderSvgShape({
-                        shapeType: shapeType,
-                        fill: fill,
-                        outlineColor: outlineColor,
-                        outlineWidth: outlineWidth,
-                        cornerRadius: cornerRadiusPct,
-                        svgWidth: '100%',
-                        svgHeight: '100%',
-                      })}
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                        {renderSvgShape({
+                          shapeType: shapeType,
+                          fill: fill,
+                          outlineColor: outlineColor,
+                          outlineWidth: outlineWidth,
+                          cornerRadius: cornerRadiusPct,
+                          svgWidth: '100%',
+                          svgHeight: '100%',
+                        })}
+                      </View>
                       {shapeTextElement && (
                         <View
                           style={{
@@ -294,6 +296,67 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function colorToRgba(colorStr, opacity = 1.0) {
+  if (!colorStr || colorStr === 'none' || colorStr === 'transparent') {
+    return 'transparent';
+  }
+  let hex = String(colorStr).trim();
+  const NAMED_COLORS = {
+    black: '#000000',
+    white: '#ffffff',
+    red: '#ff0000',
+    green: '#008000',
+    blue: '#0000ff',
+    yellow: '#ffff00',
+    gray: '#808080',
+    grey: '#808080',
+    lightgray: '#d3d3d3',
+    lightgrey: '#d3d3d3',
+    darkgray: '#a9a9a9',
+    darkgrey: '#a9a9a9',
+    cyan: '#00ffff',
+    magenta: '#ff00ff',
+    orange: '#ffa500',
+    purple: '#800080',
+  };
+  if (NAMED_COLORS[hex.toLowerCase()]) {
+    hex = NAMED_COLORS[hex.toLowerCase()];
+  }
+  if (hex.startsWith('#')) {
+    let cleanHex = hex.slice(1);
+    if (cleanHex.length === 3) {
+      cleanHex = cleanHex.split('').map(c => c + c).join('');
+    }
+    if (cleanHex.length === 6) {
+      const r = parseInt(cleanHex.slice(0, 2), 16);
+      const g = parseInt(cleanHex.slice(2, 4), 16);
+      const b = parseInt(cleanHex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+    if (cleanHex.length === 8) {
+      const r = parseInt(cleanHex.slice(0, 2), 16);
+      const g = parseInt(cleanHex.slice(2, 4), 16);
+      const b = parseInt(cleanHex.slice(4, 6), 16);
+      const a = (parseInt(cleanHex.slice(6, 8), 16) / 255) * opacity;
+      return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
+    }
+  }
+  if (hex.startsWith('rgb(')) {
+    const parts = hex.slice(4, -1).split(',').map(s => s.trim());
+    if (parts.length >= 3) {
+      return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${opacity})`;
+    }
+  }
+  if (hex.startsWith('rgba(')) {
+    const parts = hex.slice(5, -1).split(',').map(s => s.trim());
+    if (parts.length >= 4) {
+      const a = parseFloat(parts[3]) * opacity;
+      return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${a.toFixed(3)})`;
+    }
+  }
+  return colorStr;
 }
 
 export async function renderSlideToHtml(slide, width = 960, height = 540, fontFamily = 'Tahoma', slideIndex = 0) {
@@ -398,11 +461,14 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
       `);
     } else if (elem.type === 'shape') {
       const shapeType = elem.shapeType || 'rect';
-      const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
+      const rawFill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
       const outline = elem.outline || { color: '#000000', width: 2 };
-      const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
+      const rawOutlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
       const outlineWidth = outline.width || 0;
       const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
+
+      const fill = colorToRgba(rawFill, opacity);
+      const outlineColor = colorToRgba(rawOutlineColor, opacity);
 
       let shapeContentHtml = '';
 
@@ -490,7 +556,6 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
           height: ${uncroppedHeight.toFixed(2)}pt;
           z-index: ${zIndex};
           transform: rotate(${rotation}deg);
-          opacity: ${opacity};
           box-sizing: border-box;
         ">
           ${shapeContentHtml}

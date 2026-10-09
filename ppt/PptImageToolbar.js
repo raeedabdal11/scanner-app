@@ -29,8 +29,9 @@ export const PptImageToolbar = forwardRef(({
   onDeleteElement,
   onClose,
 }, ref) => {
-  const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'style' | 'crop' | 'border' | 'tools'
+  const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'size' | 'style' | 'crop' | 'border' | 'tools'
   const [showShapesPanel, setShowShapesPanel] = useState(false);
+  const [keepAspect, setKeepAspect] = useState(false);
 
   // Expose back navigation handlers via ref
   useImperativeHandle(ref, () => ({
@@ -74,6 +75,44 @@ export const PptImageToolbar = forwardRef(({
   const currentCrop = selectedElement?.crop || { top: 0, bottom: 0, left: 0, right: 0 };
   const isLocked = !!selectedElement?.locked;
 
+  const currentWidth = Math.round(selectedElement?.width || 50);
+  const currentHeight = Math.round(selectedElement?.height || 30);
+  const currentX = Math.round(selectedElement?.x || 25);
+  const currentY = Math.round(selectedElement?.y || 35);
+
+  // Size Handlers
+  const changeWidth = (newW) => {
+    const clampedW = Math.max(5, Math.min(100, Math.round(newW)));
+    if (keepAspect) {
+      const aspect = currentWidth / Math.max(1, currentHeight);
+      const newH = Math.max(3, Math.min(100, Math.round(clampedW / aspect)));
+      updateImage({ width: clampedW, height: newH });
+    } else {
+      updateImage({ width: clampedW });
+    }
+  };
+
+  const changeHeight = (newH) => {
+    const clampedH = Math.max(3, Math.min(100, Math.round(newH)));
+    if (keepAspect) {
+      const aspect = currentWidth / Math.max(1, currentHeight);
+      const newW = Math.max(5, Math.min(100, Math.round(clampedH * aspect)));
+      updateImage({ width: newW, height: clampedH });
+    } else {
+      updateImage({ height: clampedH });
+    }
+  };
+
+  const changeX = (newX) => {
+    const clampedX = Math.max(0, Math.min(100 - currentWidth, Math.round(newX)));
+    updateImage({ x: clampedX });
+  };
+
+  const changeY = (newY) => {
+    const clampedY = Math.max(0, Math.min(100 - currentHeight, Math.round(newY)));
+    updateImage({ y: clampedY });
+  };
+
   // Fit/Fill Toggle
   const toggleFit = (mode) => {
     updateImage({ fit: mode });
@@ -82,14 +121,12 @@ export const PptImageToolbar = forwardRef(({
   // Opacity Change
   const changeOpacity = (val) => {
     const clamped = Math.max(0.1, Math.min(1.0, Math.round(val * 100) / 100));
-    console.log('[PptImageToolbar] changeOpacity rawVal=', val, 'clampedOpacity=', clamped, 'currentElement.opacity=', selectedElement?.opacity);
     updateImage({ opacity: clamped });
   };
 
   // Border Radius Change
   const changeRadius = (rad) => {
     const clamped = Math.max(0, Math.min(50, rad));
-    console.log('[PptImageToolbar] changeRadius rawRad=', rad, 'clampedRadius=', clamped, 'currentElement.borderRadius=', selectedElement?.borderRadius);
     updateImage({ borderRadius: clamped });
   };
 
@@ -106,7 +143,6 @@ export const PptImageToolbar = forwardRef(({
 
   // Border Width & Color
   const setBorderWidth = (w) => {
-    console.log('[PptImageToolbar] setBorderWidth rawWidth=', w, 'currentElement.border=', selectedElement?.border);
     updateImage({
       border: {
         color: currentBorderColor,
@@ -173,7 +209,7 @@ export const PptImageToolbar = forwardRef(({
   return (
     <View style={styles.toolbarContainer}>
       {/* Top Header Tabs */}
-      <View style={styles.tabHeaderRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabHeaderRow}>
         <TouchableOpacity
           style={[styles.tabHeaderBtn, activeSubTab === 'insert' && styles.tabHeaderBtnActive]}
           onPress={() => setActiveSubTab('insert')}
@@ -187,12 +223,22 @@ export const PptImageToolbar = forwardRef(({
         {isImageSelected && (
           <>
             <TouchableOpacity
+              style={[styles.tabHeaderBtn, activeSubTab === 'size' && styles.tabHeaderBtnActive]}
+              onPress={() => setActiveSubTab('size')}
+            >
+              <Ionicons name="resize-outline" size={15} color={activeSubTab === 'size' ? '#ffffff' : '#aaaaaa'} />
+              <Text style={[styles.tabHeaderBtnText, activeSubTab === 'size' && styles.tabHeaderBtnTextActive]}>
+                قەبارەی ستوونی و ئاسۆیی (Size)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.tabHeaderBtn, activeSubTab === 'style' && styles.tabHeaderBtnActive]}
               onPress={() => setActiveSubTab('style')}
             >
               <Ionicons name="options-outline" size={15} color={activeSubTab === 'style' ? '#ffffff' : '#aaaaaa'} />
               <Text style={[styles.tabHeaderBtnText, activeSubTab === 'style' && styles.tabHeaderBtnTextActive]}>
-                شێواز و گۆشە
+                شێواز و ڕوونی
               </Text>
             </TouchableOpacity>
 
@@ -227,7 +273,7 @@ export const PptImageToolbar = forwardRef(({
             </TouchableOpacity>
           </>
         )}
-      </View>
+      </ScrollView>
 
       {/* SUB-TAB 1: INSERT MODE ("زیادکردن") */}
       {activeSubTab === 'insert' && (
@@ -371,10 +417,134 @@ export const PptImageToolbar = forwardRef(({
         </View>
       )}
 
+      {/* SUB-TAB: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}
+      {isImageSelected && activeSubTab === 'size' && (
+        <View style={styles.tabContentBox}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sizeSectionContainer}>
+            {/* Width Controls (پانی / Horizontal) */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>پانی (Width): {currentWidth}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeWidth(currentWidth - 1)}>
+                    <Text style={styles.stepBtnText}>-1</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeWidth(currentWidth + 1)}>
+                    <Text style={styles.stepBtnText}>+1</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <PptSlider
+                label="پانی"
+                unit="%"
+                min={5}
+                max={100}
+                step={1}
+                value={currentWidth}
+                onChange={changeWidth}
+                style={{ width: 170 }}
+              />
+
+              <View style={styles.chipRow}>
+                {[15, 25, 50, 75, 100].map((wVal) => (
+                  <TouchableOpacity
+                    key={`wchip_${wVal}`}
+                    style={[styles.chipBtn, currentWidth === wVal && styles.chipBtnActive]}
+                    onPress={() => changeWidth(wVal)}
+                  >
+                    <Text style={[styles.chipBtnText, currentWidth === wVal && styles.chipBtnTextActive]}>{wVal}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Height Controls (بەرزایی / Vertical) */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>بەرزایی (Height): {currentHeight}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeHeight(currentHeight - 1)}>
+                    <Text style={styles.stepBtnText}>-1</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeHeight(currentHeight + 1)}>
+                    <Text style={styles.stepBtnText}>+1</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <PptSlider
+                label="بەرزایی"
+                unit="%"
+                min={3}
+                max={100}
+                step={1}
+                value={currentHeight}
+                onChange={changeHeight}
+                style={{ width: 170 }}
+              />
+
+              <View style={styles.chipRow}>
+                {[10, 20, 35, 50, 75].map((hVal) => (
+                  <TouchableOpacity
+                    key={`hchip_${hVal}`}
+                    style={[styles.chipBtn, currentHeight === hVal && styles.chipBtnActive]}
+                    onPress={() => changeHeight(hVal)}
+                  >
+                    <Text style={[styles.chipBtnText, currentHeight === hVal && styles.chipBtnTextActive]}>{hVal}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Position X Controls */}
+            <View style={styles.dimensionBox}>
+              <Text style={styles.dimensionTitle}>شوێنی ئاسۆیی (X): {currentX}%</Text>
+              <PptSlider
+                label="شوێنی X"
+                unit="%"
+                min={0}
+                max={Math.max(1, 100 - currentWidth)}
+                step={1}
+                value={currentX}
+                onChange={changeX}
+                style={{ width: 150 }}
+              />
+            </View>
+
+            {/* Position Y Controls */}
+            <View style={styles.dimensionBox}>
+              <Text style={styles.dimensionTitle}>شوێنی ستوونی (Y): {currentY}%</Text>
+              <PptSlider
+                label="شوێنی Y"
+                unit="%"
+                min={0}
+                max={Math.max(1, 100 - currentHeight)}
+                step={1}
+                value={currentY}
+                onChange={changeY}
+                style={{ width: 150 }}
+              />
+            </View>
+
+            {/* Aspect Ratio Lock Toggle */}
+            <TouchableOpacity
+              style={[styles.aspectLockBtn, keepAspect && styles.aspectLockBtnActive]}
+              onPress={() => setKeepAspect(!keepAspect)}
+            >
+              <Ionicons name={keepAspect ? 'link' : 'unlink-outline'} size={18} color="#ffffff" />
+              <Text style={styles.aspectLockText}>
+                {keepAspect ? 'لێکچوونی ڕێژە (Locked)' : 'ڕێژەی ئازاد (Unlocked)'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+
       {/* SUB-TAB 2: STYLE & OPACITY & ROTATION ("شێواز و گۆشە") */}
       {isImageSelected && activeSubTab === 'style' && (
         <View style={styles.tabContentBox}>
-          <View style={[styles.scrollContentRow, { flexWrap: 'wrap' }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
             {/* 1. Fit / Fill Toggle */}
             <View style={styles.controlGroup}>
               <Text style={styles.groupLabel}>شێوازی پێشاندان:</Text>
@@ -408,22 +578,71 @@ export const PptImageToolbar = forwardRef(({
               step={1}
               value={currentRadius}
               onChange={changeRadius}
-              style={{ width: 180 }}
+              style={{ width: 160 }}
             />
 
             {/* 3. Opacity (10 - 100%) */}
-            <PptSlider
-              label="ڕوونی (Opacity)"
-              unit="%"
-              min={10}
-              max={100}
-              step={1}
-              value={Math.round(currentOpacity * 100)}
-              onChange={(val) => changeOpacity(val / 100)}
-              style={{ width: 180 }}
-            />
+            <View style={styles.controlGroup}>
+              <PptSlider
+                label="ڕوونی (Opacity)"
+                unit="%"
+                min={10}
+                max={100}
+                step={1}
+                value={Math.round(currentOpacity * 100)}
+                onChange={(val) => changeOpacity(val / 100)}
+                style={{ width: 160 }}
+              />
+              <View style={styles.chipRow}>
+                {[20, 40, 60, 80, 100].map((opVal) => (
+                  <TouchableOpacity
+                    key={`opchip_${opVal}`}
+                    style={[styles.chipBtn, Math.round(currentOpacity * 100) === opVal && styles.chipBtnActive]}
+                    onPress={() => changeOpacity(opVal / 100)}
+                  >
+                    <Text style={[styles.chipBtnText, Math.round(currentOpacity * 100) === opVal && styles.chipBtnTextActive]}>{opVal}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-            {/* 4. Image Scale / Size Slider (10 - 100%) */}
+            {/* 4. Rotation Controls */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.groupLabel}>سوڕاندنەوە (Rotation): {currentRotation}°</Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(-90)}>
+                  <Text style={styles.chipBtnText}>↺ 90°</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(90)}>
+                  <Text style={styles.chipBtnText}>↻ 90°</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(-15)}>
+                  <Text style={styles.chipBtnText}>↺ 15°</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(15)}>
+                  <Text style={styles.chipBtnText}>↻ 15°</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.chipBtn, currentRotation === 0 && styles.chipBtnActive]} onPress={() => setRotation(0)}>
+                  <Text style={[styles.chipBtnText, currentRotation === 0 && styles.chipBtnTextActive]}>0°</Text>
+                </TouchableOpacity>
+              </View>
+              <PptSlider
+                label="گۆشەی سوڕاندن"
+                unit="°"
+                min={0}
+                max={360}
+                step={1}
+                value={currentRotation}
+                onChange={setRotation}
+                style={{ width: 160 }}
+              />
+            </View>
+
+            {/* 5. Image Scale / Proportional Size Slider */}
             <PptSlider
               label="قەبارەی وێنە (Scale)"
               unit="%"
@@ -436,37 +655,14 @@ export const PptImageToolbar = forwardRef(({
                 const currentH = selectedElement?.height || 30;
                 const aspect = currentW / Math.max(1, currentH);
                 const newH = Math.max(5, newWidth / aspect);
-                console.log('[PptImageToolbar] Image Scale slider val=', newWidth, 'newWidth=', newWidth, 'newH=', newH, 'currentElement.width=', selectedElement?.width);
                 updateImage({
                   width: newWidth,
                   height: Math.round(newH * 10) / 10,
                 });
               }}
-              style={{ width: 180 }}
+              style={{ width: 160 }}
             />
-
-            {/* 4. Rotation */}
-            <View style={styles.controlGroup}>
-              <Text style={styles.groupLabel}>سوڕاندن (Rotation):</Text>
-              <View style={styles.chipRow}>
-                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(-90)}>
-                  <Text style={styles.chipBtnText}>↺ 90°</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(90)}>
-                  <Text style={styles.chipBtnText}>↻ 90°</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.chipBtn, currentRotation === 0 && styles.chipBtnActive]} onPress={() => setRotation(0)}>
-                  <Text style={[styles.chipBtnText, currentRotation === 0 && styles.chipBtnTextActive]}>0°</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.chipBtn, currentRotation === 180 && styles.chipBtnActive]} onPress={() => setRotation(180)}>
-                  <Text style={[styles.chipBtnText, currentRotation === 180 && styles.chipBtnTextActive]}>180°</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -626,7 +822,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#141416',
     paddingHorizontal: 8,
     paddingVertical: 6,
-    gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#2c2c2e',
   },
@@ -638,6 +833,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 5,
     backgroundColor: '#2c2c2e',
+    marginRight: 6,
   },
   tabHeaderBtnActive: {
     backgroundColor: '#8B3A2B',
@@ -652,6 +848,66 @@ const styles = StyleSheet.create({
   },
   tabContentBox: {
     padding: 10,
+  },
+  sizeSectionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  dimensionBox: {
+    backgroundColor: '#2c2c2e',
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 180,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  dimensionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  dimensionTitle: {
+    color: '#30d158',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  stepBtnGroup: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  stepBtn: {
+    backgroundColor: '#3a3a3c',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  stepBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  aspectLockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    gap: 6,
+  },
+  aspectLockBtnActive: {
+    backgroundColor: '#8B3A2B',
+    borderColor: '#8B3A2B',
+  },
+  aspectLockText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   sectionTitle: {
     color: '#ffffff',

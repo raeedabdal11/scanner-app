@@ -867,6 +867,53 @@ export default function App() {
     })
   ).current;
 
+  const createShapeHandlePanResponder = (handleType, sigItem) => {
+    let startX = 0, startY = 0, startW = 0, startH = 0;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        startX = sigItem.x;
+        startY = sigItem.y;
+        startW = sigItem.width;
+        startH = sigItem.height;
+        setActiveSigId(sigItem.id);
+      },
+      onPanResponderMove: (evt, gs) => {
+        const minW = 25;
+        const minH = 20;
+        let x = startX;
+        let y = startY;
+        let w = startW;
+        let h = startH;
+
+        if (handleType.includes('l')) {
+          const maxDx = startW - minW;
+          const dx = Math.min(gs.dx, maxDx);
+          x = startX + dx;
+          w = startW - dx;
+        }
+        if (handleType.includes('r')) {
+          w = Math.max(minW, startW + gs.dx);
+        }
+        if (handleType.includes('t')) {
+          const maxDy = startH - minH;
+          const dy = Math.min(gs.dy, maxDy);
+          y = startY + dy;
+          h = startH - dy;
+        }
+        if (handleType.includes('b')) {
+          h = Math.max(minH, startH + gs.dy);
+        }
+
+        setSignatures(prev => prev.map(s => s.id === sigItem.id ? { ...s, x, y, width: Math.round(w), height: Math.round(h) } : s));
+      },
+      onPanResponderRelease: () => {},
+    });
+  };
+
   const renderSigning = () => {
     return (
       <View style={[styles.flex1, {backgroundColor: '#000'}]} onTouchStart={() => { setActiveSigId(null); setActiveSigColorPicker(null); }}>
@@ -930,26 +977,107 @@ export default function App() {
                 <Image source={{ uri: sig.uri }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
 
                 <TouchableOpacity
-                  style={{position: 'absolute', top: -16, right: -16, backgroundColor: '#ff3b30', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', zIndex: 15, elevation: 5}}
+                  style={{position: 'absolute', top: -16, right: -16, backgroundColor: '#ff3b30', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', zIndex: 35, elevation: 5}}
                   onPress={() => setSignatures(prev => prev.filter(s => s.id !== sig.id))}
                 >
                   <Text style={{color: '#fff', fontSize: 16, fontWeight: 'bold'}}>✕</Text>
                 </TouchableOpacity>
 
-                <View style={{position: 'absolute', bottom: -16, right: 0, flexDirection: 'row', zIndex: 15}}>
-                  <TouchableOpacity
-                    style={{backgroundColor: '#007AFF', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, elevation: 4}}
-                    onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: s.width + 25, height: s.height + 18 } : s))}
-                  >
-                    <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold'}}>+</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{backgroundColor: '#007AFF', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginHorizontal: 3, elevation: 4}}
-                    onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: Math.max(60, s.width - 25), height: Math.max(40, s.height - 18) } : s))}
-                  >
-                    <Text style={{color: '#fff', fontSize: 18, fontWeight: 'bold'}}>-</Text>
-                  </TouchableOpacity>
-                </View>
+                {isSelected && (
+                  <>
+                    {/* Top Edge Handle (Vertical Top) */}
+                    <View
+                      style={[styles.shapeHandle, { top: -12, left: '50%', marginLeft: -12 }]}
+                      {...createShapeHandlePanResponder('t', sig).panHandlers}
+                    >
+                      <View style={styles.handleDot} />
+                    </View>
+
+                    {/* Bottom Edge Handle (Vertical Bottom) */}
+                    <View
+                      style={[styles.shapeHandle, { bottom: -12, left: '50%', marginLeft: -12 }]}
+                      {...createShapeHandlePanResponder('b', sig).panHandlers}
+                    >
+                      <View style={styles.handleDot} />
+                    </View>
+
+                    {/* Left Edge Handle (Horizontal Left) */}
+                    <View
+                      style={[styles.shapeHandle, { left: -12, top: '50%', marginTop: -12 }]}
+                      {...createShapeHandlePanResponder('l', sig).panHandlers}
+                    >
+                      <View style={styles.handleDot} />
+                    </View>
+
+                    {/* Right Edge Handle (Horizontal Right) */}
+                    <View
+                      style={[styles.shapeHandle, { right: -12, top: '50%', marginTop: -12 }]}
+                      {...createShapeHandlePanResponder('r', sig).panHandlers}
+                    >
+                      <View style={styles.handleDot} />
+                    </View>
+
+                    {/* Top-Left Corner Handle */}
+                    <View
+                      style={[styles.shapeHandle, { top: -12, left: -12 }]}
+                      {...createShapeHandlePanResponder('tl', sig).panHandlers}
+                    >
+                      <View style={styles.handleDotCorner} />
+                    </View>
+
+                    {/* Top-Right Corner Handle */}
+                    <View
+                      style={[styles.shapeHandle, { top: -12, right: -12 }]}
+                      {...createShapeHandlePanResponder('tr', sig).panHandlers}
+                    >
+                      <View style={styles.handleDotCorner} />
+                    </View>
+
+                    {/* Bottom-Left Corner Handle */}
+                    <View
+                      style={[styles.shapeHandle, { bottom: -12, left: -12 }]}
+                      {...createShapeHandlePanResponder('bl', sig).panHandlers}
+                    >
+                      <View style={styles.handleDotCorner} />
+                    </View>
+
+                    {/* Bottom-Right Corner Handle */}
+                    <View
+                      style={[styles.shapeHandle, { bottom: -12, right: -12 }]}
+                      {...createShapeHandlePanResponder('br', sig).panHandlers}
+                    >
+                      <View style={styles.handleDotCorner} />
+                    </View>
+
+                    {/* Directional Resizing Quick Buttons */}
+                    <View style={{position: 'absolute', bottom: -28, right: -5, flexDirection: 'row', zIndex: 35, gap: 4}}>
+                      <TouchableOpacity
+                        style={{backgroundColor: '#007AFF', paddingHorizontal: 7, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', elevation: 4}}
+                        onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, height: s.height + 15 } : s))}
+                      >
+                        <Text style={{color: '#fff', fontSize: 11, fontWeight: 'bold'}}>+بەرزایی</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{backgroundColor: '#007AFF', paddingHorizontal: 7, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', elevation: 4}}
+                        onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, height: Math.max(20, s.height - 15) } : s))}
+                      >
+                        <Text style={{color: '#fff', fontSize: 11, fontWeight: 'bold'}}>-بەرزایی</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{backgroundColor: '#34c759', paddingHorizontal: 7, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', elevation: 4}}
+                        onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: s.width + 15 } : s))}
+                      >
+                        <Text style={{color: '#fff', fontSize: 11, fontWeight: 'bold'}}>+پانی</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{backgroundColor: '#34c759', paddingHorizontal: 7, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', elevation: 4}}
+                        onPress={() => setSignatures(prev => prev.map(s => s.id === sig.id ? { ...s, width: Math.max(25, s.width - 15) } : s))}
+                      >
+                        <Text style={{color: '#fff', fontSize: 11, fontWeight: 'bold'}}>-پانی</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             );
           })}
@@ -961,7 +1089,7 @@ export default function App() {
             style={{backgroundColor: '#007AFF', padding: 16, borderRadius: 20, alignItems: 'center', marginBottom: signatures.length > 0 ? 10 : 0}}
             onPress={() => setSignatureModalVisible(true)}
           >
-            <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➕ زیادکردنی ئیمزا</Text>
+            <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➕ زیادکردنی ئیمزا / شێوە</Text>
           </TouchableOpacity>
 
           {/* BOTTOM TOOLBAR WHEN SIGNATURES EXIST */}
@@ -993,7 +1121,7 @@ export default function App() {
               {activePanel === 'rotate' && (
                 <View style={styles.panelContainer}>
                   <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>سوڕاندنەوە (Rotation):</Text>
-                  <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{flexDirection: 'row', gap: 8, alignItems: 'center'}}>
                     <TouchableOpacity
                       style={styles.panelBtn}
                       onPress={() => {
@@ -1021,58 +1149,159 @@ export default function App() {
                       onPress={() => {
                         const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                         if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: ((s.rotation || 0) - 15 + 360) % 360 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold'}}>⟲ ١٥°</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
+                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: ((s.rotation || 0) + 15) % 360 } : s));
+                        }
+                      }}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold'}}>⟳ ١٥°</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.panelBtn}
+                      onPress={() => {
+                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                        if (targetSig) {
                           setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, rotation: 0 } : s));
                         }
                       }}
                     >
                       <Text style={{color: '#ff3b30', fontWeight: 'bold'}}>ڕێککردنەوە (0°)</Text>
                     </TouchableOpacity>
-                  </View>
+                  </ScrollView>
                 </View>
               )}
 
               {activePanel === 'size' && (
                 <View style={styles.panelContainer}>
-                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 6, textAlign: 'right'}}>
-                    قەبارە و گۆڕینی پێوەر (Resize / Scale):
+                  <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold', marginBottom: 8, textAlign: 'right'}}>
+                    قەبارە و گۆڕینی ئاسۆیی و ستوونی (Height & Width Scaling):
                   </Text>
-                  <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 8}}>
-                    <TouchableOpacity
-                      style={styles.panelBtn}
-                      onPress={() => {
-                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
-                        if (targetSig) {
-                          const aspect = targetSig.width / targetSig.height;
-                          const newW = Math.max(40, targetSig.width - 25);
-                          const newH = Math.max(25, newW / aspect);
-                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH } : s));
-                        }
-                      }}
-                    >
-                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➖ بچووککردنەوە</Text>
-                    </TouchableOpacity>
 
-                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>
-                      {Math.round((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.width || 150)}px
+                  {/* 1. HEIGHT / VERTICAL CONTROL */}
+                  <View style={{marginBottom: 10}}>
+                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', marginBottom: 4, textAlign: 'right'}}>
+                      بەرزایی / Height (ستوونی):
                     </Text>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                      <TouchableOpacity
+                        style={styles.panelBtn}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const newH = Math.max(20, targetSig.height - 15);
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>➖ کەمکردنی بەرزایی</Text>
+                      </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.panelBtn}
-                      onPress={() => {
-                        const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
-                        if (targetSig) {
-                          const aspect = targetSig.width / targetSig.height;
-                          const newW = targetSig.width + 25;
-                          const newH = newW / aspect;
-                          setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH } : s));
-                        }
-                      }}
-                    >
-                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 16}}>➕ گەورەکردنەوە</Text>
-                    </TouchableOpacity>
+                      <Text style={{color: '#ffd60a', fontSize: 13, fontWeight: 'bold'}}>
+                        {Math.round((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.height || 100)}px
+                      </Text>
+
+                      <TouchableOpacity
+                        style={styles.panelBtn}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const newH = targetSig.height + 15;
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>➕ زیادکردنی بەرزایی</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 6}}>
+                  {/* 2. WIDTH / HORIZONTAL CONTROL */}
+                  <View style={{marginBottom: 10}}>
+                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', marginBottom: 4, textAlign: 'right'}}>
+                      پانی / Width (ئاسۆیی):
+                    </Text>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                      <TouchableOpacity
+                        style={[styles.panelBtn, {backgroundColor: '#34c759'}]}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const newW = Math.max(25, targetSig.width - 15);
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>➖ کەمکردنی پانی</Text>
+                      </TouchableOpacity>
+
+                      <Text style={{color: '#34c759', fontSize: 13, fontWeight: 'bold'}}>
+                        {Math.round((signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.width || 150)}px
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[styles.panelBtn, {backgroundColor: '#34c759'}]}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const newW = targetSig.width + 15;
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>➕ زیادکردنی پانی</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* 3. BOTH / PROPORTIONAL SCALING */}
+                  <View style={{marginBottom: 10}}>
+                    <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', marginBottom: 4, textAlign: 'right'}}>
+                      پێکەوە / Both (هاوسەنگ):
+                    </Text>
+                    <View style={{flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center'}}>
+                      <TouchableOpacity
+                        style={[styles.panelBtn, {backgroundColor: '#5856D6'}]}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const ratio = targetSig.width / targetSig.height;
+                            const newW = Math.max(25, targetSig.width - 20);
+                            const newH = Math.max(20, newW / ratio);
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: Math.round(newW), height: Math.round(newH) } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 12}}>➖ بچووککردنەوەی هەردوو لا</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.panelBtn, {backgroundColor: '#5856D6'}]}
+                        onPress={() => {
+                          const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                          if (targetSig) {
+                            const ratio = targetSig.width / targetSig.height;
+                            const newW = targetSig.width + 20;
+                            const newH = newW / ratio;
+                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: Math.round(newW), height: Math.round(newH) } : s));
+                          }
+                        }}
+                      >
+                        <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 12}}>➕ گەورەکردنی هەردوو لا</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 6, paddingTop: 4}}>
                     {[
                       { label: '50%', factor: 0.5 },
                       { label: '75%', factor: 0.75 },
@@ -1083,7 +1312,7 @@ export default function App() {
                     ].map(item => (
                       <TouchableOpacity
                         key={`sig_scale_${item.label}`}
-                        style={styles.panelBtn}
+                        style={[styles.panelBtn, {backgroundColor: '#3a3a3c'}]}
                         onPress={() => {
                           const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                           if (targetSig) {
@@ -2767,5 +2996,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     alignItems: 'center'
+  },
+  shapeHandle: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  handleDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#007AFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  handleDotCorner: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#FF9500',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   }
 });

@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { getElementRuns } from './formattedText';
+import { renderSvgShape } from './shapeCatalog';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -125,6 +126,69 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
                         );
                       })}
                     </Text>
+                  </View>
+                ) : elem.type === 'shape' ? (
+                  <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+                    {(() => {
+                      const shapeType = elem.shapeType || 'rect';
+                      const fill = elem.fill && elem.fill !== 'none' && elem.fill !== 'transparent' ? elem.fill : 'transparent';
+                      const outline = elem.outline || { color: '#000000', width: 2 };
+                      const outlineColor = outline.width > 0 ? (outline.color || '#000000') : 'transparent';
+                      const outlineWidth = outline.width || 0;
+                      const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
+
+                      const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / 360);
+                      const textColor = elem.textColor || '#000000';
+                      const isBold = !!elem.bold;
+                      const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
+
+                      const shapeTextElement = elem.text ? (
+                        <Text
+                          style={{
+                            color: textColor,
+                            fontSize: shapeFontSize,
+                            fontWeight: isBold ? 'bold' : 'normal',
+                            fontFamily: fontFamily || 'Tahoma',
+                            textAlign: 'center',
+                            writingDirection: 'rtl',
+                          }}
+                        >
+                          {elem.text}
+                        </Text>
+                      ) : null;
+
+                      return (
+                        <React.Fragment>
+                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                            {renderSvgShape({
+                              shapeType: shapeType,
+                              fill: fill,
+                              outlineColor: outlineColor,
+                              outlineWidth: outlineWidth,
+                              cornerRadius: cornerRadiusPct,
+                              svgWidth: '100%',
+                              svgHeight: '100%',
+                            })}
+                          </View>
+                          {shapeTextElement && (
+                            <View
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                padding: 2,
+                              }}
+                            >
+                              {shapeTextElement}
+                            </View>
+                          )}
+                        </React.Fragment>
+                      );
+                    })()}
                   </View>
                 ) : (
                   <View style={{ flex: 1 }}>

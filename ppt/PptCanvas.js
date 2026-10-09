@@ -552,7 +552,7 @@ export const PptCanvas = ({
                   height: elemHeight,
                   zIndex: elem.zIndex || 1,
                   transform: rotation ? [{ rotate: `${rotation}deg` }] : [],
-                  opacity,
+                  opacity: elem.type === 'shape' ? 1 : opacity,
                 },
                 isSelected && styles.selectedWrapper,
               ]}
@@ -667,15 +667,17 @@ export const PptCanvas = ({
 
                     return (
                       <React.Fragment>
-                        {renderSvgShape({
-                          shapeType: shapeType,
-                          fill: fill,
-                          outlineColor: outlineColor,
-                          outlineWidth: outlineWidth,
-                          cornerRadius: cornerRadiusPct,
-                          svgWidth: '100%',
-                          svgHeight: '100%',
-                        })}
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                          {renderSvgShape({
+                            shapeType: shapeType,
+                            fill: fill,
+                            outlineColor: outlineColor,
+                            outlineWidth: outlineWidth,
+                            cornerRadius: cornerRadiusPct,
+                            svgWidth: '100%',
+                            svgHeight: '100%',
+                          })}
+                        </View>
                         {shapeTextElement && (
                           <View
                             style={{

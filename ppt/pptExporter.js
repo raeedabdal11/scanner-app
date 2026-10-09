@@ -761,10 +761,50 @@ export const exportPresentationToPptx = async (
             });
 
             try {
-              let pptxShapeType = shapeType || pptx.shapes.RECTANGLE;
-              if (shapeType === 'roundRect') pptxShapeType = pptx.shapes.ROUNDED_RECTANGLE;
-              else if (shapeType === 'ellipse') pptxShapeType = pptx.shapes.OVAL;
-              else if (shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow') pptxShapeType = pptx.shapes.LINE;
+              let pptxShapeType = pptx.shapes ? pptx.shapes.RECTANGLE : 'rect';
+              if (pptx.shapes) {
+                const upper = shapeType.toUpperCase();
+                if (pptx.shapes[upper]) {
+                  pptxShapeType = pptx.shapes[upper];
+                } else {
+                  const shapeMap = {
+                    rect: pptx.shapes.RECTANGLE,
+                    roundRect: pptx.shapes.ROUNDED_RECTANGLE,
+                    ellipse: pptx.shapes.OVAL,
+                    triangle: pptx.shapes.TRIANGLE,
+                    rtTriangle: pptx.shapes.RIGHT_TRIANGLE,
+                    diamond: pptx.shapes.DIAMOND,
+                    parallelogram: pptx.shapes.PARALLELOGRAM,
+                    trapezoid: pptx.shapes.TRAPEZOID,
+                    pentagon: pptx.shapes.PENTAGON,
+                    hexagon: pptx.shapes.HEXAGON,
+                    octagon: pptx.shapes.OCTAGON,
+                    line: pptx.shapes.LINE,
+                    arrow: pptx.shapes.LINE,
+                    doubleArrow: pptx.shapes.LINE,
+                    rightArrow: pptx.shapes.RIGHT_ARROW,
+                    leftArrow: pptx.shapes.LEFT_ARROW,
+                    upArrow: pptx.shapes.UP_ARROW,
+                    downArrow: pptx.shapes.DOWN_ARROW,
+                    leftRightArrow: pptx.shapes.LEFT_RIGHT_ARROW,
+                    upDownArrow: pptx.shapes.UP_DOWN_ARROW,
+                    star4: pptx.shapes.STAR_4_POINT,
+                    star5: pptx.shapes.STAR_5_POINT,
+                    star6: pptx.shapes.STAR_6_POINT,
+                    star8: pptx.shapes.STAR_8_POINT,
+                    heart: pptx.shapes.HEART,
+                    lightningBolt: pptx.shapes.LIGHTNING_BOLT,
+                    sun: pptx.shapes.SUN,
+                    moon: pptx.shapes.MOON,
+                    cloud: pptx.shapes.CLOUD,
+                    smileyFace: pptx.shapes.SMILEY_FACE,
+                    donut: pptx.shapes.DONUT,
+                    can: pptx.shapes.CAN,
+                    cube: pptx.shapes.CUBE,
+                  };
+                  pptxShapeType = shapeMap[shapeType] || pptx.shapes.RECTANGLE;
+                }
+              }
 
               const shapeOpts = {
                 x: xIn,
@@ -1533,11 +1573,15 @@ export const exportPresentationToPptx = async (
                 let clrNode = clrNodes.length > 0 ? clrNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
                 clrNode.setAttribute('val', spec.color.hex);
 
+                let alphaNodes = clrNode.getElementsByTagName('a:alpha');
                 if (spec.color.alpha !== null && spec.color.alpha !== undefined) {
-                  let alphaNodes = clrNode.getElementsByTagName('a:alpha');
                   let alphaNode = alphaNodes.length > 0 ? alphaNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:alpha');
                   alphaNode.setAttribute('val', String(spec.color.alpha));
                   if (alphaNodes.length === 0) clrNode.appendChild(alphaNode);
+                } else {
+                  while (alphaNodes.length > 0) {
+                    clrNode.removeChild(alphaNodes[0]);
+                  }
                 }
 
                 if (clrNodes.length === 0) solidFillNode.appendChild(clrNode);
