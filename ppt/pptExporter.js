@@ -904,7 +904,7 @@ export const exportPresentationToPptx = async (
               }
 
               const shapeOpts = {
-                name: shapeTagName,
+                objectName: shapeTagName, // pptxgenjs writes this as <p:cNvPr name>; "name" is ignored
                 x: xIn,
                 y: yIn,
                 w: wIn,
@@ -1324,7 +1324,6 @@ export const exportPresentationToPptx = async (
         let shapesWithTextCount = 0;
         let nextShapeId = 1000;
 
-        let shapeNodeIndex = 0;
         for (const shapeNode of allShapeNodes) {
           nextShapeId++;
           let nameAttr = '';
@@ -1348,17 +1347,15 @@ export const exportPresentationToPptx = async (
             }
           }
 
+          // Match by name only: an index fallback would turn text boxes into shapes.
           let sIdx = -1;
           const match = nameAttr.match(/^APP_SHAPE_(\d+)$/);
           if (match) {
             sIdx = parseInt(match[1], 10);
-          } else if (shapeNodeIndex < shapeElemSpecs.length) {
-            sIdx = shapeNodeIndex;
           }
 
           if (sIdx < 0 || !shapeElemSpecs[sIdx]) continue;
           const spec = shapeElemSpecs[sIdx];
-          shapeNodeIndex++;
 
           shapeExportCount++;
           const shapeType = spec.shapeType || 'rect';
@@ -1424,11 +1421,13 @@ export const exportPresentationToPptx = async (
             if (prstGeomNodes.length === 0) spPr.appendChild(prstGeom);
             modified = true;
 
-            const fillTags = ['a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:noFill'];
-            for (const ft of fillTags) {
-              const existingFills = spPr.getElementsByTagName(ft);
-              while (existingFills.length > 0) {
-                spPr.removeChild(existingFills[0]);
+            // Only DIRECT children of spPr: getElementsByTagName is deep and would also return the
+            // <a:solidFill> inside <a:ln>; xmldom's removeChild does not check the parent, so removing
+            // a non-child corrupts spPr's sibling chain and the whole spPr serializes empty.
+            const fillTags = ['a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:noFill', 'a:ln'];
+            for (const child of Array.from(spPr.childNodes)) {
+              if (child.nodeType === 1 && fillTags.includes(child.nodeName)) {
+                spPr.removeChild(child);
               }
             }
 
@@ -1453,11 +1452,6 @@ export const exportPresentationToPptx = async (
               spPr.appendChild(noFill);
             }
             modified = true;
-
-            const existingLns = spPr.getElementsByTagName('a:ln');
-            while (existingLns.length > 0) {
-              spPr.removeChild(existingLns[0]);
-            }
 
             const outline = spec.outline || { color: '#000000', width: 2 };
             const outlineWidth = outline.width !== undefined ? outline.width : 2;
