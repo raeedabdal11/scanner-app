@@ -11,7 +11,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
-import { SHAPE_STYLE_PRESETS, renderSvgShape } from './shapeCatalog';
+import { SHAPE_STYLE_ROWS } from './shapeCatalog';
+
+const normFill = (c) => {
+  const v = (c || 'none').toLowerCase();
+  return v === 'transparent' ? 'none' : v;
+};
 
 const COLOR_PALETTE = [
   '#ffffff', '#000000', '#1f497d', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646',
@@ -217,7 +222,8 @@ export const PptShapeToolbar = forwardRef(({
     }
   };
 
-  // --- Apply Preset Shape Style (أنماط الأشكال) ---
+  // --- Apply Shape Style preset ---
+  // One updateShape call = one undo step. Size, position, rotation, text and opacity are kept.
   const applyShapeStylePreset = (preset) => {
     updateShape({
       fill: preset.fill,
@@ -225,11 +231,16 @@ export const PptShapeToolbar = forwardRef(({
         color: preset.outlineColor,
         width: preset.outlineWidth,
       },
-      textColor: preset.textColor || selectedElement.textColor || '#000000',
-      bold: preset.bold !== undefined ? preset.bold : (selectedElement.bold || false),
-      opacity: preset.opacity !== undefined ? preset.opacity : (selectedElement.opacity !== undefined ? selectedElement.opacity : 1.0),
+      textColor: preset.textColor,
     });
   };
+
+  const currentTextColor = (selectedElement.textColor || '#000000').toLowerCase();
+  const isPresetActive = (preset) =>
+    normFill(currentFill) === normFill(preset.fill) &&
+    currentOutlineWidth === preset.outlineWidth &&
+    (preset.outlineWidth === 0 || currentOutlineColor.toLowerCase() === preset.outlineColor.toLowerCase()) &&
+    currentTextColor === preset.textColor.toLowerCase();
 
   return (
     <View style={styles.toolbarContainer}>
@@ -242,7 +253,7 @@ export const PptShapeToolbar = forwardRef(({
           >
             <Ionicons name="color-palette-outline" size={15} color={activeSubTab === 'style_presets' ? '#ffffff' : '#aaaaaa'} />
             <Text style={[styles.tabHeaderBtnText, activeSubTab === 'style_presets' && styles.tabHeaderBtnTextActive]}>
-              أنماط الأشكال (Shape Styles)
+              شێوازی شێوەکان
             </Text>
           </TouchableOpacity>
         )}
@@ -253,7 +264,7 @@ export const PptShapeToolbar = forwardRef(({
         >
           <Ionicons name="resize-outline" size={15} color={activeSubTab === 'size' ? '#ffffff' : '#aaaaaa'} />
           <Text style={[styles.tabHeaderBtnText, activeSubTab === 'size' && styles.tabHeaderBtnTextActive]}>
-            قەبارەی ستوونی و ئاسۆیی (Size)
+            قەبارە
           </Text>
         </TouchableOpacity>
 
@@ -264,7 +275,7 @@ export const PptShapeToolbar = forwardRef(({
           >
             <Ionicons name="color-fill-outline" size={15} color={activeSubTab === 'fill' ? '#ffffff' : '#aaaaaa'} />
             <Text style={[styles.tabHeaderBtnText, activeSubTab === 'fill' && styles.tabHeaderBtnTextActive]}>
-              ڕەنگ (Fill)
+              ڕەنگی ناوەوە
             </Text>
           </TouchableOpacity>
         )}
@@ -290,7 +301,7 @@ export const PptShapeToolbar = forwardRef(({
         >
           <Ionicons name="square-outline" size={15} color={activeSubTab === 'outline' ? '#ffffff' : '#aaaaaa'} />
           <Text style={[styles.tabHeaderBtnText, activeSubTab === 'outline' && styles.tabHeaderBtnTextActive]}>
-            چوارچێوە (Outline)
+            ڕەنگی هێڵ
           </Text>
         </TouchableOpacity>
 
@@ -300,7 +311,7 @@ export const PptShapeToolbar = forwardRef(({
         >
           <Ionicons name="options-outline" size={15} color={activeSubTab === 'style' ? '#ffffff' : '#aaaaaa'} />
           <Text style={[styles.tabHeaderBtnText, activeSubTab === 'style' && styles.tabHeaderBtnTextActive]}>
-            شێواز و ڕوونی
+            ڕوونی
           </Text>
         </TouchableOpacity>
 
@@ -329,41 +340,51 @@ export const PptShapeToolbar = forwardRef(({
 
       {/* SUB-TAB 0: SHAPE STYLE PRESETS ("أنماط الأشكال") */}
       {!isLineOrArrow && activeSubTab === 'style_presets' && (
-        <View style={styles.tabContentBox}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScrollRow}>
-            {SHAPE_STYLE_PRESETS.map((preset) => {
-              const isSelectedPreset =
-                currentFill.toLowerCase() === preset.fill.toLowerCase() &&
-                currentOutlineColor.toLowerCase() === preset.outlineColor.toLowerCase();
-
-              return (
-                <TouchableOpacity
-                  key={`preset_${preset.id}`}
-                  style={[
-                    styles.presetCard,
-                    isSelectedPreset && styles.presetCardActive,
-                  ]}
-                  onPress={() => applyShapeStylePreset(preset)}
-                >
-                  <View style={styles.presetPreviewBox}>
-                    {renderSvgShape({
-                      shapeType: shapeType,
-                      fill: preset.fill,
-                      outlineColor: preset.outlineColor,
-                      outlineWidth: preset.outlineWidth,
-                      cornerRadius: currentCornerRadius,
-                      svgWidth: '100%',
-                      svgHeight: '100%',
-                    })}
-                  </View>
-                  <Text style={styles.presetCardText} numberOfLines={1}>
-                    {preset.name}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <ScrollView
+          style={styles.presetRowsScroll}
+          contentContainerStyle={styles.tabContentBox}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {SHAPE_STYLE_ROWS.map((row) => (
+            <View key={`prow_${row.id}`} style={styles.presetRow}>
+              <Text style={styles.presetRowTitle}>{row.title}</Text>
+              <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScrollRow}>
+                {row.presets.map((preset) => {
+                  const active = isPresetActive(preset);
+                  return (
+                    <TouchableOpacity
+                      key={`preset_${preset.id}`}
+                      style={[styles.presetCard, active && styles.presetCardActive]}
+                      onPress={() => applyShapeStylePreset(preset)}
+                    >
+                      <View
+                        style={[
+                          styles.presetPreviewBox,
+                          {
+                            backgroundColor: preset.fill === 'none' ? 'transparent' : preset.fill,
+                            borderColor: preset.outlineColor,
+                            borderWidth: preset.outlineWidth > 0 ? Math.max(1, preset.outlineWidth * 0.6) : 0,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.presetPreviewText, { color: preset.textColor }]}>ئەب</Text>
+                      </View>
+                      <Text
+                        style={styles.presetCardText}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.7}
+                      >
+                        {preset.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       {/* SUB-TAB 1: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}
@@ -373,7 +394,7 @@ export const PptShapeToolbar = forwardRef(({
             {/* Width Controls (پانی / Horizontal) */}
             <View style={styles.dimensionBox}>
               <View style={styles.dimensionHeader}>
-                <Text style={styles.dimensionTitle}>پانی (Width): {currentWidth}%</Text>
+                <Text style={styles.dimensionTitle}>پانی: {currentWidth}%</Text>
                 <View style={styles.stepBtnGroup}>
                   <TouchableOpacity style={styles.stepBtn} onPress={() => changeWidth(currentWidth - 1)}>
                     <Text style={styles.stepBtnText}>-1</Text>
@@ -411,7 +432,7 @@ export const PptShapeToolbar = forwardRef(({
             {/* Height Controls (بەرزایی / Vertical) */}
             <View style={styles.dimensionBox}>
               <View style={styles.dimensionHeader}>
-                <Text style={styles.dimensionTitle}>بەرزایی (Height): {currentHeight}%</Text>
+                <Text style={styles.dimensionTitle}>بەرزایی: {currentHeight}%</Text>
                 <View style={styles.stepBtnGroup}>
                   <TouchableOpacity style={styles.stepBtn} onPress={() => changeHeight(currentHeight - 1)}>
                     <Text style={styles.stepBtnText}>-1</Text>
@@ -448,9 +469,9 @@ export const PptShapeToolbar = forwardRef(({
 
             {/* Position X Controls */}
             <View style={styles.dimensionBox}>
-              <Text style={styles.dimensionTitle}>شوێنی ئاسۆیی (X): {currentX}%</Text>
+              <Text style={styles.dimensionTitle}>شوێنی ئاسۆیی: {currentX}%</Text>
               <PptSlider
-                label="شوێنی X"
+                label="ئاسۆیی"
                 unit="%"
                 min={0}
                 max={Math.max(1, 100 - currentWidth)}
@@ -463,9 +484,9 @@ export const PptShapeToolbar = forwardRef(({
 
             {/* Position Y Controls */}
             <View style={styles.dimensionBox}>
-              <Text style={styles.dimensionTitle}>شوێنی ستوونی (Y): {currentY}%</Text>
+              <Text style={styles.dimensionTitle}>شوێنی ستوونی: {currentY}%</Text>
               <PptSlider
-                label="شوێنی Y"
+                label="ستوونی"
                 unit="%"
                 min={0}
                 max={Math.max(1, 100 - currentHeight)}
@@ -483,7 +504,7 @@ export const PptShapeToolbar = forwardRef(({
             >
               <Ionicons name={keepAspect ? 'link' : 'unlink-outline'} size={18} color="#ffffff" />
               <Text style={styles.aspectLockText}>
-                {keepAspect ? 'لێکچوونی ڕێژە (Locked)' : 'ڕێژەی ئازاد (Unlocked)'}
+                {keepAspect ? 'ڕێژە قفڵە' : 'ڕێژەی ئازاد'}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -642,7 +663,7 @@ export const PptShapeToolbar = forwardRef(({
             {/* 1. Corner Roundness for rounded rectangle (0 - 50%) */}
             {shapeType === 'roundRect' && (
               <PptSlider
-                label="گۆشەی خڕ (Corners)"
+                label="گۆشەی خڕ"
                 unit="%"
                 min={0}
                 max={50}
@@ -655,7 +676,7 @@ export const PptShapeToolbar = forwardRef(({
 
             {/* 2. Opacity (10 - 100%) */}
             <PptSlider
-              label="ڕوونی (Opacity)"
+              label="ڕوونی"
               unit="%"
               min={10}
               max={100}
@@ -667,7 +688,7 @@ export const PptShapeToolbar = forwardRef(({
 
             {/* 3. Rotation */}
             <View style={styles.controlGroup}>
-              <Text style={styles.groupLabel}>سوڕاندن (Rotation):</Text>
+              <Text style={styles.groupLabel}>سوڕاندن:</Text>
               <View style={styles.chipRow}>
                 <TouchableOpacity style={styles.chipBtn} onPress={() => addRotation(-90)}>
                   <Text style={styles.chipBtnText}>↺ 90°</Text>
@@ -774,20 +795,34 @@ const styles = StyleSheet.create({
   tabContentBox: {
     padding: 10,
   },
+  presetRowsScroll: {
+    maxHeight: 230,
+  },
+  presetRow: {
+    marginBottom: 8,
+  },
+  presetRowTitle: {
+    color: '#aaaaaa',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 4,
+  },
   presetScrollRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 4,
+    gap: 8,
+    paddingVertical: 2,
   },
   presetCard: {
-    width: 90,
-    height: 75,
+    width: 68,
     backgroundColor: '#2c2c2e',
     borderRadius: 10,
-    padding: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 4,
     borderWidth: 1.5,
     borderColor: '#3a3a3c',
   },
@@ -796,14 +831,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f2a38',
   },
   presetPreviewBox: {
-    width: 42,
-    height: 36,
+    width: 54,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetPreviewText: {
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   presetCardText: {
     color: '#ffffff',
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+    width: '100%',
   },
   sizeSectionContainer: {
     flexDirection: 'row',

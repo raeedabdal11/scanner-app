@@ -235,29 +235,55 @@ export const OPENXML_SHAPE_PRST_MAP = {
   plus: 'mathPlus',
 };
 
-// --- Professional PowerPoint Shape Style Presets (أنماط الأشكال) ---
-export const SHAPE_STYLE_PRESETS = [
-  { id: 'blue_dark', name: 'شینی تۆخ (Blue)', fill: '#1f497d', outlineColor: '#132d4e', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'red_intense', name: 'سووری بەهێز (Red)', fill: '#c00000', outlineColor: '#800000', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'green_emerald', name: 'سەوزی ژینگە (Green)', fill: '#2e7d32', outlineColor: '#1b5e20', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'yellow_golden', name: 'زەردی ئاڵتونی (Yellow)', fill: '#ffb300', outlineColor: '#ff8f00', outlineWidth: 2, textColor: '#000000' },
-  { id: 'purple_royal', name: 'مۆری شاهانە (Purple)', fill: '#6a1b9a', outlineColor: '#4a148c', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'orange_vibrant', name: 'نارنجی گەش (Orange)', fill: '#e65100', outlineColor: '#bf360c', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'cyan_sky', name: 'کەویاری گەش (Cyan)', fill: '#00b0f0', outlineColor: '#0070c0', outlineWidth: 2, textColor: '#ffffff' },
+// --- PowerPoint-like Shape Style gallery ---
+// Only uses properties the PPTX exporter already writes: solid fill, outline color/width, text color.
+const STYLE_DARK_TEXT = '#262626';
 
-  { id: 'white_blue_border', name: 'سپی و چوارچێوەی شین', fill: '#ffffff', outlineColor: '#1f497d', outlineWidth: 2.5, textColor: '#1f497d' },
-  { id: 'white_red_border', name: 'سپی و چوارچێوەی سوور', fill: '#ffffff', outlineColor: '#c00000', outlineWidth: 2.5, textColor: '#c00000' },
-  { id: 'white_black_border', name: 'سپی و چوارچێوەی ڕەش', fill: '#ffffff', outlineColor: '#000000', outlineWidth: 2, textColor: '#000000' },
-  { id: 'black_graphite', name: 'ڕەشی گرافیتی', fill: '#1c1c1e', outlineColor: '#3a3a3c', outlineWidth: 2, textColor: '#ffffff' },
-  { id: 'gray_soft', name: 'ڕەساسی مۆدێرن', fill: '#e5e5ea', outlineColor: '#8e8e93', outlineWidth: 1.5, textColor: '#000000' },
+const mixHex = (hex, target, t) => {
+  const a = hex.replace('#', '');
+  const b = target.replace('#', '');
+  let out = '#';
+  for (let i = 0; i < 6; i += 2) {
+    const v = Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t);
+    out += v.toString(16).padStart(2, '0');
+  }
+  return out;
+};
+const tint = (hex, t) => mixHex(hex, '#ffffff', t);
+const shade = (hex, t) => mixHex(hex, '#000000', t);
 
-  { id: 'outline_blue', name: 'خڵۆڵ (چوارچێوەی شین)', fill: 'none', outlineColor: '#007aff', outlineWidth: 3, textColor: '#007aff' },
-  { id: 'outline_red', name: 'خڵۆڵ (چوارچێوەی سوور)', fill: 'none', outlineColor: '#ff3b30', outlineWidth: 3, textColor: '#ff3b30' },
-  { id: 'outline_yellow', name: 'خڵۆڵ (چوارچێوەی زەرد)', fill: 'none', outlineColor: '#ffcc00', outlineWidth: 3, textColor: '#ffcc00' },
-  { id: 'outline_green', name: 'خڵۆڵ (چوارچێوەی سەوز)', fill: 'none', outlineColor: '#34c759', outlineWidth: 3, textColor: '#34c759' },
-  { id: 'outline_black', name: 'خڵۆڵ (چوارچێوەی ڕەش)', fill: 'none', outlineColor: '#000000', outlineWidth: 3, textColor: '#000000' },
-  { id: 'outline_white', name: 'خڵۆڵ (چوارچێوەی سپی)', fill: 'none', outlineColor: '#ffffff', outlineWidth: 3, textColor: '#ffffff' },
+export const SHAPE_STYLE_COLORS = [
+  { id: 'blue', name: 'شین', hex: '#4472c4' },
+  { id: 'red', name: 'سوور', hex: '#c00000' },
+  { id: 'green', name: 'سەوز', hex: '#70ad47' },
+  { id: 'yellow', name: 'زەرد', hex: '#ffc000' },
+  { id: 'orange', name: 'پرتەقاڵی', hex: '#ed7d31' },
+  { id: 'purple', name: 'مۆر', hex: '#7030a0' },
+  { id: 'gray', name: 'خۆڵەمێشی', hex: '#7f7f7f' },
+  { id: 'black', name: 'ڕەش', hex: '#262626' },
 ];
+
+const STYLE_ROW_DEFS = [
+  { id: 'outline', title: 'هێڵی ڕەنگاوڕەنگ', make: (c) => ({ fill: '#ffffff', outlineColor: c, outlineWidth: 3, textColor: c }) },
+  { id: 'solid', title: 'پڕکراو بە ڕەنگ', make: (c) => ({ fill: c, outlineColor: c, outlineWidth: 0, textColor: '#ffffff' }) },
+  { id: 'solid_outline', title: 'پڕکراو و هێڵ', make: (c) => ({ fill: c, outlineColor: shade(c, 0.35), outlineWidth: 3, textColor: '#ffffff' }) },
+  { id: 'moderate', title: 'ناوەند', make: (c) => ({ fill: tint(c, 0.85), outlineColor: c, outlineWidth: 2, textColor: STYLE_DARK_TEXT }) },
+  { id: 'subtle', title: 'نەرم', make: (c) => ({ fill: tint(c, 0.6), outlineColor: c, outlineWidth: 0, textColor: STYLE_DARK_TEXT }) },
+  { id: 'intense', title: 'بەهێز', make: (c) => ({ fill: shade(c, 0.45), outlineColor: tint(c, 0.45), outlineWidth: 3, textColor: '#ffffff' }) },
+  { id: 'thick', title: 'هێڵی ئەستوور', make: (c) => ({ fill: '#ffffff', outlineColor: c, outlineWidth: 6, textColor: STYLE_DARK_TEXT }) },
+  { id: 'thin', title: 'هێڵی تەنک', make: (c) => ({ fill: 'none', outlineColor: c, outlineWidth: 1, textColor: c }) },
+];
+
+// [{ id, title, presets: [{ id, name, fill, outlineColor, outlineWidth, textColor }] }]
+export const SHAPE_STYLE_ROWS = STYLE_ROW_DEFS.map((row) => ({
+  id: row.id,
+  title: row.title,
+  presets: SHAPE_STYLE_COLORS.map((color) => ({
+    id: `${row.id}_${color.id}`,
+    name: color.name,
+    ...row.make(color.hex),
+  })),
+}));
 
 // Helper function to render any shape in React Native SVG
 export function renderSvgShape({
