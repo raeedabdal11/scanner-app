@@ -379,9 +379,10 @@ export const PptCanvas = ({
     let initialH = element.height;
 
     return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => !element.locked,
+      onMoveShouldSetPanResponder: () => !element.locked,
       onPanResponderGrant: () => {
+        if (element.locked) return;
         initialX = element.x;
         initialY = element.y;
         initialW = element.width;
@@ -389,6 +390,8 @@ export const PptCanvas = ({
         setResizingElement({ id: element.id, width: element.width, height: element.height });
       },
       onPanResponderMove: (evt, gestureState) => {
+        if (element.locked) return;
+
         const deltaXPercent = (gestureState.dx / canvasWidth) * 100;
         const deltaYPercent = (gestureState.dy / canvasHeight) * 100;
 
@@ -397,8 +400,8 @@ export const PptCanvas = ({
         let newW = initialW;
         let newH = initialH;
 
-        const MIN_W = 10;
-        const MIN_H = 5;
+        const MIN_W = 5;
+        const MIN_H = 3;
 
         let minAllowedY = 0;
         if (element.type === 'text') {
@@ -410,39 +413,72 @@ export const PptCanvas = ({
           }
         }
 
-        if (handleKey.includes('r')) {
-          newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
-        }
-        if (handleKey.includes('l')) {
-          const maxLeft = initialX + initialW - MIN_W;
-          newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
-          newW = initialW + (initialX - newX);
-        }
-        if (handleKey.includes('b')) {
-          newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
-        }
-        if (handleKey.includes('t')) {
-          const maxTop = initialY + initialH - MIN_H;
-          let targetY = initialY + deltaYPercent;
-          if (minAllowedY > 0 && targetY < minAllowedY) {
-            targetY = minAllowedY;
+        const isAspectLocked = !!(element.lockAspect ?? element.keepAspect);
+        const aspect = element.aspectRatio && element.aspectRatio > 0
+          ? element.aspectRatio
+          : (initialW / Math.max(0.1, initialH));
+
+        if (isAspectLocked) {
+          // Maintain aspect ratio for ALL handle types when locked
+          if (handleKey === 'r' || handleKey === 'br' || handleKey === 'tr') {
+            newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
+            newH = Math.max(MIN_H, newW / aspect);
+            if (handleKey === 'tr') {
+              newY = Math.max(minAllowedY, initialY + (initialH - newH));
+            }
+          } else if (handleKey === 'l' || handleKey === 'bl' || handleKey === 'tl') {
+            const maxLeft = initialX + initialW - MIN_W;
+            newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
+            newW = initialW + (initialX - newX);
+            newH = Math.max(MIN_H, newW / aspect);
+            if (handleKey === 'tl') {
+              newY = Math.max(minAllowedY, initialY + (initialH - newH));
+            }
+          } else if (handleKey === 'b') {
+            newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
+            newW = Math.max(MIN_W, newH * aspect);
+          } else if (handleKey === 't') {
+            const maxTop = initialY + initialH - MIN_H;
+            let targetY = initialY + deltaYPercent;
+            if (minAllowedY > 0 && targetY < minAllowedY) {
+              targetY = minAllowedY;
+            }
+            newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
+            newH = initialH + (initialY - newY);
+            newW = Math.max(MIN_W, newH * aspect);
           }
-          newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
-          newH = initialH + (initialY - newY);
+        } else {
+          // Unlocked freeform resizing
+          if (handleKey.includes('r')) {
+            newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
+          }
+          if (handleKey.includes('l')) {
+            const maxLeft = initialX + initialW - MIN_W;
+            newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
+            newW = initialW + (initialX - newX);
+          }
+          if (handleKey.includes('b')) {
+            newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
+          }
+          if (handleKey.includes('t')) {
+            const maxTop = initialY + initialH - MIN_H;
+            let targetY = initialY + deltaYPercent;
+            if (minAllowedY > 0 && targetY < minAllowedY) {
+              targetY = minAllowedY;
+            }
+            newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
+            newH = initialH + (initialY - newY);
+          }
         }
 
-        // For image elements on corner handles, maintain aspect ratio
-        if (element.type === 'image' && (handleKey === 'tl' || handleKey === 'tr' || handleKey === 'bl' || handleKey === 'br')) {
-          const aspect = element.aspectRatio || (initialW / initialH) || 1.0;
-          newH = Math.max(MIN_H, newW / aspect);
-        }
-
+        const currentAspect = isAspectLocked ? aspect : (newH > 0 ? (newW / newH) : (element.aspectRatio || 1));
         const updated = {
           ...element,
           x: Math.round(newX * 10) / 10,
           y: Math.round(newY * 10) / 10,
           width: Math.round(newW * 10) / 10,
           height: Math.round(newH * 10) / 10,
+          aspectRatio: currentAspect,
         };
 
         setResizingElement({ id: element.id, width: updated.width, height: updated.height });
@@ -847,12 +883,13 @@ const styles = StyleSheet.create({
   },
   elementWrapper: {
     position: 'absolute',
-    padding: 2,
+    padding: 0,
   },
   selectedWrapper: {
     borderWidth: 1.5,
     borderColor: '#8B3A2B',
     borderStyle: 'dashed',
+    margin: -1.5,
   },
   textContainer: {
     flex: 1,

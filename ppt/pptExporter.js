@@ -4,12 +4,14 @@ import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { planPage, reverseTableLineColumns, isTableElement, splitRuns, calculateFittingFontSize } from './pptFit';
 import { getExportFontFamily } from './fonts';
 import { getElementRuns } from './formattedText';
+import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 
 if (typeof window === 'undefined') {
   global.window = global;
 }
 
 const DRAWINGML_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const PML_NS = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 
 /**
  * Standard named colors mapped to 6-character uppercase hex
@@ -217,6 +219,97 @@ export function reorderRPrChildren(rPrNode) {
 
   for (const child of children) {
     rPrNode.appendChild(child);
+  }
+}
+
+/**
+ * Reorders child element nodes inside an <a:spPr> element according to strict OOXML schema rules.
+ */
+export function reorderSpPrChildren(spPrNode) {
+  if (!spPrNode) return;
+
+  const SPPR_TAG_ORDER = {
+    xfrm: 10,
+    custgeom: 20,
+    prstgeom: 20,
+    nofill: 30,
+    solidfill: 30,
+    gradfill: 30,
+    blipfill: 30,
+    pattfill: 30,
+    grpfill: 30,
+    ln: 40,
+    effectlst: 50,
+    effectdag: 50,
+    scene3d: 60,
+    sp3d: 60,
+    extlst: 70,
+  };
+
+  const children = [];
+  for (let i = 0; i < spPrNode.childNodes.length; i++) {
+    const child = spPrNode.childNodes[i];
+    if (child.nodeType === 1) { // Element node
+      children.push(child);
+    }
+  }
+
+  children.sort((a, b) => {
+    const tagA = getCleanTagName(a);
+    const tagB = getCleanTagName(b);
+    const orderA = SPPR_TAG_ORDER[tagA] || 999;
+    const orderB = SPPR_TAG_ORDER[tagB] || 999;
+    return orderA - orderB;
+  });
+
+  while (spPrNode.firstChild) {
+    spPrNode.removeChild(spPrNode.firstChild);
+  }
+
+  for (const child of children) {
+    spPrNode.appendChild(child);
+  }
+}
+
+/**
+ * Reorders child element nodes inside a <p:sp> shape element according to strict OOXML schema rules.
+ */
+export function reorderSpChildren(spNode) {
+  if (!spNode) return;
+
+  const SP_TAG_ORDER = {
+    nvpicpr: 10,
+    nvsppr: 10,
+    nvcxnssppr: 10,
+    blipfill: 20,
+    sppr: 20,
+    style: 30,
+    txbody: 40,
+    extlst: 50,
+  };
+
+  const children = [];
+  for (let i = 0; i < spNode.childNodes.length; i++) {
+    const child = spNode.childNodes[i];
+    if (child.nodeType === 1) { // Element node
+      children.push(child);
+    }
+  }
+
+  children.sort((a, b) => {
+    const tagA = getCleanTagName(a);
+    const tagB = getCleanTagName(b);
+    const orderA = SP_TAG_ORDER[tagA] || 999;
+    const orderB = SP_TAG_ORDER[tagB] || 999;
+    return orderA - orderB;
+  });
+
+  while (spNode.firstChild) {
+    spNode.removeChild(spNode.firstChild);
+  }
+
+  for (const child of children) {
+    spNode.appendChild(child);
   }
 }
 
@@ -729,7 +822,7 @@ export const exportPresentationToPptx = async (
             }
           } else if (elem.type === 'shape') {
             const shapeType = elem.shapeType || 'rect';
-            const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow';
+            const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow';
 
             const fillParsed = parseColor(elem.fill, null);
             const fillHex = fillParsed ? fillParsed.hex : null;
@@ -738,6 +831,9 @@ export const exportPresentationToPptx = async (
             const outlineParsed = parseColor(outline.color, '000000');
             const outlineHex = outlineParsed ? outlineParsed.hex : '000000';
             const outlineWidth = outline.width !== undefined ? outline.width : 2;
+
+            const shapeIdx = slideShapeElemSpecs[slideCount].length;
+            const shapeTagName = `APP_SHAPE_${shapeIdx}`;
 
             slideShapeElemSpecs[slideCount].push({
               shapeType: shapeType,
@@ -771,6 +867,7 @@ export const exportPresentationToPptx = async (
                     rect: pptx.shapes.RECTANGLE,
                     roundRect: pptx.shapes.ROUNDED_RECTANGLE,
                     ellipse: pptx.shapes.OVAL,
+                    circle: pptx.shapes.OVAL,
                     triangle: pptx.shapes.TRIANGLE,
                     rtTriangle: pptx.shapes.RIGHT_TRIANGLE,
                     diamond: pptx.shapes.DIAMOND,
@@ -807,6 +904,7 @@ export const exportPresentationToPptx = async (
               }
 
               const shapeOpts = {
+                name: shapeTagName,
                 x: xIn,
                 y: yIn,
                 w: wIn,
@@ -821,6 +919,21 @@ export const exportPresentationToPptx = async (
 
               if (outlineWidth > 0 && outlineHex) {
                 shapeOpts.line = { color: outlineHex, width: outlineWidth };
+              }
+
+              if (!isLineOrArrow && elem.text && elem.text.trim()) {
+                const textColorParsed = parseColor(elem.textColor || '#000000', '000000');
+                const textColorHex = textColorParsed ? textColorParsed.hex : '000000';
+                shapeOpts.text = {
+                  text: elem.text,
+                  options: {
+                    fontSize: elem.fontSize || 16,
+                    color: textColorHex,
+                    align: 'center',
+                    fontFace: getExportFontFamily(elem.kurdishFont || 'Tahoma', true),
+                    bold: !!elem.bold,
+                  },
+                };
               }
 
               slide.addShape(pptxShapeType, shapeOpts);
@@ -1067,6 +1180,12 @@ export const exportPresentationToPptx = async (
             }
             modified = true;
           }
+
+          // Strict OOXML: <a:pPr> MUST be the very first child of <a:p>
+          if (mainPPr && pNode.firstChild !== mainPPr) {
+            pNode.insertBefore(mainPPr, pNode.firstChild);
+            modified = true;
+          }
         }
 
         // Process Picture elements <p:pic> in slide (crop, opacity, rotation, rounded corners, border)
@@ -1189,92 +1308,105 @@ export const exportPresentationToPptx = async (
                 modified = true;
               }
             }
+            reorderSpPrChildren(spPr);
           }
         }
 
-        // Process Shape elements <p:sp> in slide (geometry, fill, outline, rotation, alpha)
+        // Process Shape elements in slide (geometry, fill, outline, rotation, alpha)
         const shapeElemSpecs = slideShapeElemSpecs[slideNum] || [];
-        const spNodes = Array.from(slideDoc.getElementsByTagName('p:sp'));
 
-        const shapeSpNodes = spNodes.filter((spNode) => {
-          const txBody = spNode.getElementsByTagName('p:txBody')[0];
-          if (!txBody) return true;
-          const textRuns = txBody.getElementsByTagName('a:r');
-          const pText = txBody.textContent || '';
-          return textRuns.length === 0 && pText.trim() === '';
-        });
+        // Find all shape nodes (<p:sp> and <p:cxnSp>) in the slide XML
+        const allShapeNodes = Array.from(slideDoc.getElementsByTagName('p:sp')).concat(
+          Array.from(slideDoc.getElementsByTagName('p:cxnSp'))
+        );
 
         let shapeExportCount = 0;
         let shapesWithTextCount = 0;
+        let nextShapeId = 1000;
 
-        for (let sIdx = 0; sIdx < shapeSpNodes.length; sIdx++) {
-          const spNode = shapeSpNodes[sIdx];
+        let shapeNodeIndex = 0;
+        for (const shapeNode of allShapeNodes) {
+          nextShapeId++;
+          let nameAttr = '';
+          const cNvPrs = shapeNode.getElementsByTagName('p:cNvPr');
+          if (cNvPrs.length > 0) {
+            nameAttr = cNvPrs[0].getAttribute('name') || '';
+            cNvPrs[0].setAttribute('id', String(nextShapeId));
+            if (!nameAttr) {
+              nameAttr = `Shape_${nextShapeId}`;
+              cNvPrs[0].setAttribute('name', nameAttr);
+            }
+          } else {
+            const cNvSpPrs = shapeNode.getElementsByTagName('p:cNvSpPr');
+            if (cNvSpPrs.length > 0) {
+              nameAttr = cNvSpPrs[0].getAttribute('name') || '';
+              cNvSpPrs[0].setAttribute('id', String(nextShapeId));
+              if (!nameAttr) {
+                nameAttr = `Shape_${nextShapeId}`;
+                cNvSpPrs[0].setAttribute('name', nameAttr);
+              }
+            }
+          }
+
+          let sIdx = -1;
+          const match = nameAttr.match(/^APP_SHAPE_(\d+)$/);
+          if (match) {
+            sIdx = parseInt(match[1], 10);
+          } else if (shapeNodeIndex < shapeElemSpecs.length) {
+            sIdx = shapeNodeIndex;
+          }
+
+          if (sIdx < 0 || !shapeElemSpecs[sIdx]) continue;
           const spec = shapeElemSpecs[sIdx];
-          if (!spec) continue;
+          shapeNodeIndex++;
 
           shapeExportCount++;
           const shapeType = spec.shapeType || 'rect';
-          const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow';
+          const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow';
 
-          let targetNode = spNode;
-          if (isLineOrArrow) {
-            const cxnSp = slideDoc.createElementNS('http://schemas.openxmlformats.org/presentationml/2006/main', 'p:cxnSp');
-            while (spNode.firstChild) {
-              const child = spNode.firstChild;
-              spNode.removeChild(child);
-              if (child.nodeType === 1) {
-                const tag = child.localName || child.tagName;
-                if (tag === 'nvSpPr' || tag === 'p:nvSpPr') {
-                  const nvCxnSpPr = slideDoc.createElementNS('http://schemas.openxmlformats.org/presentationml/2006/main', 'p:nvCxnSpPr');
-                  while (child.firstChild) {
-                    const grandChild = child.firstChild;
-                    child.removeChild(grandChild);
-                    if (grandChild.nodeType === 1 && (grandChild.localName === 'cNvSpPr' || grandChild.tagName === 'p:cNvSpPr')) {
-                      const cNvCxnSpPr = slideDoc.createElementNS('http://schemas.openxmlformats.org/presentationml/2006/main', 'p:cNvCxnSpPr');
-                      nvCxnSpPr.appendChild(cNvCxnSpPr);
-                    } else {
-                      nvCxnSpPr.appendChild(grandChild);
-                    }
-                  }
-                  cxnSp.appendChild(nvCxnSpPr);
-                } else {
-                  cxnSp.appendChild(child);
-                }
-              }
-            }
-            if (spNode.parentNode) {
-              spNode.parentNode.replaceChild(cxnSp, spNode);
-            }
-            targetNode = cxnSp;
-            modified = true;
-          }
-
-          let spPrNodes = targetNode.getElementsByTagName('p:spPr');
+          let spPrNodes = shapeNode.getElementsByTagName('p:spPr');
           if (spPrNodes.length === 0) {
-            spPrNodes = targetNode.getElementsByTagName('a:spPr');
+            spPrNodes = shapeNode.getElementsByTagName('a:spPr');
           }
           if (spPrNodes.length > 0) {
             const spPr = spPrNodes[0];
 
+            // Lock and guarantee precise <a:xfrm> transform coordinates & rotation
+            const xEmu = Math.round((spec.xIn || 0) * 914400);
+            const yEmu = Math.round((spec.yIn || 0) * 914400);
+            const wEmu = Math.round((spec.wIn || 0) * 914400);
+            const hEmu = Math.round((spec.hIn || 0) * 914400);
+
+            let xfrmNodes = spPr.getElementsByTagName('a:xfrm');
+            let xfrm = xfrmNodes.length > 0 ? xfrmNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:xfrm');
+
+            let offNodes = xfrm.getElementsByTagName('a:off');
+            let offNode = offNodes.length > 0 ? offNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:off');
+            offNode.setAttribute('x', String(xEmu));
+            offNode.setAttribute('y', String(yEmu));
+            if (offNodes.length === 0) xfrm.appendChild(offNode);
+
+            let extNodes = xfrm.getElementsByTagName('a:ext');
+            let extNode = extNodes.length > 0 ? extNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:ext');
+            extNode.setAttribute('cx', String(wEmu));
+            extNode.setAttribute('cy', String(hEmu));
+            if (extNodes.length === 0) xfrm.appendChild(extNode);
+
             if (spec.rotation) {
-              const xfrmNodes = spPr.getElementsByTagName('a:xfrm');
-              if (xfrmNodes.length > 0) {
-                const xfrm = xfrmNodes[0];
-                let rotDeg = ((spec.rotation % 360) + 360) % 360;
-                const rotVal = Math.round(rotDeg * 60000);
-                xfrm.setAttribute('rot', String(rotVal));
-                modified = true;
-              }
+              let rotDeg = ((spec.rotation % 360) + 360) % 360;
+              const rotVal = Math.round(rotDeg * 60000);
+              xfrm.setAttribute('rot', String(rotVal));
+            } else {
+              xfrm.removeAttribute('rot');
+            }
+            if (xfrmNodes.length === 0) {
+              spPr.insertBefore(xfrm, spPr.firstChild);
             }
 
             let prstGeomNodes = spPr.getElementsByTagName('a:prstGeom');
             let prstGeom = prstGeomNodes.length > 0 ? prstGeomNodes[0] : slideDoc.createElementNS(DRAWINGML_NS, 'a:prstGeom');
 
-            let prstName = shapeType || 'rect';
-            if (shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow') {
-              prstName = 'line';
-            }
-
+            const prstName = OPENXML_SHAPE_PRST_MAP[shapeType] || shapeType || 'rect';
             prstGeom.setAttribute('prst', prstName);
 
             let avLstNodes = prstGeom.getElementsByTagName('a:avLst');
@@ -1357,6 +1489,18 @@ export const exportPresentationToPptx = async (
                 tailEnd.setAttribute('w', 'med');
                 tailEnd.setAttribute('len', 'med');
                 lnNode.appendChild(tailEnd);
+              } else if (shapeType === 'doubleArrow') {
+                const headEnd = slideDoc.createElementNS(DRAWINGML_NS, 'a:headEnd');
+                headEnd.setAttribute('type', 'triangle');
+                headEnd.setAttribute('w', 'med');
+                headEnd.setAttribute('len', 'med');
+                lnNode.appendChild(headEnd);
+
+                const tailEnd = slideDoc.createElementNS(DRAWINGML_NS, 'a:tailEnd');
+                tailEnd.setAttribute('type', 'triangle');
+                tailEnd.setAttribute('w', 'med');
+                tailEnd.setAttribute('len', 'med');
+                lnNode.appendChild(tailEnd);
               }
 
               spPr.appendChild(lnNode);
@@ -1367,101 +1511,107 @@ export const exportPresentationToPptx = async (
               spPr.appendChild(lnNode);
             }
             modified = true;
+
+            // Strict OOXML child ordering for shape properties
+            reorderSpPrChildren(spPr);
           }
 
           // Process Text inside Shape <p:txBody>
           if (!isLineOrArrow) {
-            let txBody = targetNode.getElementsByTagName('p:txBody')[0];
-            if (txBody) {
-              while (txBody.firstChild) {
-                txBody.removeChild(txBody.firstChild);
-              }
-            } else {
-              txBody = slideDoc.createElementNS(PML_NS, 'p:txBody');
-              targetNode.appendChild(txBody);
-            }
+            let txBodyNodes = shapeNode.getElementsByTagName('p:txBody');
+            let txBody = txBodyNodes.length > 0 ? txBodyNodes[0] : slideDoc.createElementNS(PML_NS, 'p:txBody');
 
-            const bodyPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:bodyPr');
+            // clear it to rebuild properly
+            while (txBody.firstChild) txBody.removeChild(txBody.firstChild);
+
+            let bodyPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:bodyPr');
             bodyPr.setAttribute('anchor', 'ctr');
+            bodyPr.setAttribute('rtlCol', '1');
             txBody.appendChild(bodyPr);
 
-            const lstStyle = slideDoc.createElementNS(DRAWINGML_NS, 'a:lstStyle');
+            let lstStyle = slideDoc.createElementNS(DRAWINGML_NS, 'a:lstStyle');
             txBody.appendChild(lstStyle);
+
+            let pNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:p');
 
             if (spec.text && spec.text.trim()) {
               shapesWithTextCount++;
-              const lines = spec.text.split(/\r?\n/);
-              const textColorParsed = parseColor(spec.textColor || '#000000', '000000');
-              const textColorHex = textColorParsed ? textColorParsed.hex : '000000';
-              const szVal = String(Math.round((spec.fontSize || 16) * 100));
-              const fontName = getExportFontFamily(spec.kurdishFont || 'Tahoma', true);
-
-              for (const line of lines) {
-                const pNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:p');
-                const pPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:pPr');
-                pPr.setAttribute('algn', 'ctr');
-                pPr.setAttribute('rtl', '1');
-                pNode.appendChild(pPr);
-
-                if (line.length > 0) {
-                  const rNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:r');
-                  const rPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:rPr');
-                  rPr.setAttribute('lang', 'ar-IQ');
-                  rPr.setAttribute('sz', szVal);
-                  if (spec.bold) {
-                    rPr.setAttribute('b', '1');
-                  }
-
-                  const solidFill = slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
-                  const srgbClr = slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
-                  srgbClr.setAttribute('val', textColorHex);
-                  solidFill.appendChild(srgbClr);
-                  rPr.appendChild(solidFill);
-
-                  const latinFont = slideDoc.createElementNS(DRAWINGML_NS, 'a:latin');
-                  latinFont.setAttribute('typeface', fontName);
-                  rPr.appendChild(latinFont);
-
-                  const eaFont = slideDoc.createElementNS(DRAWINGML_NS, 'a:ea');
-                  eaFont.setAttribute('typeface', fontName);
-                  rPr.appendChild(eaFont);
-
-                  const csFont = slideDoc.createElementNS(DRAWINGML_NS, 'a:cs');
-                  csFont.setAttribute('typeface', fontName);
-                  rPr.appendChild(csFont);
-
-                  reorderRPrChildren(rPr);
-                  rNode.appendChild(rPr);
-
-                  const tNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:t');
-                  tNode.textContent = line;
-                  rNode.appendChild(tNode);
-
-                  pNode.appendChild(rNode);
-                }
-                txBody.appendChild(pNode);
-              }
-            } else {
-              // Text is empty -> omit txBody runs
-              const pNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:p');
-              const pPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:pPr');
+              let pPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:pPr');
               pPr.setAttribute('algn', 'ctr');
               pPr.setAttribute('rtl', '1');
               pNode.appendChild(pPr);
-              txBody.appendChild(pNode);
+
+              let rNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:r');
+              let rPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:rPr');
+              rPr.setAttribute('lang', 'ar-IQ');
+              rPr.setAttribute('sz', String(Math.round((spec.fontSize || 16) * 100)));
+              if (spec.bold) rPr.setAttribute('b', '1');
+
+              const textColorParsed = parseColor(spec.textColor || '#000000', '000000');
+              const textColorHex = textColorParsed ? textColorParsed.hex : '000000';
+              let solidFill = slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
+              let srgbClr = slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
+              srgbClr.setAttribute('val', textColorHex);
+              // WITHOUT alpha for text
+              solidFill.appendChild(srgbClr);
+              rPr.appendChild(solidFill);
+
+              const fontName = getExportFontFamily(spec.kurdishFont || 'Tahoma', true);
+              let latin = slideDoc.createElementNS(DRAWINGML_NS, 'a:latin');
+              latin.setAttribute('typeface', fontName);
+              rPr.appendChild(latin);
+
+              let cs = slideDoc.createElementNS(DRAWINGML_NS, 'a:cs');
+              cs.setAttribute('typeface', fontName);
+              rPr.appendChild(cs);
+
+              let ea = slideDoc.createElementNS(DRAWINGML_NS, 'a:ea');
+              ea.setAttribute('typeface', fontName);
+              rPr.appendChild(ea);
+
+              reorderRPrChildren(rPr);
+              rNode.appendChild(rPr);
+
+              let tNode = slideDoc.createElementNS(DRAWINGML_NS, 'a:t');
+              tNode.textContent = spec.text; // Text content is escaped automatically by XMLSerializer
+              rNode.appendChild(tNode);
+
+              pNode.appendChild(rNode);
+            } else {
+              let endParaRPr = slideDoc.createElementNS(DRAWINGML_NS, 'a:endParaRPr');
+              endParaRPr.setAttribute('lang', 'ar-IQ');
+              pNode.appendChild(endParaRPr);
+            }
+            txBody.appendChild(pNode);
+
+            if (txBodyNodes.length === 0) {
+              shapeNode.appendChild(txBody);
             }
             modified = true;
           }
+
+          // Enforce strict OOXML child element ordering for shape container <p:sp>
+          reorderSpChildren(shapeNode);
         }
 
         console.log(`[PPT Exporter] Slide ${slideNum}: Exported ${shapeExportCount} shapes (${shapesWithTextCount} shapes with text)`);
 
-        // Configure <a:bodyPr> for text boxes to enforce wrap="square", tight zero insets, and <a:normAutofit/>
-        const txBodyNodes = slideDoc.getElementsByTagName('p:txBody');
+        // Configure <a:bodyPr> ONLY for standard text boxes (excluding APP_SHAPE_ nodes)
+        const allSpNodes = Array.from(slideDoc.getElementsByTagName('p:sp'));
+        const textBoxNodes = allSpNodes.filter((sp) => {
+          const cNvPrs = sp.getElementsByTagName('p:cNvPr');
+          const name = cNvPrs.length > 0 ? (cNvPrs[0].getAttribute('name') || '') : '';
+          return !name.match(/^APP_SHAPE_\d+$/);
+        });
+
         const textElemSpecs = slideTextElemSpecs[slideNum] || [];
 
-        for (let bIdx = 0; bIdx < txBodyNodes.length; bIdx++) {
-          const txBody = txBodyNodes[bIdx];
+        for (let bIdx = 0; bIdx < textBoxNodes.length; bIdx++) {
+          const spNode = textBoxNodes[bIdx];
+          const txBodyNodes = spNode.getElementsByTagName('p:txBody');
+          if (txBodyNodes.length === 0) continue;
+          const txBody = txBodyNodes[0];
+
           let bodyPrNodes = txBody.getElementsByTagName('a:bodyPr');
           let bodyPr;
           if (bodyPrNodes.length > 0) {
@@ -1498,7 +1648,11 @@ export const exportPresentationToPptx = async (
             normAutofit = normAutofits[0];
           } else {
             normAutofit = slideDoc.createElementNS(DRAWINGML_NS, 'a:normAutofit');
-            bodyPr.appendChild(normAutofit);
+            if (bodyPr.firstChild) {
+              bodyPr.insertBefore(normAutofit, bodyPr.firstChild);
+            } else {
+              bodyPr.appendChild(normAutofit);
+            }
           }
 
           const elemSpec = textElemSpecs[bIdx];
@@ -1533,12 +1687,14 @@ export const exportPresentationToPptx = async (
             modified = true;
           }
 
-          // Set lang="ar-IQ" altLang="en-US" on <a:rPr> for Kurdish/Arabic runs
+          // Set lang="ar-IQ" on <a:rPr> for Kurdish/Arabic runs (remove invalid altLang attribute)
           const pParent = runNode.parentNode;
           const pText = pParent ? (pParent.textContent || '') : '';
           if (IS_ARABIC_REGEX.test(runText) || IS_ARABIC_REGEX.test(pText)) {
             rPrNode.setAttribute('lang', 'ar-IQ');
-            rPrNode.setAttribute('altLang', 'en-US');
+            if (rPrNode.hasAttribute('altLang')) {
+              rPrNode.removeAttribute('altLang');
+            }
             modified = true;
           }
 
@@ -1662,9 +1818,84 @@ export const exportPresentationToPptx = async (
           }
         }
 
+        let finalXml = slideDoc;
         if (modified) {
-          const updatedXml = new XMLSerializer().serializeToString(slideDoc);
-          zip.file(slideFileName, updatedXml);
+          finalXml = new XMLSerializer().serializeToString(slideDoc);
+        } else {
+          finalXml = xmlText;
+        }
+
+        // 1. Sanitize step
+        const badWordRegex = /([a-zA-Z0-9:]+)=["']([^"']*(?:NaN|undefined|null|Infinity|\.\d+|\d+\.\d+)[^"']*)["']/g;
+        let sanitizedXml = finalXml.replace(badWordRegex, (match, attrName, attrVal, offset, string) => {
+           if (attrVal.includes('NaN') || attrVal.includes('undefined') || attrVal.includes('null') || attrVal.includes('Infinity') || /\d+\.\d+/.test(attrVal)) {
+              // check if it's an EMU/size attribute
+              const isEmu = /^(x|y|cx|cy|rot|w|sz|val|fmla|l|t|r|b|dist|dir|blurRad)$/i.test(attrName) || attrName.endsWith('Ins');
+              if (isEmu || attrVal.includes('NaN') || attrVal.includes('undefined') || attrVal.includes('null') || attrVal.includes('Infinity')) {
+                  const context = string.substring(Math.max(0, offset - 40), Math.min(string.length, offset + 40));
+                  console.warn(`[PPTX Sanitizer] Slide ${slideNum}, attribute ${attrName}="${attrVal}" is invalid! Context: ...${context}...`);
+
+                  // auto fix
+                  let newVal = attrVal.replace(/(NaN|undefined|null|Infinity)/g, '0');
+                  if (attrName === 'fmla' && newVal.startsWith('val ')) {
+                     newVal = 'val ' + Math.round(parseFloat(newVal.replace('val ', '')) || 0);
+                  } else {
+                     newVal = newVal.replace(/-?\d+\.\d+/g, (dec) => String(Math.round(parseFloat(dec) || 0)));
+                  }
+                  return `${attrName}="${newVal}"`;
+              }
+           }
+           return match;
+        });
+
+        // 2. console.log the full XML of the first <p:sp> of each slide
+        const firstSpMatch = sanitizedXml.match(/<p:sp[^>]*>[\s\S]*?<\/p:sp>/);
+        if (firstSpMatch) {
+            const spXml = firstSpMatch[0];
+            for (let i = 0; i < spXml.length; i += 800) {
+                console.log(`[SHAPE-XML][Slide ${slideNum}] ${spXml.substring(i, i + 800)}`);
+            }
+        }
+
+        zip.file(slideFileName, sanitizedXml);
+
+        if (slideNum === 1) {
+          try {
+            const firstSp = sanitizedXml.match(/<p:sp[\s>][\s\S]*?<\/p:sp>/);
+            let spprMatch = null;
+            if (firstSp) {
+              spprMatch = firstSp[0].match(/<(?:p|a):spPr[\s\S]*?<\/(?:p|a):spPr>/);
+            }
+            if (!spprMatch) {
+              spprMatch = sanitizedXml.match(/<(?:p|a):spPr[\s\S]*?<\/(?:p|a):spPr>/);
+            }
+            const spprText = spprMatch ? spprMatch[0].replace(/[\r\n]+/g, '') : '';
+            const sldHeadText = sanitizedXml.substring(0, 500).replace(/[\r\n]+/g, '');
+            const sldTailText = sanitizedXml.substring(Math.max(0, sanitizedXml.length - 400)).replace(/[\r\n]+/g, '');
+
+            const ctFile = zip.file('[Content_Types].xml');
+            const rawCtText = ctFile ? await ctFile.async('text') : '';
+            const ctText = rawCtText.replace(/[\r\n]+/g, '');
+
+            const printGroup = (tag, text) => {
+              console.log(`[${tag}-BEGIN]`);
+              if (text) {
+                const prefix = `[${tag}] `;
+                const maxChunk = 90 - prefix.length;
+                for (let i = 0; i < text.length; i += maxChunk) {
+                  console.log(prefix + text.substring(i, i + maxChunk));
+                }
+              }
+              console.log(`[${tag}-END]`);
+            };
+
+            printGroup('SPPR', spprText);
+            printGroup('SLD-HEAD', sldHeadText);
+            printGroup('SLD-TAIL', sldTailText);
+            printGroup('CT', ctText);
+          } catch (logErr) {
+            console.log('[PPT Exporter Log Error]', logErr);
+          }
         }
       }
 

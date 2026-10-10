@@ -211,6 +211,54 @@ export const SHAPE_MAP = ALL_SHAPES.reduce((acc, shape) => {
   return acc;
 }, {});
 
+// --- OpenXML Preset Geometry Names Mapping ---
+export const OPENXML_SHAPE_PRST_MAP = {
+  ellipse: 'oval',
+  circle: 'oval',
+  roundRect: 'roundRect',
+  rect: 'rect',
+  line: 'line',
+  arrow: 'line',
+  doubleArrow: 'line',
+  flowProcess: 'flowChartProcess',
+  flowDecision: 'flowChartDecision',
+  flowData: 'flowChartInputOutput',
+  flowPredefined: 'flowChartPredefinedProcess',
+  flowInternalStorage: 'flowChartInternalStorage',
+  flowDocument: 'flowChartDocument',
+  flowMultidocument: 'flowChartMultidocument',
+  flowTerminator: 'flowChartTerminator',
+  flowPreparation: 'flowChartPreparation',
+  flowManualInput: 'flowChartManualInput',
+  flowManualOperation: 'flowChartManualOperation',
+  flowDisplay: 'flowChartDisplay',
+  plus: 'mathPlus',
+};
+
+// --- Professional PowerPoint Shape Style Presets (أنماط الأشكال) ---
+export const SHAPE_STYLE_PRESETS = [
+  { id: 'blue_dark', name: 'شینی تۆخ (Blue)', fill: '#1f497d', outlineColor: '#132d4e', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'red_intense', name: 'سووری بەهێز (Red)', fill: '#c00000', outlineColor: '#800000', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'green_emerald', name: 'سەوزی ژینگە (Green)', fill: '#2e7d32', outlineColor: '#1b5e20', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'yellow_golden', name: 'زەردی ئاڵتونی (Yellow)', fill: '#ffb300', outlineColor: '#ff8f00', outlineWidth: 2, textColor: '#000000' },
+  { id: 'purple_royal', name: 'مۆری شاهانە (Purple)', fill: '#6a1b9a', outlineColor: '#4a148c', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'orange_vibrant', name: 'نارنجی گەش (Orange)', fill: '#e65100', outlineColor: '#bf360c', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'cyan_sky', name: 'کەویاری گەش (Cyan)', fill: '#00b0f0', outlineColor: '#0070c0', outlineWidth: 2, textColor: '#ffffff' },
+
+  { id: 'white_blue_border', name: 'سپی و چوارچێوەی شین', fill: '#ffffff', outlineColor: '#1f497d', outlineWidth: 2.5, textColor: '#1f497d' },
+  { id: 'white_red_border', name: 'سپی و چوارچێوەی سوور', fill: '#ffffff', outlineColor: '#c00000', outlineWidth: 2.5, textColor: '#c00000' },
+  { id: 'white_black_border', name: 'سپی و چوارچێوەی ڕەش', fill: '#ffffff', outlineColor: '#000000', outlineWidth: 2, textColor: '#000000' },
+  { id: 'black_graphite', name: 'ڕەشی گرافیتی', fill: '#1c1c1e', outlineColor: '#3a3a3c', outlineWidth: 2, textColor: '#ffffff' },
+  { id: 'gray_soft', name: 'ڕەساسی مۆدێرن', fill: '#e5e5ea', outlineColor: '#8e8e93', outlineWidth: 1.5, textColor: '#000000' },
+
+  { id: 'outline_blue', name: 'خڵۆڵ (چوارچێوەی شین)', fill: 'none', outlineColor: '#007aff', outlineWidth: 3, textColor: '#007aff' },
+  { id: 'outline_red', name: 'خڵۆڵ (چوارچێوەی سوور)', fill: 'none', outlineColor: '#ff3b30', outlineWidth: 3, textColor: '#ff3b30' },
+  { id: 'outline_yellow', name: 'خڵۆڵ (چوارچێوەی زەرد)', fill: 'none', outlineColor: '#ffcc00', outlineWidth: 3, textColor: '#ffcc00' },
+  { id: 'outline_green', name: 'خڵۆڵ (چوارچێوەی سەوز)', fill: 'none', outlineColor: '#34c759', outlineWidth: 3, textColor: '#34c759' },
+  { id: 'outline_black', name: 'خڵۆڵ (چوارچێوەی ڕەش)', fill: 'none', outlineColor: '#000000', outlineWidth: 3, textColor: '#000000' },
+  { id: 'outline_white', name: 'خڵۆڵ (چوارچێوەی سپی)', fill: 'none', outlineColor: '#ffffff', outlineWidth: 3, textColor: '#ffffff' },
+];
+
 // Helper function to render any shape in React Native SVG
 export function renderSvgShape({
   shapeType = 'rect',
@@ -286,10 +334,10 @@ export function renderSvgShape({
     return (
       <Svg width={svgWidth} height={svgHeight} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Rect
-          x="1"
-          y="1"
-          width="98"
-          height="98"
+          x="0"
+          y="0"
+          width="100"
+          height="100"
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
@@ -304,10 +352,10 @@ export function renderSvgShape({
     return (
       <Svg width={svgWidth} height={svgHeight} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Rect
-          x="1"
-          y="1"
-          width="98"
-          height="98"
+          x="0"
+          y="0"
+          width="100"
+          height="100"
           rx={rx}
           ry={rx}
           fill={fill}
@@ -325,8 +373,8 @@ export function renderSvgShape({
         <Ellipse
           cx="50"
           cy="50"
-          rx="48"
-          ry="48"
+          rx="50"
+          ry="50"
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
@@ -393,3 +441,66 @@ export function renderSvgShape({
     </Svg>
   );
 }
+
+// Helper function to render any shape in HTML SVG for PDF export
+export function getShapeSvgHtml({
+  shapeType = 'rect',
+  fill = '#1f497d',
+  outlineColor = '#000000',
+  outlineWidth = 2,
+  cornerRadius = 20,
+}) {
+  const isLine = shapeType === 'line';
+  const isArrow = shapeType === 'arrow';
+  const isDoubleArrow = shapeType === 'doubleArrow';
+  const stroke = outlineWidth > 0 ? (outlineColor || '#000000') : 'none';
+
+  if (isLine) {
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <line x1="0" y1="50" x2="100" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+    </svg>`;
+  }
+
+  if (isArrow) {
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <line x1="0" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+      <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
+    </svg>`;
+  }
+
+  if (isDoubleArrow) {
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <path d="M 20,25 L 0,50 L 20,75 Z" fill="${outlineColor || '#000000'}" />
+      <line x1="20" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
+      <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
+    </svg>`;
+  }
+
+  if (shapeType === 'rect' || shapeType === 'flowProcess') {
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <rect x="0" y="0" width="100" height="100" fill="${fill}" stroke="${stroke}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+    </svg>`;
+  }
+
+  if (shapeType === 'roundRect') {
+    const rx = Math.max(2, Math.min(40, cornerRadius));
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <rect x="0" y="0" width="100" height="100" rx="${rx}" ry="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+    </svg>`;
+  }
+
+  if (shapeType === 'ellipse' || shapeType === 'wedgeEllipseCallout') {
+    const wedgeCallout = shapeType === 'wedgeEllipseCallout' ? `<path d="M 25,85 L 10,100 L 40,90 Z" fill="${fill}" stroke="${stroke}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />` : '';
+    return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+      <ellipse cx="50" cy="50" rx="50" ry="50" fill="${fill}" stroke="${stroke}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+      ${wedgeCallout}
+    </svg>`;
+  }
+
+  const def = SHAPE_MAP[shapeType];
+  const pathD = def?.path || 'M 0,0 L 100,0 L 100,100 L 0,100 Z';
+  return `<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
+    <path d="${pathD}" fill="${fill}" stroke="${stroke}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
+  </svg>`;
+}
+

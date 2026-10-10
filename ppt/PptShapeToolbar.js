@@ -1,4 +1,4 @@
-import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
+import { SHAPE_STYLE_PRESETS, renderSvgShape } from './shapeCatalog';
 
 const COLOR_PALETTE = [
   '#ffffff', '#000000', '#1f497d', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646',
@@ -26,9 +27,16 @@ export const PptShapeToolbar = forwardRef(({
   onOpenShapePicker,
   onClose,
 }, ref) => {
-  const [activeSubTab, setActiveSubTab] = useState('size'); // 'size' | 'fill' | 'text' | 'outline' | 'style' | 'tools'
+  const [activeSubTab, setActiveSubTab] = useState('style_presets'); // 'style_presets' | 'size' | 'fill' | 'text' | 'outline' | 'style' | 'tools'
   const [keepAspect, setKeepAspect] = useState(false);
   const textInputRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedElement) {
+      const isAspectLocked = selectedElement.lockAspect ?? selectedElement.keepAspect ?? false;
+      setKeepAspect(!!isAspectLocked);
+    }
+  }, [selectedElement?.id, selectedElement?.lockAspect, selectedElement?.keepAspect]);
 
   // Expose back navigation and openTextTabAndFocus handlers via ref
   useImperativeHandle(ref, () => ({
@@ -78,36 +86,76 @@ export const PptShapeToolbar = forwardRef(({
 
   const isLocked = !!selectedElement.locked;
 
+  // Toggle Aspect Ratio Lock
+  const toggleAspectLock = () => {
+    const nextVal = !keepAspect;
+    setKeepAspect(nextVal);
+    const aspect = (currentWidth && currentHeight && currentHeight > 0)
+      ? (currentWidth / currentHeight)
+      : (selectedElement?.aspectRatio || 1);
+    updateShape({
+      lockAspect: nextVal,
+      keepAspect: nextVal,
+      aspectRatio: aspect,
+    });
+  };
+
   // --- Size Handlers ---
   const changeWidth = (newW) => {
     const clampedW = Math.max(5, Math.min(100, Math.round(newW)));
-    if (keepAspect) {
-      const aspect = currentWidth / Math.max(1, currentHeight);
+    const isAspectLocked = selectedElement?.lockAspect ?? selectedElement?.keepAspect ?? keepAspect;
+    const aspect = selectedElement?.aspectRatio || (currentWidth / Math.max(1, currentHeight)) || 1;
+    if (isAspectLocked) {
       const newH = Math.max(3, Math.min(100, Math.round(clampedW / aspect)));
-      updateShape({ width: clampedW, height: newH });
+      updateShape({
+        width: clampedW,
+        height: newH,
+        lockAspect: true,
+        keepAspect: true,
+        aspectRatio: aspect,
+      });
     } else {
-      updateShape({ width: clampedW });
+      const newAspect = clampedW / Math.max(1, currentHeight);
+      updateShape({
+        width: clampedW,
+        aspectRatio: newAspect,
+        lockAspect: false,
+        keepAspect: false,
+      });
     }
   };
 
   const changeHeight = (newH) => {
     const clampedH = Math.max(3, Math.min(100, Math.round(newH)));
-    if (keepAspect) {
-      const aspect = currentWidth / Math.max(1, currentHeight);
+    const isAspectLocked = selectedElement?.lockAspect ?? selectedElement?.keepAspect ?? keepAspect;
+    const aspect = selectedElement?.aspectRatio || (currentWidth / Math.max(1, currentHeight)) || 1;
+    if (isAspectLocked) {
       const newW = Math.max(5, Math.min(100, Math.round(clampedH * aspect)));
-      updateShape({ width: newW, height: clampedH });
+      updateShape({
+        width: newW,
+        height: clampedH,
+        lockAspect: true,
+        keepAspect: true,
+        aspectRatio: aspect,
+      });
     } else {
-      updateShape({ height: clampedH });
+      const newAspect = Math.max(1, currentWidth) / clampedH;
+      updateShape({
+        height: clampedH,
+        aspectRatio: newAspect,
+        lockAspect: false,
+        keepAspect: false,
+      });
     }
   };
 
   const changeX = (newX) => {
-    const clampedX = Math.max(0, Math.min(100 - currentWidth, Math.round(newX)));
+    const clampedX = Math.max(0, Math.min(100 - currentWidth, Math.round(newX * 10) / 10));
     updateShape({ x: clampedX });
   };
 
   const changeY = (newY) => {
-    const clampedY = Math.max(0, Math.min(100 - currentHeight, Math.round(newY)));
+    const clampedY = Math.max(0, Math.min(100 - currentHeight, Math.round(newY * 10) / 10));
     updateShape({ y: clampedY });
   };
 
@@ -169,10 +217,36 @@ export const PptShapeToolbar = forwardRef(({
     }
   };
 
+  // --- Apply Preset Shape Style (أنماط الأشكال) ---
+  const applyShapeStylePreset = (preset) => {
+    updateShape({
+      fill: preset.fill,
+      outline: {
+        color: preset.outlineColor,
+        width: preset.outlineWidth,
+      },
+      textColor: preset.textColor || selectedElement.textColor || '#000000',
+      bold: preset.bold !== undefined ? preset.bold : (selectedElement.bold || false),
+      opacity: preset.opacity !== undefined ? preset.opacity : (selectedElement.opacity !== undefined ? selectedElement.opacity : 1.0),
+    });
+  };
+
   return (
     <View style={styles.toolbarContainer}>
       {/* Top Header Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabHeaderRow}>
+        {!isLineOrArrow && (
+          <TouchableOpacity
+            style={[styles.tabHeaderBtn, activeSubTab === 'style_presets' && styles.tabHeaderBtnActive]}
+            onPress={() => setActiveSubTab('style_presets')}
+          >
+            <Ionicons name="color-palette-outline" size={15} color={activeSubTab === 'style_presets' ? '#ffffff' : '#aaaaaa'} />
+            <Text style={[styles.tabHeaderBtnText, activeSubTab === 'style_presets' && styles.tabHeaderBtnTextActive]}>
+              أنماط الأشكال (Shape Styles)
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[styles.tabHeaderBtn, activeSubTab === 'size' && styles.tabHeaderBtnActive]}
           onPress={() => setActiveSubTab('size')}
@@ -252,6 +326,45 @@ export const PptShapeToolbar = forwardRef(({
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* SUB-TAB 0: SHAPE STYLE PRESETS ("أنماط الأشكال") */}
+      {!isLineOrArrow && activeSubTab === 'style_presets' && (
+        <View style={styles.tabContentBox}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScrollRow}>
+            {SHAPE_STYLE_PRESETS.map((preset) => {
+              const isSelectedPreset =
+                currentFill.toLowerCase() === preset.fill.toLowerCase() &&
+                currentOutlineColor.toLowerCase() === preset.outlineColor.toLowerCase();
+
+              return (
+                <TouchableOpacity
+                  key={`preset_${preset.id}`}
+                  style={[
+                    styles.presetCard,
+                    isSelectedPreset && styles.presetCardActive,
+                  ]}
+                  onPress={() => applyShapeStylePreset(preset)}
+                >
+                  <View style={styles.presetPreviewBox}>
+                    {renderSvgShape({
+                      shapeType: shapeType,
+                      fill: preset.fill,
+                      outlineColor: preset.outlineColor,
+                      outlineWidth: preset.outlineWidth,
+                      cornerRadius: currentCornerRadius,
+                      svgWidth: '100%',
+                      svgHeight: '100%',
+                    })}
+                  </View>
+                  <Text style={styles.presetCardText} numberOfLines={1}>
+                    {preset.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* SUB-TAB 1: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}
       {activeSubTab === 'size' && (
@@ -366,7 +479,7 @@ export const PptShapeToolbar = forwardRef(({
             {/* Aspect Ratio Lock Toggle */}
             <TouchableOpacity
               style={[styles.aspectLockBtn, keepAspect && styles.aspectLockBtnActive]}
-              onPress={() => setKeepAspect(!keepAspect)}
+              onPress={toggleAspectLock}
             >
               <Ionicons name={keepAspect ? 'link' : 'unlink-outline'} size={18} color="#ffffff" />
               <Text style={styles.aspectLockText}>
@@ -660,6 +773,37 @@ const styles = StyleSheet.create({
   },
   tabContentBox: {
     padding: 10,
+  },
+  presetScrollRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  presetCard: {
+    width: 90,
+    height: 75,
+    backgroundColor: '#2c2c2e',
+    borderRadius: 10,
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: '#3a3a3c',
+  },
+  presetCardActive: {
+    borderColor: '#0a84ff',
+    backgroundColor: '#1f2a38',
+  },
+  presetPreviewBox: {
+    width: 42,
+    height: 36,
+  },
+  presetCardText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   sizeSectionContainer: {
     flexDirection: 'row',

@@ -286,6 +286,25 @@ export const PptEditorModal = ({
   const isApplyingStyleRef = useRef(false);
   const [controlledSelection, setControlledSelection] = useState(undefined);
   const [showSoftInputOnFocus, setShowSoftInputOnFocus] = useState(true);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const h = e?.endCoordinates?.height || 0;
+      setKeyboardHeight(h);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Saved state per page e.g. { [pageId]: boolean }
   const [savedPages, setSavedPages] = useState({});
@@ -875,9 +894,9 @@ export const PptEditorModal = ({
       const targetPage = presentation.slides.find((s) => s.id === targetPageId);
       const initialZIndex = ((targetPage?.elements || []).length || 0) + 1;
 
-      const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow';
+      const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow';
       const w = 30;
-      const h = isLineOrArrow ? 6 : 20;
+      const h = isLineOrArrow ? 6 : (shapeType === 'ellipse' ? 25 : 20);
 
       const newElem = {
         id: `shape_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
@@ -1687,60 +1706,62 @@ export const PptEditorModal = ({
               </KeyboardAvoidingView>
 
               {/* Contextual / Persistent Bottom Toolbar */}
-              {selectedElement && selectedElement.type === 'text' ? (
-                <PptTextToolbar
-                  ref={textToolbarRef}
-                  element={selectedElement}
-                  onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
-                  onClose={() => {
-                    setSelectedElementId(null);
-                    setEditingElementId(null);
-                  }}
-                  selRef={selRef}
-                  pendingSelRef={pendingSelRef}
-                  pressingRef={pressingRef}
-                  stickyRangeRef={stickyRangeRef}
-                  userTouchRef={userTouchRef}
-                  ignoreSelectionRef={ignoreSelectionRef}
-                  inputRef={inputRef}
-                  isApplyingStyleRef={isApplyingStyleRef}
-                  controlledSelection={controlledSelection}
-                  setControlledSelection={setControlledSelection}
-                  setShowSoftInputOnFocus={setShowSoftInputOnFocus}
-                  onRequestClose={() => handleBack(false)}
-                />
-              ) : selectedElement && selectedElement.type === 'shape' ? (
-                <PptShapeToolbar
-                  ref={shapeToolbarRef}
-                  selectedElement={selectedElement}
-                  onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
-                  onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
-                  onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
-                  onOpenShapePicker={(mode) => handleOpenShapePicker(mode)}
-                  onClose={() => {
-                    setSelectedElementId(null);
-                    setEditingElementId(null);
-                  }}
-                  onRequestClose={() => handleBack(false)}
-                />
-              ) : (
-                <PptImageToolbar
-                  ref={imageToolbarRef}
-                  selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
-                  onPickGallery={handlePickGalleryImages}
-                  onPickCamera={handlePickCameraImage}
-                  onAddShape={handleAddShape}
-                  onOpenShapePicker={() => handleOpenShapePicker('add')}
-                  onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
-                  onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
-                  onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
-                  onClose={() => {
-                    setSelectedElementId(null);
-                    setEditingElementId(null);
-                  }}
-                  onRequestClose={() => handleBack(false)}
-                />
-              )}
+              <View style={{ marginBottom: keyboardHeight }}>
+                {selectedElement && selectedElement.type === 'text' ? (
+                  <PptTextToolbar
+                    ref={textToolbarRef}
+                    element={selectedElement}
+                    onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                    onClose={() => {
+                      setSelectedElementId(null);
+                      setEditingElementId(null);
+                    }}
+                    selRef={selRef}
+                    pendingSelRef={pendingSelRef}
+                    pressingRef={pressingRef}
+                    stickyRangeRef={stickyRangeRef}
+                    userTouchRef={userTouchRef}
+                    ignoreSelectionRef={ignoreSelectionRef}
+                    inputRef={inputRef}
+                    isApplyingStyleRef={isApplyingStyleRef}
+                    controlledSelection={controlledSelection}
+                    setControlledSelection={setControlledSelection}
+                    setShowSoftInputOnFocus={setShowSoftInputOnFocus}
+                    onRequestClose={() => handleBack(false)}
+                  />
+                ) : selectedElement && selectedElement.type === 'shape' ? (
+                  <PptShapeToolbar
+                    ref={shapeToolbarRef}
+                    selectedElement={selectedElement}
+                    onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                    onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
+                    onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
+                    onOpenShapePicker={(mode) => handleOpenShapePicker(mode)}
+                    onClose={() => {
+                      setSelectedElementId(null);
+                      setEditingElementId(null);
+                    }}
+                    onRequestClose={() => handleBack(false)}
+                  />
+                ) : (
+                  <PptImageToolbar
+                    ref={imageToolbarRef}
+                    selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
+                    onPickGallery={handlePickGalleryImages}
+                    onPickCamera={handlePickCameraImage}
+                    onAddShape={handleAddShape}
+                    onOpenShapePicker={() => handleOpenShapePicker('add')}
+                    onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                    onDuplicateElement={(elemId) => handleDuplicateElement(selectedPageId, elemId)}
+                    onDeleteElement={(elemId) => handleDeleteElement(selectedPageId, elemId)}
+                    onClose={() => {
+                      setSelectedElementId(null);
+                      setEditingElementId(null);
+                    }}
+                    onRequestClose={() => handleBack(false)}
+                  />
+                )}
+              </View>
 
             </View>
           )}

@@ -3,7 +3,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { SLIDE, measureElementLayout, splitRuns } from './pptFit';
 import { getElementRuns } from './formattedText';
-import { renderSvgShape, SHAPE_MAP } from './shapeCatalog';
+import { renderSvgShape, getShapeSvgHtml, SHAPE_MAP } from './shapeCatalog';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   elementWrapper: {
     position: 'absolute',
-    padding: 2,
+    padding: 0,
   },
   textContainer: {
     flex: 1,
@@ -485,67 +485,20 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
         ">${escapeHtml(elem.text)}</span>
       ` : '';
 
-      let svgPathD = SHAPE_MAP[shapeType]?.path;
-      if (shapeType === 'line') {
-        shapeContentHtml = `
-          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-            <line x1="0" y1="50" x2="100" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
-          </svg>
-        `;
-      } else if (shapeType === 'arrow') {
-        shapeContentHtml = `
-          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-            <line x1="0" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
-            <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
-          </svg>
-        `;
-      } else if (shapeType === 'doubleArrow') {
-        shapeContentHtml = `
-          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-            <path d="M 20,25 L 0,50 L 20,75 Z" fill="${outlineColor || '#000000'}" />
-            <line x1="20" y1="50" x2="80" y2="50" stroke="${outlineColor || '#000000'}" stroke-width="${Math.max(2, outlineWidth * 3)}" vector-effect="non-scaling-stroke" />
-            <path d="M 80,25 L 100,50 L 80,75 Z" fill="${outlineColor || '#000000'}" />
-          </svg>
-        `;
-      } else if (shapeType === 'rect') {
-        shapeContentHtml = `
-          <div style="width: 100%; height: 100%; position: relative;">
-            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-              <rect x="1" y="1" width="98" height="98" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
-            </svg>
-            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
-          </div>
-        `;
-      } else if (shapeType === 'roundRect') {
-        const rx = Math.max(2, Math.min(40, cornerRadiusPct));
-        shapeContentHtml = `
-          <div style="width: 100%; height: 100%; position: relative;">
-            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-              <rect x="1" y="1" width="98" height="98" rx="${rx}" ry="${rx}" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
-            </svg>
-            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
-          </div>
-        `;
-      } else if (shapeType === 'ellipse') {
-        shapeContentHtml = `
-          <div style="width: 100%; height: 100%; position: relative;">
-            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-              <ellipse cx="50" cy="50" rx="48" ry="48" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
-            </svg>
-            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
-          </div>
-        `;
-      } else {
-        const pathD = svgPathD || 'M 0,0 L 100,0 L 100,100 L 0,100 Z';
-        shapeContentHtml = `
-          <div style="width: 100%; height: 100%; position: relative;">
-            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style="position: absolute; top:0; left:0;">
-              <path d="${pathD}" fill="${fill}" stroke="${outlineWidth > 0 ? outlineColor : 'none'}" stroke-width="${outlineWidth}" vector-effect="non-scaling-stroke" />
-            </svg>
-            <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
-          </div>
-        `;
-      }
+      const svgInner = getShapeSvgHtml({
+        shapeType,
+        fill,
+        outlineColor,
+        outlineWidth,
+        cornerRadius: cornerRadiusPct,
+      });
+
+      shapeContentHtml = `
+        <div style="width: 100%; height: 100%; position: relative;">
+          ${svgInner}
+          <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
+        </div>
+      `;
 
       elementHtmls.push(`
         <div style="

@@ -10,6 +10,7 @@ import {
   ToastAndroid,
   Platform,
   Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { KURDISH_FONTS, ENGLISH_FONTS } from './fonts';
 import {
@@ -363,14 +364,8 @@ export const PptTextToolbar = forwardRef(({
       pendingSelRef.current = { ...selRef.current };
     }
 
-    if (setShowSoftInputOnFocus) {
-      setShowSoftInputOnFocus(false);
-    }
-    Keyboard.dismiss();
-
     const saved = stickyRangeRef.current;
     if (saved && inputRef?.current) {
-      if (inputRef.current.focus) inputRef.current.focus();
       if (typeof inputRef.current.setSelection === 'function') {
         inputRef.current.setSelection(saved.start, saved.end);
       } else if (inputRef.current.setNativeProps) {
@@ -1251,7 +1246,10 @@ export const PptTextToolbar = forwardRef(({
         animationType="slide"
         onRequestClose={onRequestClose || (() => setEditTextModal(false))}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>نوسینی دەق و تەحدیدکردن ✍️</Text>
 
@@ -1392,7 +1390,7 @@ export const PptTextToolbar = forwardRef(({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Font Selector Bottom Sheet */}

@@ -1,4 +1,4 @@
-import React, { useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
 
-// Theme Colors for Border Picker Grid
-const BORDER_COLORS_GRID = [
+// Theme Colors for Border/Outline Picker Grid (Matches PptShapeToolbar)
+const COLOR_PALETTE = [
   '#ffffff', '#000000', '#1f497d', '#c0504d', '#9bbb59', '#8064a2', '#4bacc6', '#f79646',
   '#c00000', '#ff0000', '#ffc000', '#ffff00', '#92d050', '#00b0f0', '#0070c0', '#7030a0',
   '#ff3b30', '#ff9500', '#34c759', '#007aff', '#5856d6', '#af52de', '#8e8e93', '#3a3a3c',
@@ -32,6 +32,13 @@ export const PptImageToolbar = forwardRef(({
   const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'size' | 'style' | 'crop' | 'border' | 'tools'
   const [showShapesPanel, setShowShapesPanel] = useState(false);
   const [keepAspect, setKeepAspect] = useState(false);
+
+  useEffect(() => {
+    if (selectedElement) {
+      const isAspectLocked = selectedElement.lockAspect ?? selectedElement.keepAspect ?? false;
+      setKeepAspect(!!isAspectLocked);
+    }
+  }, [selectedElement?.id, selectedElement?.lockAspect, selectedElement?.keepAspect]);
 
   // Expose back navigation handlers via ref
   useImperativeHandle(ref, () => ({
@@ -70,8 +77,12 @@ export const PptImageToolbar = forwardRef(({
   const currentOpacity = selectedElement?.opacity !== undefined ? selectedElement.opacity : 1.0;
   const currentRadius = selectedElement?.borderRadius || 0;
   const currentRotation = selectedElement?.rotation || 0;
-  const currentBorderWidth = selectedElement?.border?.width || 0;
-  const currentBorderColor = selectedElement?.border?.color || '#ffffff';
+
+  // Border & Outline
+  const outline = selectedElement?.outline || selectedElement?.border || { color: '#ffffff', width: 0 };
+  const currentBorderWidth = selectedElement?.border?.width !== undefined ? selectedElement.border.width : (outline?.width || 0);
+  const currentBorderColor = selectedElement?.border?.color || outline?.color || '#ffffff';
+
   const currentCrop = selectedElement?.crop || { top: 0, bottom: 0, left: 0, right: 0 };
   const isLocked = !!selectedElement?.locked;
 
@@ -80,26 +91,66 @@ export const PptImageToolbar = forwardRef(({
   const currentX = Math.round(selectedElement?.x || 25);
   const currentY = Math.round(selectedElement?.y || 35);
 
-  // Size Handlers
+  // Toggle Aspect Ratio Lock
+  const toggleAspectLock = () => {
+    const nextVal = !keepAspect;
+    setKeepAspect(nextVal);
+    const aspect = (currentWidth && currentHeight && currentHeight > 0)
+      ? (currentWidth / currentHeight)
+      : (selectedElement?.aspectRatio || 1);
+    updateImage({
+      lockAspect: nextVal,
+      keepAspect: nextVal,
+      aspectRatio: aspect,
+    });
+  };
+
+  // --- Size Handlers ---
   const changeWidth = (newW) => {
     const clampedW = Math.max(5, Math.min(100, Math.round(newW)));
-    if (keepAspect) {
-      const aspect = currentWidth / Math.max(1, currentHeight);
+    const isAspectLocked = selectedElement?.lockAspect ?? selectedElement?.keepAspect ?? keepAspect;
+    const aspect = selectedElement?.aspectRatio || (currentWidth / Math.max(1, currentHeight)) || 1;
+    if (isAspectLocked) {
       const newH = Math.max(3, Math.min(100, Math.round(clampedW / aspect)));
-      updateImage({ width: clampedW, height: newH });
+      updateImage({
+        width: clampedW,
+        height: newH,
+        lockAspect: true,
+        keepAspect: true,
+        aspectRatio: aspect,
+      });
     } else {
-      updateImage({ width: clampedW });
+      const newAspect = clampedW / Math.max(1, currentHeight);
+      updateImage({
+        width: clampedW,
+        aspectRatio: newAspect,
+        lockAspect: false,
+        keepAspect: false,
+      });
     }
   };
 
   const changeHeight = (newH) => {
     const clampedH = Math.max(3, Math.min(100, Math.round(newH)));
-    if (keepAspect) {
-      const aspect = currentWidth / Math.max(1, currentHeight);
+    const isAspectLocked = selectedElement?.lockAspect ?? selectedElement?.keepAspect ?? keepAspect;
+    const aspect = selectedElement?.aspectRatio || (currentWidth / Math.max(1, currentHeight)) || 1;
+    if (isAspectLocked) {
       const newW = Math.max(5, Math.min(100, Math.round(clampedH * aspect)));
-      updateImage({ width: newW, height: clampedH });
+      updateImage({
+        width: newW,
+        height: clampedH,
+        lockAspect: true,
+        keepAspect: true,
+        aspectRatio: aspect,
+      });
     } else {
-      updateImage({ height: clampedH });
+      const newAspect = Math.max(1, currentWidth) / clampedH;
+      updateImage({
+        height: clampedH,
+        aspectRatio: newAspect,
+        lockAspect: false,
+        keepAspect: false,
+      });
     }
   };
 
@@ -118,19 +169,19 @@ export const PptImageToolbar = forwardRef(({
     updateImage({ fit: mode });
   };
 
-  // Opacity Change
+  // --- Opacity Change (10 - 100%) ---
   const changeOpacity = (val) => {
     const clamped = Math.max(0.1, Math.min(1.0, Math.round(val * 100) / 100));
     updateImage({ opacity: clamped });
   };
 
-  // Border Radius Change
+  // Border Radius Change (0 - 50%)
   const changeRadius = (rad) => {
     const clamped = Math.max(0, Math.min(50, rad));
     updateImage({ borderRadius: clamped });
   };
 
-  // Rotation Change
+  // --- Rotation Change ---
   const addRotation = (deg) => {
     let newRot = (currentRotation + deg) % 360;
     if (newRot < 0) newRot += 360;
@@ -141,26 +192,36 @@ export const PptImageToolbar = forwardRef(({
     updateImage({ rotation: deg });
   };
 
-  // Border Width & Color
+  // --- Border & Outline Width / Color Handlers ---
   const setBorderWidth = (w) => {
+    const clampedW = Math.max(0, Math.min(20, Math.round(w)));
     updateImage({
       border: {
         color: currentBorderColor,
-        width: w,
+        width: clampedW,
+      },
+      outline: {
+        color: currentBorderColor,
+        width: clampedW,
       },
     });
   };
 
   const setBorderColor = (colorHex) => {
+    const w = currentBorderWidth > 0 ? currentBorderWidth : 2;
     updateImage({
       border: {
         color: colorHex,
-        width: currentBorderWidth > 0 ? currentBorderWidth : 2,
+        width: w,
+      },
+      outline: {
+        color: colorHex,
+        width: w,
       },
     });
   };
 
-  // Crop Controls
+  // --- Crop Controls (0 - 45%) ---
   const handleCropChange = (side, newPctVal) => {
     const topPct = Math.round((currentCrop.top || 0) * 100);
     const bottomPct = Math.round((currentCrop.bottom || 0) * 100);
@@ -188,6 +249,11 @@ export const PptImageToolbar = forwardRef(({
       [side]: Math.round(clampedPct) / 100,
     };
     updateImage({ crop: newCrop });
+  };
+
+  const applyCropPreset = (pct) => {
+    const fraction = pct / 100;
+    updateImage({ crop: { top: fraction, bottom: fraction, left: fraction, right: fraction } });
   };
 
   const resetCrop = () => {
@@ -258,7 +324,7 @@ export const PptImageToolbar = forwardRef(({
             >
               <Ionicons name="square-outline" size={15} color={activeSubTab === 'border' ? '#ffffff' : '#aaaaaa'} />
               <Text style={[styles.tabHeaderBtnText, activeSubTab === 'border' && styles.tabHeaderBtnTextActive]}>
-                چوارچێوە
+                چوارچێوە (Outline)
               </Text>
             </TouchableOpacity>
 
@@ -417,7 +483,7 @@ export const PptImageToolbar = forwardRef(({
         </View>
       )}
 
-      {/* SUB-TAB: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}
+      {/* SUB-TAB 2: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}
       {isImageSelected && activeSubTab === 'size' && (
         <View style={styles.tabContentBox}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sizeSectionContainer}>
@@ -530,7 +596,7 @@ export const PptImageToolbar = forwardRef(({
             {/* Aspect Ratio Lock Toggle */}
             <TouchableOpacity
               style={[styles.aspectLockBtn, keepAspect && styles.aspectLockBtnActive]}
-              onPress={() => setKeepAspect(!keepAspect)}
+              onPress={toggleAspectLock}
             >
               <Ionicons name={keepAspect ? 'link' : 'unlink-outline'} size={18} color="#ffffff" />
               <Text style={styles.aspectLockText}>
@@ -541,7 +607,7 @@ export const PptImageToolbar = forwardRef(({
         </View>
       )}
 
-      {/* SUB-TAB 2: STYLE & OPACITY & ROTATION ("شێواز و گۆشە") */}
+      {/* SUB-TAB 3: STYLE & OPACITY & ROTATION ("شێواز و ڕوونی") */}
       {isImageSelected && activeSubTab === 'style' && (
         <View style={styles.tabContentBox}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
@@ -583,18 +649,29 @@ export const PptImageToolbar = forwardRef(({
 
             {/* 3. Opacity (10 - 100%) */}
             <View style={styles.controlGroup}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.groupLabel}>ڕوونی (Opacity): {Math.round(currentOpacity * 100)}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeOpacity(currentOpacity - 0.05)}>
+                    <Text style={styles.stepBtnText}>-5%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => changeOpacity(currentOpacity + 0.05)}>
+                    <Text style={styles.stepBtnText}>+5%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <PptSlider
-                label="ڕوونی (Opacity)"
+                label="ڕوونی"
                 unit="%"
                 min={10}
                 max={100}
                 step={1}
                 value={Math.round(currentOpacity * 100)}
                 onChange={(val) => changeOpacity(val / 100)}
-                style={{ width: 160 }}
+                style={{ width: 170 }}
               />
               <View style={styles.chipRow}>
-                {[20, 40, 60, 80, 100].map((opVal) => (
+                {[10, 25, 50, 75, 90, 100].map((opVal) => (
                   <TouchableOpacity
                     key={`opchip_${opVal}`}
                     style={[styles.chipBtn, Math.round(currentOpacity * 100) === opVal && styles.chipBtnActive]}
@@ -666,106 +743,214 @@ export const PptImageToolbar = forwardRef(({
         </View>
       )}
 
-      {/* SUB-TAB 3: CROP ("بڕین") */}
+      {/* SUB-TAB 4: CROP ("بڕین") */}
       {isImageSelected && activeSubTab === 'crop' && (
         <View style={styles.tabContentBox}>
           <ScrollView
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled
-            contentContainerStyle={styles.cropVerticalContainer}
+            showsHorizontalScrollIndicator={false}
+            horizontal
+            contentContainerStyle={styles.scrollContentRow}
           >
-            <View style={styles.cropHeaderRow}>
-              <TouchableOpacity style={styles.resetCropBtn} onPress={resetCrop}>
-                <Ionicons name="refresh-outline" size={14} color="#ffffff" />
-                <Text style={styles.resetCropText}>بێ برین (Reset)</Text>
-              </TouchableOpacity>
+            {/* Reset & Crop Presets */}
+            <View style={styles.controlGroup}>
+              <Text style={styles.groupLabel}>بڕینی پێشوەختە:</Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity style={styles.resetCropBtn} onPress={resetCrop}>
+                  <Ionicons name="refresh-outline" size={14} color="#ffffff" />
+                  <Text style={styles.resetCropText}>بێ بڕین (0%)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => applyCropPreset(5)}>
+                  <Text style={styles.chipBtnText}>5% لایەکان</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => applyCropPreset(10)}>
+                  <Text style={styles.chipBtnText}>10% لایەکان</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.chipBtn} onPress={() => applyCropPreset(20)}>
+                  <Text style={styles.chipBtnText}>20% لایەکان</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.cropSlidersList}>
+            {/* Top Crop Slider */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>سەرەوە (Top): {Math.round((currentCrop.top || 0) * 100)}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('top', Math.round((currentCrop.top || 0) * 100) - 1)}>
+                    <Text style={styles.stepBtnText}>-1%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('top', Math.round((currentCrop.top || 0) * 100) + 1)}>
+                    <Text style={styles.stepBtnText}>+1%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <PptSlider
-                label="سەرەوە (Top)"
+                label="سەرەوە"
                 unit="%"
                 min={0}
                 max={45}
                 step={1}
                 value={Math.round((currentCrop.top || 0) * 100)}
                 onChange={(val) => handleCropChange('top', val)}
+                style={{ width: 160 }}
               />
+            </View>
 
+            {/* Bottom Crop Slider */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>خوارەوە (Bottom): {Math.round((currentCrop.bottom || 0) * 100)}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('bottom', Math.round((currentCrop.bottom || 0) * 100) - 1)}>
+                    <Text style={styles.stepBtnText}>-1%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('bottom', Math.round((currentCrop.bottom || 0) * 100) + 1)}>
+                    <Text style={styles.stepBtnText}>+1%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <PptSlider
-                label="خوارەوە (Bottom)"
+                label="خوارەوە"
                 unit="%"
                 min={0}
                 max={45}
                 step={1}
                 value={Math.round((currentCrop.bottom || 0) * 100)}
                 onChange={(val) => handleCropChange('bottom', val)}
+                style={{ width: 160 }}
               />
+            </View>
 
+            {/* Left Crop Slider */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>چەپ (Left): {Math.round((currentCrop.left || 0) * 100)}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('left', Math.round((currentCrop.left || 0) * 100) - 1)}>
+                    <Text style={styles.stepBtnText}>-1%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('left', Math.round((currentCrop.left || 0) * 100) + 1)}>
+                    <Text style={styles.stepBtnText}>+1%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <PptSlider
-                label="چەپ (Left)"
+                label="چەپ"
                 unit="%"
                 min={0}
                 max={45}
                 step={1}
                 value={Math.round((currentCrop.left || 0) * 100)}
                 onChange={(val) => handleCropChange('left', val)}
+                style={{ width: 160 }}
               />
+            </View>
 
+            {/* Right Crop Slider */}
+            <View style={styles.dimensionBox}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionTitle}>ڕاست (Right): {Math.round((currentCrop.right || 0) * 100)}%</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('right', Math.round((currentCrop.right || 0) * 100) - 1)}>
+                    <Text style={styles.stepBtnText}>-1%</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => handleCropChange('right', Math.round((currentCrop.right || 0) * 100) + 1)}>
+                    <Text style={styles.stepBtnText}>+1%</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <PptSlider
-                label="ڕاست (Right)"
+                label="ڕاست"
                 unit="%"
                 min={0}
                 max={45}
                 step={1}
                 value={Math.round((currentCrop.right || 0) * 100)}
                 onChange={(val) => handleCropChange('right', val)}
+                style={{ width: 160 }}
               />
             </View>
           </ScrollView>
         </View>
       )}
 
-      {/* SUB-TAB 4: BORDER ("چوارچێوە") */}
+      {/* SUB-TAB 5: BORDER / OUTLINE ("چوارچێوە") */}
       {isImageSelected && activeSubTab === 'border' && (
         <View style={styles.tabContentBox}>
-          <View style={styles.borderWidthRow}>
-            <PptSlider
-              label="ئەستووری چوارچێوە"
-              unit="px"
-              min={0}
-              max={20}
-              step={1}
-              value={currentBorderWidth}
-              onChange={setBorderWidth}
-            />
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContentRow}>
+            {/* Outline Width Slider & Presets */}
+            <View style={styles.controlGroup}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.groupLabel}>ئەستووریی چوارچێوە: {currentBorderWidth}px</Text>
+                <View style={styles.stepBtnGroup}>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => setBorderWidth(currentBorderWidth - 1)}>
+                    <Text style={styles.stepBtnText}>-1px</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.stepBtn} onPress={() => setBorderWidth(currentBorderWidth + 1)}>
+                    <Text style={styles.stepBtnText}>+1px</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-          {currentBorderWidth > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorPaletteRow}>
-              {BORDER_COLORS_GRID.map((hex) => (
-                <TouchableOpacity
-                  key={`bclr_${hex}`}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: hex },
-                    currentBorderColor.toLowerCase() === hex.toLowerCase() && styles.colorDotActive,
-                  ]}
-                  onPress={() => setBorderColor(hex)}
-                >
-                  {currentBorderColor.toLowerCase() === hex.toLowerCase() && (
-                    <Text style={{ color: hex === '#ffffff' || hex === '#ffff00' ? '#000' : '#fff', fontSize: 10, fontWeight: 'bold' }}>
-                      ✓
+              <PptSlider
+                label="ئەستووری"
+                unit="px"
+                min={0}
+                max={20}
+                step={1}
+                value={currentBorderWidth}
+                onChange={setBorderWidth}
+                style={{ width: 170 }}
+              />
+
+              <View style={styles.chipRow}>
+                {[0, 1, 2, 4, 8, 12].map((wVal) => (
+                  <TouchableOpacity
+                    key={`bwchip_${wVal}`}
+                    style={[styles.chipBtn, currentBorderWidth === wVal && styles.chipBtnActive]}
+                    onPress={() => setBorderWidth(wVal)}
+                  >
+                    <Text style={[styles.chipBtnText, currentBorderWidth === wVal && styles.chipBtnTextActive]}>
+                      {wVal === 0 ? '🚫 بێ چوارچێوە' : `${wVal}px`}
                     </Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Outline Color Palette Grid */}
+            {currentBorderWidth > 0 && (
+              <View style={styles.controlGroup}>
+                <Text style={styles.groupLabel}>ڕەنگی چوارچێوە:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorPaletteRow}>
+                  {COLOR_PALETTE.map((hex) => (
+                    <TouchableOpacity
+                      key={`oclr_${hex}`}
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: hex },
+                        currentBorderColor.toLowerCase() === hex.toLowerCase() && styles.colorDotActive,
+                      ]}
+                      onPress={() => setBorderColor(hex)}
+                    >
+                      {currentBorderColor.toLowerCase() === hex.toLowerCase() && (
+                        <Text style={{ color: hex === '#ffffff' || hex === '#ffff00' ? '#000' : '#fff', fontSize: 10, fontWeight: 'bold' }}>
+                          ✓
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </ScrollView>
         </View>
       )}
 
-      {/* SUB-TAB 5: TOOLS ("ئامرازەکان") */}
+      {/* SUB-TAB 6: TOOLS ("ئامرازەکان") */}
       {isImageSelected && activeSubTab === 'tools' && (
         <View style={styles.tabContentBox}>
           <View style={styles.toolsRow}>

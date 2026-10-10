@@ -889,26 +889,58 @@ export default function App() {
         let w = startW;
         let h = startH;
 
-        if (handleType.includes('l')) {
-          const maxDx = startW - minW;
-          const dx = Math.min(gs.dx, maxDx);
-          x = startX + dx;
-          w = startW - dx;
-        }
-        if (handleType.includes('r')) {
-          w = Math.max(minW, startW + gs.dx);
-        }
-        if (handleType.includes('t')) {
-          const maxDy = startH - minH;
-          const dy = Math.min(gs.dy, maxDy);
-          y = startY + dy;
-          h = startH - dy;
-        }
-        if (handleType.includes('b')) {
-          h = Math.max(minH, startH + gs.dy);
+        const isAspectLocked = !!sigItem.isAspectLocked;
+        const aspect = sigItem.aspectRatio || (startW / Math.max(1, startH)) || 1.5;
+
+        if (isAspectLocked) {
+          if (handleType === 'r' || handleType === 'br' || handleType === 'tr') {
+            w = Math.max(minW, startW + gs.dx);
+            h = Math.max(minH, Math.round(w / aspect));
+            if (handleType === 'tr') {
+              y = startY + (startH - h);
+            }
+          } else if (handleType === 'l' || handleType === 'bl' || handleType === 'tl') {
+            const maxDx = startW - minW;
+            const dx = Math.min(gs.dx, maxDx);
+            x = startX + dx;
+            w = startW - dx;
+            h = Math.max(minH, Math.round(w / aspect));
+            if (handleType === 'tl') {
+              y = startY + (startH - h);
+            }
+          } else if (handleType === 'b') {
+            h = Math.max(minH, startH + gs.dy);
+            w = Math.max(minW, Math.round(h * aspect));
+          } else if (handleType === 't') {
+            const maxDy = startH - minH;
+            const dy = Math.min(gs.dy, maxDy);
+            y = startY + dy;
+            h = startH - dy;
+            w = Math.max(minW, Math.round(h * aspect));
+          }
+        } else {
+          if (handleType.includes('l')) {
+            const maxDx = startW - minW;
+            const dx = Math.min(gs.dx, maxDx);
+            x = startX + dx;
+            w = startW - dx;
+          }
+          if (handleType.includes('r')) {
+            w = Math.max(minW, startW + gs.dx);
+          }
+          if (handleType.includes('t')) {
+            const maxDy = startH - minH;
+            const dy = Math.min(gs.dy, maxDy);
+            y = startY + dy;
+            h = startH - dy;
+          }
+          if (handleType.includes('b')) {
+            h = Math.max(minH, startH + gs.dy);
+          }
         }
 
-        setSignatures(prev => prev.map(s => s.id === sigItem.id ? { ...s, x, y, width: Math.round(w), height: Math.round(h) } : s));
+        const currentAspect = isAspectLocked ? aspect : (h > 0 ? w / h : 1);
+        setSignatures(prev => prev.map(s => s.id === sigItem.id ? { ...s, x, y, width: Math.round(w), height: Math.round(h), aspectRatio: currentAspect } : s));
       },
       onPanResponderRelease: () => {},
     });
@@ -1187,6 +1219,35 @@ export default function App() {
                     قەبارە و گۆڕینی ئاسۆیی و ستوونی (Height & Width Scaling):
                   </Text>
 
+                  {/* 0. ASPECT RATIO LOCK TOGGLE BUTTON */}
+                  <TouchableOpacity
+                    style={[
+                      styles.panelBtn,
+                      {
+                        backgroundColor: (signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.isAspectLocked ? '#34c759' : '#3a3a3c',
+                        marginBottom: 10,
+                        paddingVertical: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 10,
+                      }
+                    ]}
+                    onPress={() => {
+                      const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
+                      if (targetSig) {
+                        const nextVal = !targetSig.isAspectLocked;
+                        const aspect = targetSig.width / Math.max(1, targetSig.height);
+                        setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, isAspectLocked: nextVal, aspectRatio: aspect } : s));
+                      }
+                    }}
+                  >
+                    <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 13}}>
+                      {(signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1])?.isAspectLocked
+                        ? '🔒 ڕێژەی قەبارە: قفڵکراوە (Locked)'
+                        : '🔓 ڕێژەی قەبارە: ئازادە (Unlocked)'}
+                    </Text>
+                  </TouchableOpacity>
+
                   {/* 1. HEIGHT / VERTICAL CONTROL */}
                   <View style={{marginBottom: 10}}>
                     <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold', marginBottom: 4, textAlign: 'right'}}>
@@ -1199,7 +1260,13 @@ export default function App() {
                           const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                           if (targetSig) {
                             const newH = Math.max(20, targetSig.height - 15);
-                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH } : s));
+                            if (targetSig.isAspectLocked) {
+                              const aspect = targetSig.aspectRatio || (targetSig.width / targetSig.height);
+                              const newW = Math.max(25, Math.round(newH * aspect));
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH, width: newW, aspectRatio: aspect } : s));
+                            } else {
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH, aspectRatio: targetSig.width / newH } : s));
+                            }
                           }
                         }}
                       >
@@ -1216,7 +1283,13 @@ export default function App() {
                           const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                           if (targetSig) {
                             const newH = targetSig.height + 15;
-                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH } : s));
+                            if (targetSig.isAspectLocked) {
+                              const aspect = targetSig.aspectRatio || (targetSig.width / targetSig.height);
+                              const newW = Math.round(newH * aspect);
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH, width: newW, aspectRatio: aspect } : s));
+                            } else {
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, height: newH, aspectRatio: targetSig.width / newH } : s));
+                            }
                           }
                         }}
                       >
@@ -1237,7 +1310,13 @@ export default function App() {
                           const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                           if (targetSig) {
                             const newW = Math.max(25, targetSig.width - 15);
-                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW } : s));
+                            if (targetSig.isAspectLocked) {
+                              const aspect = targetSig.aspectRatio || (targetSig.width / targetSig.height);
+                              const newH = Math.max(20, Math.round(newW / aspect));
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH, aspectRatio: aspect } : s));
+                            } else {
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, aspectRatio: newW / targetSig.height } : s));
+                            }
                           }
                         }}
                       >
@@ -1254,7 +1333,13 @@ export default function App() {
                           const targetSig = signatures.find(s => s.id === activeSigId) || signatures[signatures.length - 1];
                           if (targetSig) {
                             const newW = targetSig.width + 15;
-                            setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW } : s));
+                            if (targetSig.isAspectLocked) {
+                              const aspect = targetSig.aspectRatio || (targetSig.width / targetSig.height);
+                              const newH = Math.round(newW / aspect);
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, height: newH, aspectRatio: aspect } : s));
+                            } else {
+                              setSignatures(prev => prev.map(s => s.id === targetSig.id ? { ...s, width: newW, aspectRatio: newW / targetSig.height } : s));
+                            }
                           }
                         }}
                       >

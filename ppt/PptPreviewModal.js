@@ -137,7 +137,7 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
                       const outlineWidth = outline.width || 0;
                       const cornerRadiusPct = elem.cornerRadius !== undefined ? elem.cornerRadius : 20;
 
-                      const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / 360);
+                      const shapeFontSize = (elem.fontSize || 16) * (canvasWidth / 960);
                       const textColor = elem.textColor || '#000000';
                       const isBold = !!elem.bold;
                       const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
