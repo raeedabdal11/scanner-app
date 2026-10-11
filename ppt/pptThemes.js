@@ -269,6 +269,10 @@ const applyThemeToText = (elem, theme) => {
   return updated;
 };
 
+// Styles one newly added element like the rest of a themed slide (no decor changes).
+export const applyThemeToNewElement = (elem, theme) =>
+  elem && theme && elem.type === 'text' ? applyThemeToText(elem, theme) : elem;
+
 // Returns a new slide with the theme applied (content kept in place, decor replaced).
 export const applyThemeToSlide = (slide, theme) => {
   if (!slide || !theme) return slide;

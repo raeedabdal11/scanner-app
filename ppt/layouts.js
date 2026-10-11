@@ -7,8 +7,93 @@ export const CATEGORIES = [
   'کۆتایی',
 ];
 
+// Builders for the simple PowerPoint-style layouts. Positions/sizes are slide
+// percentages; `maxFontPt` is the starting (largest) size the auto-fit uses.
+// Colors are the stock layout colors, so an active theme recolors them.
+let layoutElemSeq = 0;
+const newElemId = (prefix) => {
+  layoutElemSeq += 1;
+  return `${prefix}_${Date.now()}_${layoutElemSeq}_${Math.random().toString().slice(2, 6)}`;
+};
+
+const textBox = (x, y, width, height, text, opts = {}) => ({
+  id: newElemId('elem'),
+  type: 'text',
+  x,
+  y,
+  width,
+  height,
+  zIndex: 2,
+  text,
+  fontMode: 'auto',
+  fontWeight: 'normal',
+  fontStyle: 'normal',
+  textDecorationLine: 'none',
+  color: '#444444',
+  highlightColor: 'transparent',
+  textAlign: 'right',
+  writingDirection: 'rtl',
+  lineSpacing: 1.25,
+  maxFontPt: 24,
+  ...opts,
+});
+
+const TITLE_OPTS = { fontWeight: 'bold', color: '#1c1c1e', maxFontPt: 40, lineSpacing: 1.2 };
+const titleBox = (text = 'ناونیشانی سلاید') => textBox(5, 5, 90, 15, text, TITLE_OPTS);
+
+const shapeBase = (shapeType, x, y, width, height, extra) => ({
+  id: newElemId('shape'),
+  type: 'shape',
+  shapeType,
+  x,
+  y,
+  width,
+  height,
+  rotation: 0,
+  opacity: 1.0,
+  locked: false,
+  zIndex: 1,
+  ...extra,
+});
+
+// Light gray picture placeholder (a normal rounded rectangle, no text)
+const pictureFrame = (x, y, width, height) =>
+  shapeBase('roundRect', x, y, width, height, {
+    fill: '#e5e7eb',
+    outline: { color: '#9ca3af', width: 1 },
+    cornerRadius: 6,
+  });
+
+const lineShape = (x, y, width, height, color = '#9ca3af', strokeWidth = 3) =>
+  shapeBase('line', x, y, width, height, {
+    fill: 'none',
+    outline: { color, width: strokeWidth },
+    cornerRadius: 0,
+  });
+
+// Round point; height is converted so it stays a circle on a 16:9 or 4:3 slide
+const dotShape = (cx, cy, aspectRatio, widthPct = 3, color = '#D24726') => {
+  const heightPct = widthPct * (aspectRatio === '4:3' ? 4 / 3 : 16 / 9);
+  return shapeBase('ellipse', cx - widthPct / 2, cy - heightPct / 2, widthPct, heightPct, {
+    fill: color,
+    outline: { color, width: 0 },
+    cornerRadius: 0,
+  });
+};
+
+// Column x positions (RTL: the first column is on the right)
+const COLS_2 = [52, 5];
+const COLS_3 = [67, 36, 5];
+
 export const LAYOUTS = [
-  // --- سەرەتا (Start) ---
+  // --- سەرەتا ---
+  {
+    key: 'simple_blank',
+    category: 'سەرەتا',
+    title: 'سلایدی بەتاڵ',
+    desc: 'سلایدێکی بەتاڵ بۆ ئەوەی خۆت هەموو شتێک دابنێیت',
+    createElements: () => [],
+  },
   {
     key: 'title',
     category: 'سەرەتا',
@@ -102,7 +187,7 @@ export const LAYOUTS = [
   {
     key: 'agenda',
     category: 'سەرەتا',
-    title: 'کارنامە (Agenda)',
+    title: 'کارنامە',
     desc: 'لیستی تەوەرە سەرەکییەکانی پاوەرپۆینتەکە',
     createElements: () => [
       {
@@ -145,7 +230,92 @@ export const LAYOUTS = [
     ],
   },
 
-  // --- نووسین (Text) ---
+  // --- نووسین ---
+  {
+    key: 'simple_title_only',
+    category: 'نووسین',
+    title: 'تەنها سەردێر',
+    desc: 'تەنها سەردێرێک لە سەرەوەی سلایدەکە',
+    createElements: () => [titleBox()],
+  },
+  {
+    key: 'simple_title_content',
+    category: 'نووسین',
+    title: 'سەردێر و ناوەڕۆک',
+    desc: 'سەردێرێک و سندوقێکی گەورەی نووسین',
+    createElements: () => [
+      titleBox(),
+      textBox(5, 24, 90, 68, 'ناوەڕۆک لێرە بنووسە\nدێڕی دووەمی ناوەڕۆک'),
+    ],
+  },
+  {
+    key: 'simple_two_columns',
+    category: 'نووسین',
+    title: 'دوو ستوون',
+    desc: 'سەردێرێک و دوو ستوونی نووسین',
+    createElements: () => [
+      titleBox(),
+      textBox(COLS_2[0], 24, 43, 68, 'ستوونی یەکەم\nناوەڕۆک لێرە بنووسە'),
+      textBox(COLS_2[1], 24, 43, 68, 'ستوونی دووەم\nناوەڕۆک لێرە بنووسە'),
+    ],
+  },
+  {
+    key: 'simple_three_columns',
+    category: 'نووسین',
+    title: 'سێ ستوون',
+    desc: 'سەردێرێک و سێ ستوونی نووسین',
+    createElements: () => [
+      titleBox(),
+      textBox(COLS_3[0], 24, 28, 68, 'ستوونی یەکەم\nناوەڕۆک لێرە بنووسە', { maxFontPt: 22 }),
+      textBox(COLS_3[1], 24, 28, 68, 'ستوونی دووەم\nناوەڕۆک لێرە بنووسە', { maxFontPt: 22 }),
+      textBox(COLS_3[2], 24, 28, 68, 'ستوونی سێیەم\nناوەڕۆک لێرە بنووسە', { maxFontPt: 22 }),
+    ],
+  },
+  {
+    key: 'simple_comparison',
+    category: 'نووسین',
+    title: 'بەراورد',
+    desc: 'دوو ستوون، هەریەکەیان سەردێرێکی بچووک و نووسینی هەیە',
+    createElements: () => [
+      titleBox(),
+      textBox(COLS_2[0], 24, 43, 12, 'لایەنی یەکەم', { fontWeight: 'bold', color: '#D24726', maxFontPt: 28 }),
+      textBox(COLS_2[1], 24, 43, 12, 'لایەنی دووەم', { fontWeight: 'bold', color: '#D24726', maxFontPt: 28 }),
+      textBox(COLS_2[0], 38, 43, 54, 'ناوەڕۆک لێرە بنووسە\nخاڵی دووەم'),
+      textBox(COLS_2[1], 38, 43, 54, 'ناوەڕۆک لێرە بنووسە\nخاڵی دووەم'),
+    ],
+  },
+  {
+    key: 'simple_centered',
+    category: 'نووسین',
+    title: 'ناوەڕۆکی ناوەند',
+    desc: 'نووسینێکی گەورە لە ناوەڕاستی سلایدەکە، بەبێ سەردێر',
+    createElements: () => [
+      textBox(10, 30, 80, 40, 'ناوەڕۆکی سەرەکی لێرە بنووسە', {
+        textAlign: 'center',
+        color: '#1c1c1e',
+        maxFontPt: 32,
+      }),
+    ],
+  },
+  {
+    key: 'simple_quote',
+    category: 'نووسین',
+    title: 'وتە',
+    desc: 'وتەیەکی گەورە لە ناوەڕاست و ناوی خاوەنەکەی لە ژێریدا',
+    createElements: () => [
+      textBox(10, 22, 80, 40, '«وتەیەکی جوان و بەنرخ لێرە بنووسە»', {
+        textAlign: 'center',
+        fontStyle: 'italic',
+        color: '#1c1c1e',
+        maxFontPt: 32,
+      }),
+      textBox(20, 66, 60, 12, '— ناوی خاوەنی وتەکە', {
+        textAlign: 'center',
+        color: '#666666',
+        maxFontPt: 20,
+      }),
+    ],
+  },
   {
     key: 'title_bullets',
     category: 'نووسین',
@@ -249,7 +419,7 @@ export const LAYOUTS = [
   {
     key: 'comparison',
     category: 'نووسین',
-    title: 'بەراوردکاری (Comparison)',
+    title: 'بەراوردکاری',
     desc: 'بەراوردکردنی دوو بیرۆکە یان بابەت',
     createElements: () => [
       {
@@ -275,7 +445,7 @@ export const LAYOUTS = [
         width: 43,
         height: 12,
         zIndex: 1,
-        text: 'بژاردەی A (لایەنە باشەکان)',
+        text: 'بژاردەی یەکەم: لایەنە باشەکان',
         fontMode: 'auto',
         fontWeight: 'bold',
         color: '#30d158',
@@ -305,7 +475,7 @@ export const LAYOUTS = [
         width: 43,
         height: 12,
         zIndex: 1,
-        text: 'بژاردەی B (کەمپووکتییەکان)',
+        text: 'بژاردەی دووەم: کەموکورتییەکان',
         fontMode: 'auto',
         fontWeight: 'bold',
         color: '#ff453a',
@@ -332,7 +502,7 @@ export const LAYOUTS = [
   {
     key: 'quote',
     category: 'نووسین',
-    title: 'وتەی بەنرخ (Quote)',
+    title: 'وتەی بەنرخ',
     desc: 'پیشاندانی وتە یان دەقێکی گرنگ بە شێوازی جوان',
     createElements: () => [
       {
@@ -372,7 +542,7 @@ export const LAYOUTS = [
   {
     key: 'big_statement',
     category: 'نووسین',
-    title: 'پەیامی گەورە (Big Statement)',
+    title: 'پەیامی گەورە',
     desc: 'دەقێکی زۆر گەورە بۆ ڕاکێشانی سەرنجی ئامادەبووان',
     createElements: () => [
       {
@@ -394,7 +564,43 @@ export const LAYOUTS = [
     ],
   },
 
-  // --- وێنە (Images) ---
+  // --- وێنە ---
+  {
+    key: 'simple_picture_text',
+    category: 'وێنە',
+    title: 'وێنە و دەق',
+    desc: 'شوێنی وێنە لە لایەک، سەردێر و نووسین لە لایەکەی تر',
+    createElements: () => [
+      textBox(52, 8, 43, 16, 'ناونیشان', { ...TITLE_OPTS, maxFontPt: 36 }),
+      textBox(52, 28, 43, 64, 'ناوەڕۆک لێرە بنووسە\nدێڕی دووەمی ناوەڕۆک'),
+      pictureFrame(5, 8, 43, 84),
+    ],
+  },
+  {
+    key: 'simple_full_picture',
+    category: 'وێنە',
+    title: 'وێنەی تەواو',
+    desc: 'چوارچێوەیەکی گەورەی وێنە و وەسفێکی بچووک لە ژێریدا',
+    createElements: () => [
+      pictureFrame(5, 5, 90, 74),
+      textBox(5, 82, 90, 12, 'وەسفی وێنەکە لێرە بنووسە', {
+        textAlign: 'center',
+        color: '#666666',
+        maxFontPt: 20,
+      }),
+    ],
+  },
+  {
+    key: 'simple_two_pictures',
+    category: 'وێنە',
+    title: 'دوو وێنە',
+    desc: 'سەردێرێک و دوو چوارچێوەی وێنە لە تەنیشت یەک',
+    createElements: () => [
+      titleBox(),
+      pictureFrame(COLS_2[0], 24, 43, 68),
+      pictureFrame(COLS_2[1], 24, 43, 68),
+    ],
+  },
   {
     key: 'image_right_text',
     category: 'وێنە',
@@ -527,7 +733,7 @@ export const LAYOUTS = [
   {
     key: 'image_grid_2',
     category: 'وێنە',
-    title: 'دوو وێنە (Grid of 2)',
+    title: 'تۆڕی دوو وێنە',
     desc: 'دوو وێنەی تەریب لە تەنیشت یەکتر',
     createElements: () => [
       {
@@ -570,7 +776,7 @@ export const LAYOUTS = [
   {
     key: 'image_grid_3',
     category: 'وێنە',
-    title: 'سێ وێنە (Grid of 3)',
+    title: 'تۆڕی سێ وێنە',
     desc: 'سێ وێنە لە تەنیشت یەکتر',
     createElements: () => [
       {
@@ -623,8 +829,8 @@ export const LAYOUTS = [
   {
     key: 'image_grid_4',
     category: 'وێنە',
-    title: 'چوار وێنە (Grid of 4)',
-    desc: 'چوار وێنە بەشێوەی تۆڕی 2x2',
+    title: 'تۆڕی چوار وێنە',
+    desc: 'چوار وێنە لە دوو ڕیز و دوو ستووندا',
     createElements: () => [
       {
         id: `elem_${Date.now()}_1`,
@@ -686,8 +892,8 @@ export const LAYOUTS = [
   {
     key: 'image_caption_below',
     category: 'وێنە',
-    title: 'وێنە و وەصف لە خوارەوە',
-    desc: 'سەردێڕ + وێنە لە سەرەوە + وەصف لە خوارەوە',
+    title: 'وێنە و وەسف لە خوارەوە',
+    desc: 'سەردێڕ و وێنە لە سەرەوە، وەسف لە خوارەوە',
     createElements: () => [
       {
         id: `elem_${Date.now()}_1`,
@@ -731,12 +937,76 @@ export const LAYOUTS = [
     ],
   },
 
-  // --- داتا (Data) ---
+  // --- داتا ---
+  {
+    key: 'simple_big_number',
+    category: 'داتا',
+    title: 'ژمارەی گەورە',
+    desc: 'ژمارە یان ڕێژەیەکی زۆر گەورە و کورتەیەک لە ژێریدا',
+    createElements: () => [
+      textBox(20, 18, 60, 36, '٨٥٪', {
+        textAlign: 'center',
+        fontWeight: 'bold',
+        color: '#D24726',
+        maxFontPt: 96,
+        lineSpacing: 1.1,
+      }),
+      textBox(15, 60, 70, 16, 'کورتەیەک دەربارەی ئەم ژمارەیە', {
+        textAlign: 'center',
+        maxFontPt: 24,
+      }),
+    ],
+  },
+  {
+    key: 'simple_three_numbers',
+    category: 'داتا',
+    title: 'سێ ژمارە',
+    desc: 'سێ ژمارەی گەورە و کورتەیەک لە ژێر هەریەکەیان',
+    createElements: () => [
+      titleBox(),
+      ...[
+        ['١٢٠', 'کورتەی ژمارەی یەکەم'],
+        ['٨٥٪', 'کورتەی ژمارەی دووەم'],
+        ['٣٠', 'کورتەی ژمارەی سێیەم'],
+      ].flatMap(([num, label], i) => [
+        textBox(COLS_3[i], 26, 28, 28, num, {
+          textAlign: 'center',
+          fontWeight: 'bold',
+          color: '#D24726',
+          maxFontPt: 80,
+          lineSpacing: 1.1,
+        }),
+        textBox(COLS_3[i], 58, 28, 30, label, { textAlign: 'center', maxFontPt: 22 }),
+      ]),
+    ],
+  },
+  {
+    key: 'simple_timeline',
+    category: 'داتا',
+    title: 'هێڵی کات',
+    desc: 'هێڵێکی ئاسۆیی بە چوار خاڵ و کورتەیەک بۆ هەر خاڵێک',
+    createElements: (aspectRatio) => [
+      titleBox(),
+      lineShape(5, 52, 90, 4),
+      ...[
+        [83, 'قۆناغی ١\nکورتەیەک', 'above'],
+        [61, 'قۆناغی ٢\nکورتەیەک', 'below'],
+        [39, 'قۆناغی ٣\nکورتەیەک', 'above'],
+        [17, 'قۆناغی ٤\nکورتەیەک', 'below'],
+      ].flatMap(([cx, label, side]) => [
+        dotShape(cx, 54, aspectRatio),
+        textBox(cx - 10, side === 'above' ? 28 : 61, 20, 20, label, {
+          textAlign: 'center',
+          maxFontPt: 20,
+        }),
+      ]),
+    ],
+  },
   {
     key: 'big_numbers',
     category: 'داتا',
-    title: 'ژمارەی گەورە (Big Numbers)',
-    desc: 'پیشاندانی 3 ئاماری سەرەکی و بەرچاو',
+    title: 'ئامارە سەرەکییەکان',
+    desc: 'پیشاندانی سێ ئاماری سەرەکی و بەرچاو',
     createElements: () => [
       {
         id: `elem_${Date.now()}_1`,
@@ -761,7 +1031,7 @@ export const LAYOUTS = [
         width: 27,
         height: 22,
         zIndex: 1,
-        text: '85%',
+        text: '٨٥٪',
         fontMode: 'auto',
         fontWeight: 'bold',
         color: '#30d158',
@@ -790,7 +1060,7 @@ export const LAYOUTS = [
         width: 27,
         height: 22,
         zIndex: 1,
-        text: '+50',
+        text: '+٥٠',
         fontMode: 'auto',
         fontWeight: 'bold',
         color: '#007AFF',
@@ -819,7 +1089,7 @@ export const LAYOUTS = [
         width: 27,
         height: 22,
         zIndex: 1,
-        text: '100K',
+        text: '١٠٠ هەزار',
         fontMode: 'auto',
         fontWeight: 'bold',
         color: '#af52de',
@@ -845,8 +1115,8 @@ export const LAYOUTS = [
   {
     key: 'timeline',
     category: 'داتا',
-    title: 'هێڵی کات (Timeline)',
-    desc: '4 هەنگاوی زنجیرەیی بەپێی کات',
+    title: 'قۆناغەکانی کات',
+    desc: 'چوار هەنگاوی زنجیرەیی بەپێی کات',
     createElements: () => [
       {
         id: `elem_${Date.now()}_1`,
@@ -984,8 +1254,8 @@ export const LAYOUTS = [
   {
     key: 'process',
     category: 'داتا',
-    title: 'پرۆسە (Process)',
-    desc: '3 هەنگاوی زنجیرەیی بە فلاش یان ڕیزبەند',
+    title: 'پرۆسە',
+    desc: 'سێ هەنگاوی زنجیرەیی بە ڕیز',
     createElements: () => [
       {
         id: `elem_${Date.now()}_1`,
@@ -1058,7 +1328,7 @@ export const LAYOUTS = [
   {
     key: 'table',
     category: 'داتا',
-    title: 'خشتەی زانیاری (Table)',
+    title: 'خشتەی زانیاری',
     desc: 'ڕێکخستنی زانیاری لە شێوەی خشتە',
     createElements: () => [
       {
@@ -1102,7 +1372,7 @@ export const LAYOUTS = [
         width: 90,
         height: 52,
         zIndex: 1,
-        text: 'پڕۆژەی A  |  $12,000  |  تەواوبوو  |  سەرکەوتوو\n---------------------------------------------\nپڕۆژەی B  |  $8,500  |  لە ئیشدایە  |  لەکاتدا\n---------------------------------------------\nپڕۆژەی C  |  $15,000  |  چاوەڕوانکراو  |  پلانی نوێ',
+        text: 'پڕۆژەی یەکەم  |  ١٢٬٠٠٠ دۆلار  |  تەواوبوو  |  سەرکەوتوو\n---------------------------------------------\nپڕۆژەی دووەم  |  ٨٬٥٠٠ دۆلار  |  لە ئیشدایە  |  لەکاتدا\n---------------------------------------------\nپڕۆژەی سێیەم  |  ١٥٬٠٠٠ دۆلار  |  چاوەڕوانکراو  |  پلانی نوێ',
         fontMode: 'auto',
         color: '#333333',
         textAlign: 'center',
@@ -1112,7 +1382,42 @@ export const LAYOUTS = [
     ],
   },
 
-  // --- کۆتایی (Ending) ---
+  // --- کۆتایی ---
+  {
+    key: 'simple_thanks',
+    category: 'کۆتایی',
+    title: 'سوپاس',
+    desc: 'وشەی «سوپاس» بە گەورەیی و هێڵێکی بچووکی پەیوەندی لە ژێریدا',
+    createElements: () => [
+      textBox(10, 26, 80, 32, 'سوپاس', {
+        textAlign: 'center',
+        fontWeight: 'bold',
+        color: '#D24726',
+        maxFontPt: 72,
+        lineSpacing: 1.1,
+      }),
+      textBox(15, 64, 70, 14, 'بۆ پەیوەندی: ژمارەی مۆبایل یان ئیمەیڵەکەت', {
+        textAlign: 'center',
+        color: '#666666',
+        maxFontPt: 20,
+      }),
+    ],
+  },
+  {
+    key: 'simple_questions',
+    category: 'کۆتایی',
+    title: 'پرسیار و وەڵام',
+    desc: 'وشەی «پرسیار؟» بە گەورەیی لە ناوەڕاستی سلایدەکە',
+    createElements: () => [
+      textBox(10, 28, 80, 34, 'پرسیار؟', {
+        textAlign: 'center',
+        fontWeight: 'bold',
+        color: '#1c1c1e',
+        maxFontPt: 80,
+        lineSpacing: 1.1,
+      }),
+    ],
+  },
   {
     key: 'thank_you',
     category: 'کۆتایی',
@@ -1142,7 +1447,7 @@ export const LAYOUTS = [
         width: 80,
         height: 32,
         zIndex: 1,
-        text: '📧 ئیمەیڵ: info@example.com\n📞 مۆبایل: 0750 000 0000\n🌐 وێبسایت: www.example.com',
+        text: '📧 ئیمەیڵ: ئیمەیڵەکەت لێرە بنووسە\n📞 مۆبایل: ٠٧٥٠ ٠٠٠ ٠٠٠٠\n🌐 ماڵپەڕ: ناونیشانی ماڵپەڕەکەت',
         fontMode: 'auto',
         color: '#444444',
         textAlign: 'center',
@@ -1154,7 +1459,7 @@ export const LAYOUTS = [
   {
     key: 'blank',
     category: 'کۆتایی',
-    title: 'بەتاڵ (Blank)',
+    title: 'بەتاڵ',
     desc: 'سڵایدێکی سپی و بەتاڵ بەبێ هیچ بەشێک',
     createElements: () => [],
   },

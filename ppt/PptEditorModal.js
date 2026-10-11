@@ -41,7 +41,7 @@ import {
 import { getElementRuns } from './formattedText';
 import { CUSTOM_FONT_SOURCES } from './customFonts';
 import { makeSlideBackgroundPatch } from './slideBackground';
-import { getThemeByKey, applyThemeToSlide } from './pptThemes';
+import { getThemeByKey, applyThemeToSlide, applyThemeToNewElement } from './pptThemes';
 import {
   PptSafeAreaRoot,
   PptSafeBottomView,
@@ -124,6 +124,7 @@ const PageCard = React.memo(({
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
   onCanvasTap,
+  onCanvasDoubleTap,
   onShapeDoubleTap,
 }) => {
   const planned = planPage(slide);
@@ -268,6 +269,7 @@ const PageCard = React.memo(({
         showSoftInputOnFocus={showSoftInputOnFocus}
         setShowSoftInputOnFocus={setShowSoftInputOnFocus}
         onCanvasTap={onCanvasTap}
+        onCanvasDoubleTap={onCanvasDoubleTap}
         onShapeDoubleTap={onShapeDoubleTap}
       />
     </View>
@@ -462,12 +464,24 @@ export const PptEditorModal = ({
     }
   };
 
+  // Undoing an "add" removes the element: drop a selection that no longer exists
+  const clearSelectionIfMissing = (pres) => {
+    if (!selectedElementId) return;
+    const exists = pres.slides.some((s) => (s.elements || []).some((e) => e.id === selectedElementId));
+    if (!exists) {
+      if (editingElementId) Keyboard.dismiss();
+      setSelectedElementId(null);
+      setEditingElementId(null);
+    }
+  };
+
   const handleUndo = () => {
     if (historyIndex > 0) {
       const prev = history[historyIndex - 1];
       setHistoryIndex(historyIndex - 1);
       setPresentation(prev);
       savePptDraft(prev);
+      clearSelectionIfMissing(prev);
     }
   };
 
@@ -477,6 +491,7 @@ export const PptEditorModal = ({
       setHistoryIndex(historyIndex + 1);
       setPresentation(next);
       savePptDraft(next);
+      clearSelectionIfMissing(next);
     }
   };
 
@@ -655,13 +670,19 @@ export const PptEditorModal = ({
 
   // Add Page (Appends directly BELOW last page in continuous scroll and auto-scrolls down)
   const handleAddSlidePreset = (preset) => {
-    const newElements = preset.createElements();
-    const newSlide = {
+    const newElements = preset.createElements(presentation.aspectRatio);
+    const baseSlide = {
       id: `slide_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
       layout: preset.key,
       background: '#ffffff',
       elements: newElements,
     };
+    // Follow the deck design: the theme of the selected slide (or the last slide) from the design tab
+    const designSource =
+      presentation.slides.find((s) => s.id === selectedPageId) ||
+      presentation.slides[presentation.slides.length - 1];
+    const deckTheme = designSource && designSource.themeKey ? getThemeByKey(designSource.themeKey) : null;
+    const newSlide = deckTheme ? applyThemeToSlide(baseSlide, deckTheme) : baseSlide;
 
     const newSlides = [...presentation.slides, newSlide];
     const newPres = { ...presentation, slides: newSlides };
@@ -965,10 +986,79 @@ export const PptEditorModal = ({
     }
   };
 
+  // The slide every "add" action targets: the selected slide if it still exists
+  // (tapping any slide, even an empty one, selects it), otherwise the first slide.
+  const resolveTargetPageId = () => {
+    if (selectedPageId && presentation.slides.some((s) => s.id === selectedPageId)) {
+      return selectedPageId;
+    }
+    return presentation.slides[0]?.id || null;
+  };
+
+  // Add a text box ("نووسین" button, or double tap on an empty slide area).
+  // `pos` = tap point in slide percent; without it the box is centered.
+  const handleAddText = (pageId = null, pos = null) => {
+    const targetPageId = pageId || resolveTargetPageId();
+    if (!targetPageId) {
+      Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+      return;
+    }
+    const targetPage = presentation.slides.find((s) => s.id === targetPageId);
+    const w = 60;
+    const h = 16;
+    const clampPct = (v, size) => Math.round(Math.max(2, Math.min(98 - size, v)) * 10) / 10;
+    const sampleText = 'دەقەکەت لێرە بنووسە';
+    let newElem = {
+      id: `elem_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+      type: 'text',
+      x: pos ? clampPct(pos.x - w / 2, w) : (100 - w) / 2,
+      y: pos ? clampPct(pos.y - h / 2, h) : (100 - h) / 2,
+      width: w,
+      height: h,
+      zIndex: ((targetPage?.elements || []).length || 0) + 1,
+      text: sampleText,
+      fontMode: 'auto',
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textDecorationLine: 'none',
+      color: '#1c1c1e',
+      highlightColor: 'transparent',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+      lineSpacing: 1.2,
+      maxFontPt: 24,
+    };
+    // Match the slide's design-tab theme (color + font), like the layouts do
+    const theme = targetPage?.themeKey ? getThemeByKey(targetPage.themeKey) : null;
+    if (theme) newElem = applyThemeToNewElement(newElem, theme);
+
+    const newSlides = presentation.slides.map((s) =>
+      s.id === targetPageId ? { ...s, elements: [...(s.elements || []), newElem] } : s
+    );
+    pushState({ ...presentation, slides: newSlides }, targetPageId);
+
+    // Select it and start typing: the inline input autofocuses; then select all sample text
+    stickyRangeRef.current = { start: 0, end: sampleText.length };
+    setShowSoftInputOnFocus(true);
+    setSelectedPageId(targetPageId);
+    setSelectedElementId(newElem.id);
+    setEditingElementId(newElem.id);
+    setTimeout(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      if (input.focus) input.focus();
+      if (typeof input.setSelection === 'function') {
+        input.setSelection(0, sampleText.length);
+      } else if (input.setNativeProps) {
+        input.setNativeProps({ selection: { start: 0, end: sampleText.length } });
+      }
+    }, 150);
+  };
+
   // Add Shape to Slide
   const handleAddShape = (shapeType) => {
     try {
-      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      const targetPageId = resolveTargetPageId();
       if (!targetPageId) {
         Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
         return;
@@ -1030,7 +1120,7 @@ export const PptEditorModal = ({
 
   const handlePickGalleryImages = async () => {
     try {
-      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      const targetPageId = resolveTargetPageId();
       if (!targetPageId) {
         Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
         return;
@@ -1148,7 +1238,7 @@ export const PptEditorModal = ({
 
   const handlePickCameraImage = async () => {
     try {
-      const targetPageId = selectedPageId || presentation.slides[0]?.id;
+      const targetPageId = resolveTargetPageId();
       if (!targetPageId) {
         Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
         return;
@@ -1741,7 +1831,15 @@ export const PptEditorModal = ({
                             setControlledSelection={setControlledSelection}
                             showSoftInputOnFocus={showSoftInputOnFocus}
                             setShowSoftInputOnFocus={setShowSoftInputOnFocus}
-                            onCanvasTap={() => handleBack(true)}
+                            onCanvasTap={() => {
+                              // An empty-area tap also makes this slide the target of "add" actions
+                              if (selectedPageId !== slide.id) {
+                                setSelectedPageId(slide.id);
+                                setSelectedElementId(null);
+                              }
+                              handleBack(true);
+                            }}
+                            onCanvasDoubleTap={(pos) => handleAddText(slide.id, pos)}
                             onShapeDoubleTap={(elem) => handleShapeDoubleTap(slide.id, elem)}
                           />
 
@@ -1816,6 +1914,7 @@ export const PptEditorModal = ({
                   <PptImageToolbar
                     ref={imageToolbarRef}
                     selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
+                    onAddText={() => handleAddText()}
                     onPickGallery={handlePickGalleryImages}
                     onPickCamera={handlePickCameraImage}
                     onAddShape={handleAddShape}

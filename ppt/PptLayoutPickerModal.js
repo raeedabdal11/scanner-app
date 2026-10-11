@@ -100,7 +100,7 @@ export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
                 <View style={[styles.miniBar, { width: '80%', height: 4, backgroundColor: '#30d158' }]} />
                 <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#888' }]} />
               </View>
-              <View style={{ flex: 1, gap: 3, backgroundColor: '#fdeeeed', padding: 3, borderRadius: 4 }}>
+              <View style={{ flex: 1, gap: 3, backgroundColor: '#fdeeee', padding: 3, borderRadius: 4 }}>
                 <View style={[styles.miniBar, { width: '80%', height: 4, backgroundColor: '#ff453a' }]} />
                 <View style={[styles.miniBar, { width: '70%', height: 3, backgroundColor: '#888' }]} />
               </View>
@@ -189,13 +189,13 @@ export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
         return (
           <View style={styles.miniRow}>
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#30d158' }}>85%</Text>
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#30d158' }}>٨٥٪</Text>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#007AFF' }}>+50</Text>
+              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#007AFF' }}>+٥٠</Text>
             </View>
             <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#af52de' }}>100K</Text>
+              <Text style={{ fontSize: 8, fontWeight: 'bold', color: '#af52de' }}>١٠٠ هەزار</Text>
             </View>
           </View>
         );
@@ -242,6 +242,147 @@ export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
             <View style={[styles.miniBar, { width: '50%', height: 3, backgroundColor: '#888', marginTop: 4 }]} />
           </View>
         );
+      // --- Simple PowerPoint-style layouts ---
+      case 'simple_title_only':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '70%' }]} />
+          </View>
+        );
+      case 'simple_title_content':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={styles.miniBodyBox}>
+              <View style={[styles.miniBar, styles.miniLine, { width: '90%' }]} />
+              <View style={[styles.miniBar, styles.miniLine, { width: '75%' }]} />
+            </View>
+          </View>
+        );
+      case 'simple_two_columns':
+      case 'simple_three_columns': {
+        const cols = key === 'simple_two_columns' ? 2 : 3;
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={[styles.miniRow, styles.miniGrow]}>
+              {Array.from({ length: cols }).map((_, i) => (
+                <View key={`c${i}`} style={styles.miniBodyBox}>
+                  <View style={[styles.miniBar, styles.miniLine, { width: '90%' }]} />
+                  <View style={[styles.miniBar, styles.miniLine, { width: '70%' }]} />
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      }
+      case 'simple_comparison':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={[styles.miniRow, styles.miniGrow]}>
+              {[0, 1].map((i) => (
+                <View key={`c${i}`} style={styles.miniBodyBox}>
+                  <View style={[styles.miniBar, { width: '60%', height: 4, backgroundColor: '#D24726', alignSelf: 'flex-end' }]} />
+                  <View style={[styles.miniBar, styles.miniLine, { width: '90%' }]} />
+                  <View style={[styles.miniBar, styles.miniLine, { width: '70%' }]} />
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      case 'simple_centered':
+        return (
+          <View style={styles.miniTitleBox}>
+            <View style={[styles.miniBar, { width: '80%', height: 6, backgroundColor: '#1c1c1e' }]} />
+            <View style={[styles.miniBar, { width: '55%', height: 6, backgroundColor: '#1c1c1e', marginTop: 4 }]} />
+          </View>
+        );
+      case 'simple_quote':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 13, color: '#1c1c1e', fontWeight: 'bold' }}>«  »</Text>
+            <View style={[styles.miniBar, { width: '75%', height: 5, backgroundColor: '#1c1c1e', marginTop: 1 }]} />
+            <View style={[styles.miniBar, { width: '35%', height: 3, backgroundColor: '#888', marginTop: 5 }]} />
+          </View>
+        );
+      case 'simple_picture_text':
+        return (
+          <View style={styles.miniRow}>
+            <View style={styles.miniFrameBlock} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={[styles.miniBar, styles.miniTitleBar, { width: '80%', marginBottom: 0 }]} />
+              <View style={[styles.miniBar, styles.miniLine, { width: '90%' }]} />
+              <View style={[styles.miniBar, styles.miniLine, { width: '70%' }]} />
+            </View>
+          </View>
+        );
+      case 'simple_full_picture':
+        return (
+          <View style={[styles.miniFill, { gap: 4 }]}>
+            <View style={[styles.miniFrameBlock, { flex: 1, width: '100%' }]} />
+            <View style={[styles.miniBar, styles.miniLine, { width: '50%', alignSelf: 'center' }]} />
+          </View>
+        );
+      case 'simple_two_pictures':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={[styles.miniRow, styles.miniGrow]}>
+              <View style={styles.miniFrameBlock} />
+              <View style={styles.miniFrameBlock} />
+            </View>
+          </View>
+        );
+      case 'simple_big_number':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#D24726', lineHeight: 26 }}>٨٥٪</Text>
+            <View style={[styles.miniBar, styles.miniLine, { width: '55%', marginTop: 3 }]} />
+          </View>
+        );
+      case 'simple_three_numbers':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={[styles.miniRow, styles.miniGrow]}>
+              {['١٢٠', '٨٥٪', '٣٠'].map((n) => (
+                <View key={n} style={{ flex: 1, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#D24726' }}>{n}</Text>
+                  <View style={[styles.miniBar, styles.miniLine, { width: '80%', marginTop: 2 }]} />
+                </View>
+              ))}
+            </View>
+          </View>
+        );
+      case 'simple_timeline':
+        return (
+          <View style={styles.miniFill}>
+            <View style={[styles.miniBar, styles.miniTitleBar, { width: '60%' }]} />
+            <View style={[styles.miniGrow, { justifyContent: 'center' }]}>
+              <View style={[styles.miniBar, { width: '100%', height: 2, backgroundColor: '#9ca3af', position: 'absolute', top: '50%' }]} />
+              <View style={[styles.miniRow, { height: 'auto', justifyContent: 'space-around' }]}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={`d${i}`} style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#D24726' }} />
+                ))}
+              </View>
+            </View>
+          </View>
+        );
+      case 'simple_thanks':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#D24726' }}>سوپاس</Text>
+            <View style={[styles.miniBar, styles.miniLine, { width: '55%', marginTop: 4 }]} />
+          </View>
+        );
+      case 'simple_questions':
+        return (
+          <View style={styles.miniTitleBox}>
+            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#1c1c1e' }}>پرسیار؟</Text>
+          </View>
+        );
+      case 'simple_blank':
       case 'blank':
       default:
         return <View style={styles.miniBlankBlock} />;
@@ -466,6 +607,38 @@ const styles = StyleSheet.create({
   },
   miniBar: {
     borderRadius: 2,
+  },
+  miniFill: {
+    flex: 1,
+    width: '100%',
+  },
+  miniGrow: {
+    flex: 1,
+    height: 'auto',
+  },
+  miniTitleBar: {
+    height: 5,
+    backgroundColor: '#1c1c1e',
+    alignSelf: 'flex-end',
+    marginBottom: 5,
+  },
+  miniBodyBox: {
+    flex: 1,
+    gap: 3,
+    alignItems: 'flex-end',
+    alignSelf: 'stretch',
+  },
+  miniLine: {
+    height: 3,
+    backgroundColor: '#888',
+  },
+  miniFrameBlock: {
+    flex: 1,
+    height: '100%',
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#9ca3af',
   },
   cardTitle: {
     color: '#fff',

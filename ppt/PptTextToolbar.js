@@ -513,7 +513,8 @@ export const PptTextToolbar = forwardRef(({
 
   const changeBaseSize = (delta) => {
     const currentBase = Math.round(element.computedFontSize || element.fontSize || 18);
-    const newBase = clamp(currentBase + delta, 14, 40);
+    // Big layout text (e.g. a 96pt number) may stay above the usual 40pt cap
+    const newBase = clamp(currentBase + delta, 14, Math.max(40, element.maxFontPt || 0));
     const { color: _c, ...elemWithoutColor } = element;
     onChangeElement({
       ...elemWithoutColor,

@@ -255,11 +255,16 @@ export const calculateFittingFontSize = (elem) => {
   const isTitle = elem.fontWeight === 'bold' || (elem.y || 0) < 20 || (elem.fontSize && elem.fontSize >= 24);
 
   // Determine font bounds
-  const maxPt = isTable
+  const defaultMaxPt = isTable
     ? FONT.tableMaxPt
     : isTitle
     ? FONT.titleMaxPt
     : FONT.textMaxPt;
+  // Layouts may set `maxFontPt`: auto-fit starts there (e.g. 96pt big numbers, 24pt body),
+  // and a manual size may also go up to it.
+  const elemMaxPt = elem.maxFontPt > 0 ? elem.maxFontPt : 0;
+  const autoMaxPt = elemMaxPt || defaultMaxPt;
+  const maxPt = Math.max(defaultMaxPt, elemMaxPt);
 
   const minPt = isTable ? FONT.tableMinPt : FONT.textMinPt;
 
@@ -279,8 +284,8 @@ export const calculateFittingFontSize = (elem) => {
     };
   }
 
-  // AUTO Mode: Shrink from maxPt down to minPt until it fits cleanly
-  let currentPt = maxPt;
+  // AUTO Mode: Shrink from the auto max down to minPt until it fits cleanly
+  let currentPt = autoMaxPt;
   let bestFitSize = minPt;
   let fitsAtCurrent = false;
   let lastOverflowRatio = 1;

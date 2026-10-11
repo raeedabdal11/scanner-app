@@ -21,6 +21,7 @@ const COLOR_PALETTE = [
 
 export const PptImageToolbar = forwardRef(({
   selectedElement,
+  onAddText,
   onPickGallery,
   onPickCamera,
   onAddShape,
@@ -358,8 +359,19 @@ export const PptImageToolbar = forwardRef(({
       {/* SUB-TAB 1: INSERT MODE ("زیادکردن") */}
       {activeSubTab === 'insert' && (
         <View style={styles.tabContentBox}>
-          <Text style={styles.sectionTitle}>زیادکردنی وێنە و شێوەکان بۆ سڵاید:</Text>
+          <Text style={styles.sectionTitle}>زیادکردنی نووسین و وێنە و شێوە بۆ سلاید:</Text>
           <View style={styles.insertButtonsRow}>
+            <TouchableOpacity
+              style={[styles.insertActionBtn, { backgroundColor: '#2e7d32' }]}
+              onPress={() => {
+                setShowShapesPanel(false);
+                if (onAddText) onAddText();
+              }}
+            >
+              <Ionicons name="text-outline" size={18} color="#ffffff" />
+              <Text style={styles.insertActionBtnText}>نووسین</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.insertActionBtn} onPress={onPickGallery}>
               <Ionicons name="images-outline" size={18} color="#ffffff" />
               <Text style={styles.insertActionBtnText}>گەلەری</Text>
@@ -1121,18 +1133,21 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   insertButtonsRow: {
-    flexDirection: 'row',
-    gap: 10,
+    // RTL: the first button ("نووسین") sits on the right
+    flexDirection: 'row-reverse',
+    gap: 8,
   },
   insertActionBtn: {
     flex: 1,
-    flexDirection: 'row',
+    // Icon above the label so four buttons fit on a ~360dp phone
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#8B3A2B',
-    paddingVertical: 10,
+    paddingVertical: 8,
+    minHeight: 52,
     borderRadius: 10,
-    gap: 8,
+    gap: 4,
   },
   insertActionBtnText: {
     color: '#ffffff',

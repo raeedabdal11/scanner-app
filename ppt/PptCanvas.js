@@ -16,6 +16,9 @@ import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Double tap on an empty slide area (ms, px)
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP = 30;
 
 // 8 resize handles. sx/sy: which side of the box the handle moves (-1 = left/top, 1 = right/bottom,
 // 0 = that axis is untouched). fx/fy: handle position as a fraction of the box size.
@@ -401,12 +404,15 @@ export const PptCanvas = ({
   showSoftInputOnFocus,
   setShowSoftInputOnFocus,
   onCanvasTap,
+  onCanvasDoubleTap,
   onShapeDoubleTap,
 }) => {
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
   const touchTimeoutRef = React.useRef(null);
   const lastShapeTapRef = React.useRef({ id: null, time: 0 });
+  // Last tap on an empty slide area (elements and handles take their own touches)
+  const lastEmptyTapRef = React.useRef({ time: 0, x: 0, y: 0 });
 
   const is43 = aspectRatio === '4:3';
   const canvasWidth = SCREEN_WIDTH - 24;
@@ -588,7 +594,27 @@ export const PptCanvas = ({
           styles.canvas,
           { width: canvasWidth, height: canvasHeight, backgroundColor: getSlideBaseColor(slide) },
         ]}
-        onPress={() => {
+        onPress={(e) => {
+          // Second quick tap near the first one on an empty area: add a text box there
+          const now = Date.now();
+          const tx = e?.nativeEvent?.locationX ?? canvasWidth / 2;
+          const ty = e?.nativeEvent?.locationY ?? canvasHeight / 2;
+          const last = lastEmptyTapRef.current;
+          const isDoubleTap =
+            now - last.time < DOUBLE_TAP_MS &&
+            Math.abs(tx - last.x) < DOUBLE_TAP_SLOP &&
+            Math.abs(ty - last.y) < DOUBLE_TAP_SLOP;
+          if (isDoubleTap && onCanvasDoubleTap) {
+            lastEmptyTapRef.current = { time: 0, x: 0, y: 0 };
+            onCanvasDoubleTap({
+              x: Math.max(0, Math.min(100, (tx / canvasWidth) * 100)),
+              y: Math.max(0, Math.min(100, (ty / canvasHeight) * 100)),
+            });
+            return;
+          }
+          lastEmptyTapRef.current = { time: now, x: tx, y: ty };
+
+          // Single tap: deselect
           if (onCanvasTap) {
             onCanvasTap();
           } else {
@@ -598,6 +624,13 @@ export const PptCanvas = ({
         }}
       >
         <PptSlideBackground slide={slide} width={canvasWidth} height={canvasHeight} />
+
+        {/* Editor-only hint on an empty slide (PptCleanSlide renders exports, so it never shows there) */}
+        {!elements.some((el) => !el.themeDecor) && (
+          <View style={styles.emptyHintBox} pointerEvents="none">
+            <Text style={styles.emptyHintText}>دوو جار لێبدە بۆ نووسین، یان لە خوارەوە شتێک زیاد بکە</Text>
+          </View>
+        )}
         {elements.map((elem) => {
           const isSelected = selectedElementId === elem.id;
           const isEditing = editingElementId === elem.id;
@@ -980,6 +1013,23 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     marginVertical: 10,
+  },
+  emptyHintBox: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyHintText: {
+    color: '#8e8e93',
+    opacity: 0.85,
+    fontSize: 12,
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
   canvas: {
     borderRadius: 12,
