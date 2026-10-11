@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,16 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
+  Keyboard,
+  Platform,
+  ToastAndroid,
   Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import PptSlider from './PptSlider';
@@ -39,7 +43,20 @@ const BG_TYPES = [
   { key: 'image', label: 'وێنە', icon: 'image-outline' },
 ];
 
-const PANEL_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.42);
+// Share of the window the scrollable panel body may use, so the slide preview
+// above it always stays visible.
+const PANEL_HEIGHT_RATIO = 0.42;
+const PANEL_KEYBOARD_RATIO = 0.38;
+const PANEL_MIN_HEIGHT = 110;
+const HEX_RE = /^([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+const showShortMessage = (msg) => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(msg, ToastAndroid.SHORT);
+  } else {
+    Alert.alert('', msg);
+  }
+};
 const PREVIEW_W = 128;
 const THUMB_W = 150;
 
@@ -59,6 +76,41 @@ export const PptDesignPanel = ({
   const [gradTarget, setGradTarget] = useState(1); // 1 | 2
   const [hexText, setHexText] = useState('');
   const [picking, setPicking] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const insets = useSafeAreaInsets();
+  const { height: windowH } = useWindowDimensions();
+  const scrollRef = useRef(null);
+  const colorBlockYRef = useRef(0);
+  const hexRowYRef = useRef(0);
+  const hexFocusedRef = useRef(false);
+
+  const scrollHexIntoView = () => {
+    const y = colorBlockYRef.current + hexRowYRef.current;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 60), animated: true });
+  };
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 0);
+      // Wait for the panel to re-size above the keyboard, then reveal the hex row
+      if (hexFocusedRef.current) setTimeout(scrollHexIntoView, 150);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Never taller than the space left under the slides (shrinks while the keyboard is open)
+  const panelMaxHeight = keyboardHeight > 0
+    ? Math.max(PANEL_MIN_HEIGHT, Math.round((windowH - keyboardHeight) * PANEL_KEYBOARD_RATIO))
+    : Math.max(PANEL_MIN_HEIGHT, Math.round(windowH * PANEL_HEIGHT_RATIO));
+  // Keep the last row above the Android navigation bar / gesture line
+  const scrollBottomPad = (keyboardHeight > 0 ? 0 : insets.bottom || 0) + 24;
 
   const is43 = aspectRatio === '4:3';
   const slideAspect = is43 ? 4 / 3 : 16 / 9;
@@ -80,23 +132,26 @@ export const PptDesignPanel = ({
   const activeColor =
     draft.type === 'gradient' && gradTarget === 2 ? draft.color2 : draft.color;
 
+  // Applies a color to the selected slot right away (solid color, or gradient color 1/2)
   const setActiveColor = (hex) => {
     const color = normalizeHexColor(hex);
-    if (draft.type === 'gradient') {
-      setDraft(gradTarget === 2 ? { ...draft, color2: color } : { ...draft, color });
-    } else {
-      setDraft({ type: 'solid', color });
-    }
+    setDraft((d) => {
+      if (d.type === 'gradient') {
+        return gradTarget === 2 ? { ...d, color2: color } : { ...d, color };
+      }
+      return { type: 'solid', color };
+    });
     setHexText(color.replace('#', ''));
   };
 
+  // "دانان" / keyboard Enter: only a valid 3 or 6 digit hex code changes the color
   const commitHexText = () => {
-    const raw = `#${hexText.trim().replace(/^#/, '')}`;
-    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw)) {
-      setActiveColor(raw);
-    } else {
-      setHexText((activeColor || '').replace('#', ''));
+    const raw = hexText.trim().replace(/^#/, '');
+    if (!HEX_RE.test(raw)) {
+      showShortMessage('کۆدی ڕەنگ هەڵەیە');
+      return;
     }
+    setActiveColor(`#${raw}`);
   };
 
   const switchType = (type) => {
@@ -212,10 +267,12 @@ export const PptDesignPanel = ({
       </View>
 
       <ScrollView
-        style={{ maxHeight: PANEL_MAX_HEIGHT }}
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollRef}
+        style={{ maxHeight: panelMaxHeight }}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPad }]}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
+        showsVerticalScrollIndicator
       >
         {section === 'background' ? (
           <View>
@@ -247,21 +304,28 @@ export const PptDesignPanel = ({
             </View>
 
             {draft.type !== 'image' && (
-              <View>
+              <View onLayout={(e) => { colorBlockYRef.current = e.nativeEvent.layout.y; }}>
                 {draft.type === 'gradient' && (
                   <View>
                     <Text style={styles.label}>ڕەنگەکان:</Text>
                     <View style={styles.chipRow}>
                       {[1, 2].map((n) => {
                         const c = n === 1 ? draft.color : draft.color2;
+                        const selected = gradTarget === n;
                         return (
                           <TouchableOpacity
                             key={`gt_${n}`}
-                            style={[styles.chip, gradTarget === n && styles.chipActive]}
+                            style={[styles.slotBtn, selected && styles.slotBtnActive]}
                             onPress={() => switchGradTarget(n)}
                           >
-                            <View style={[styles.chipDot, { backgroundColor: c }]} />
-                            <Text style={styles.chipText}>{n === 1 ? 'ڕەنگی یەکەم' : 'ڕەنگی دووەم'}</Text>
+                            <View style={[styles.slotDot, { backgroundColor: c }]} />
+                            <View style={styles.slotTextBox}>
+                              <Text style={[styles.slotText, selected && styles.slotTextActive]}>
+                                {n === 1 ? 'ڕەنگی یەکەم' : 'ڕەنگی دووەم'}
+                              </Text>
+                              <Text style={styles.slotHex}>{(c || '').toUpperCase()}</Text>
+                            </View>
+                            {selected && <Ionicons name="checkmark-circle" size={16} color="#30d158" />}
                           </TouchableOpacity>
                         );
                       })}
@@ -288,7 +352,11 @@ export const PptDesignPanel = ({
                   </View>
                 )}
 
-                <Text style={styles.label}>ڕەنگ هەڵبژێرە:</Text>
+                <Text style={styles.label}>
+                  {draft.type === 'gradient'
+                    ? `ڕەنگ هەڵبژێرە بۆ ${gradTarget === 2 ? 'ڕەنگی دووەم' : 'ڕەنگی یەکەم'}:`
+                    : 'ڕەنگ هەڵبژێرە:'}
+                </Text>
                 <View style={styles.paletteGrid}>
                   {BG_PALETTE.map((hex) => {
                     const active = (activeColor || '').toLowerCase() === hex.toLowerCase();
@@ -302,18 +370,23 @@ export const PptDesignPanel = ({
                   })}
                 </View>
 
-                <View style={styles.hexRow}>
+                <View style={styles.hexRow} onLayout={(e) => { hexRowYRef.current = e.nativeEvent.layout.y; }}>
                   <View style={[styles.hexSwatch, { backgroundColor: activeColor }]} />
                   <Text style={styles.hexHash}>#</Text>
                   <TextInput
                     style={styles.hexInput}
                     value={hexText}
                     onChangeText={(t) => setHexText(t.replace(/[^0-9a-fA-F]/g, '').slice(0, 6))}
-                    onEndEditing={commitHexText}
                     onSubmitEditing={commitHexText}
+                    onFocus={() => {
+                      hexFocusedRef.current = true;
+                      if (keyboardHeight > 0) setTimeout(scrollHexIntoView, 50);
+                    }}
+                    onBlur={() => { hexFocusedRef.current = false; }}
+                    returnKeyType="done"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    maxLength={6}
+                    maxLength={7}
                     placeholder="ffffff"
                     placeholderTextColor="#666"
                   />
@@ -451,7 +524,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   scrollContent: {
-    paddingBottom: 10,
+    paddingBottom: 24,
   },
   typeRow: {
     flexDirection: 'row-reverse',
@@ -533,6 +606,46 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 1,
     borderColor: '#ffffff',
+  },
+  slotBtn: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#2c2c2e',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#3a3a3c',
+  },
+  slotBtnActive: {
+    borderColor: '#30d158',
+    backgroundColor: '#24382a',
+  },
+  slotDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+  },
+  slotTextBox: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  slotText: {
+    color: '#aaaaaa',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  slotTextActive: {
+    color: '#ffffff',
+  },
+  slotHex: {
+    color: '#888888',
+    fontSize: 10,
+    marginTop: 1,
   },
   chipText: {
     color: '#ffffff',
