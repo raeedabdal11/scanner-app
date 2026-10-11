@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
+import { PptDesignPanel } from './PptDesignPanel';
 
 // Theme Colors for Border/Outline Picker Grid (Matches PptShapeToolbar)
 const COLOR_PALETTE = [
@@ -28,8 +29,9 @@ export const PptImageToolbar = forwardRef(({
   onDuplicateElement,
   onDeleteElement,
   onClose,
+  designProps,
 }, ref) => {
-  const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'size' | 'style' | 'crop' | 'border' | 'tools'
+  const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'design' | 'size' | 'style' | 'crop' | 'border' | 'tools'
   const [showShapesPanel, setShowShapesPanel] = useState(false);
   const [keepAspect, setKeepAspect] = useState(false);
 
@@ -286,6 +288,18 @@ export const PptImageToolbar = forwardRef(({
           </Text>
         </TouchableOpacity>
 
+        {!!designProps && (
+          <TouchableOpacity
+            style={[styles.tabHeaderBtn, activeSubTab === 'design' && styles.tabHeaderBtnActive]}
+            onPress={() => setActiveSubTab('design')}
+          >
+            <Ionicons name="color-palette-outline" size={15} color={activeSubTab === 'design' ? '#ffffff' : '#aaaaaa'} />
+            <Text style={[styles.tabHeaderBtnText, activeSubTab === 'design' && styles.tabHeaderBtnTextActive]}>
+              دیزاین
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {isImageSelected && (
           <>
             <TouchableOpacity
@@ -481,6 +495,11 @@ export const PptImageToolbar = forwardRef(({
             </View>
           )}
         </View>
+      )}
+
+      {/* DESIGN TAB ("دیزاین"): slide background + themes */}
+      {activeSubTab === 'design' && !!designProps && (
+        <PptDesignPanel {...designProps} />
       )}
 
       {/* SUB-TAB 2: SIZE & DIMENSIONS ("قەبارەی ستوونی و ئاسۆیی") */}

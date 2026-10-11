@@ -12,6 +12,7 @@ import {
 import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
 import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from './formattedText';
 import { renderSvgShape } from './shapeCatalog';
+import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -509,7 +510,7 @@ export const PptCanvas = ({
         activeOpacity={1}
         style={[
           styles.canvas,
-          { width: canvasWidth, height: canvasHeight, backgroundColor: slide.background || '#ffffff' },
+          { width: canvasWidth, height: canvasHeight, backgroundColor: getSlideBaseColor(slide) },
         ]}
         onPress={() => {
           if (onCanvasTap) {
@@ -520,6 +521,7 @@ export const PptCanvas = ({
           }
         }}
       >
+        <PptSlideBackground slide={slide} width={canvasWidth} height={canvasHeight} />
         {elements.map((elem) => {
           const isSelected = selectedElementId === elem.id;
           const isEditing = editingElementId === elem.id;

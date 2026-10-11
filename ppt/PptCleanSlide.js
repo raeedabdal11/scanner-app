@@ -4,6 +4,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { SLIDE, measureElementLayout, splitRuns } from './pptFit';
 import { getElementRuns } from './formattedText';
 import { renderSvgShape, getShapeSvgHtml, SHAPE_MAP } from './shapeCatalog';
+import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
+import { getSlideBackground, getBackgroundCss } from './slideBackground';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -28,10 +30,11 @@ export const PptCleanSlide = React.forwardRef(({
         {
           width: canvasWidth,
           height: canvasHeight,
-          backgroundColor: slide?.background || '#ffffff',
+          backgroundColor: getSlideBaseColor(slide),
         },
       ]}
     >
+      <PptSlideBackground slide={slide} width={canvasWidth} height={canvasHeight} />
       {elements.map((elem) => {
         const left = (elem.x / 100) * canvasWidth;
         const top = (elem.y / 100) * canvasHeight;
@@ -585,8 +588,30 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
 
   console.log(`[PDF Export] Embedded ${embeddedImageCount} images for slide ${slideIndex + 1}`);
 
+  // Slide background (solid / gradient / image + dark overlay) — same model as the canvas
+  const bg = getSlideBackground(slide);
+  let bgImageDataUri = null;
+  if (bg.type === 'image') {
+    try {
+      if (bg.uri.startsWith('data:')) {
+        bgImageDataUri = bg.uri;
+      } else {
+        const rawBgBase64 = await FileSystem.readAsStringAsync(bg.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        bgImageDataUri = `data:image/jpeg;base64,${rawBgBase64}`;
+      }
+    } catch (bgErr) {
+      console.log('[PDF Export] Background image read error:', bgErr);
+    }
+  }
+  const bgOverlayHtml = bg.type === 'image' && bg.overlay > 0
+    ? `<div style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,${bg.overlay / 100});"></div>`
+    : '';
+
   return `
-    <div class="slide-page" style="background-color: ${slide?.background || '#ffffff'};">
+    <div class="slide-page" style="${getBackgroundCss(bg, bgImageDataUri)}">
+      ${bgOverlayHtml}
       ${elementHtmls.join('')}
     </div>
   `;

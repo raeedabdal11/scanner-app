@@ -38,6 +38,8 @@ import {
   createDefaultPresentation,
 } from './pptDraftStorage';
 import { getElementRuns } from './formattedText';
+import { makeSlideBackgroundPatch } from './slideBackground';
+import { getThemeByKey, applyThemeToSlide } from './pptThemes';
 
 // Professional PowerPoint Slide Background Color Matrices
 const PPT_THEME_BG_COLORS = [
@@ -727,7 +729,7 @@ export const PptEditorModal = ({
   // Change Slide Background Color for specific page
   const handleChangeBackground = (pageId, color) => {
     const newSlides = presentation.slides.map((s) =>
-      s.id === pageId ? { ...s, background: color } : s
+      s.id === pageId ? { ...s, background: color, bgFill: null } : s
     );
     const newPres = { ...presentation, slides: newSlides };
     pushState(newPres, pageId);
@@ -738,12 +740,71 @@ export const PptEditorModal = ({
     const newSlides = presentation.slides.map((s) => ({
       ...s,
       background: color,
+      bgFill: null,
     }));
     const newPres = { ...presentation, slides: newSlides };
     pushState(newPres, bgPickerPageId);
     if (Platform.OS === 'android') {
       ToastAndroid.show('ڕەنگی پاشبنەما بۆ هەموو پەڕەکان جێگیرکرا', ToastAndroid.SHORT);
     }
+  };
+
+  // "دیزاین" tab: target slide = selected page, or the first page
+  const designTargetIndex = Math.max(
+    0,
+    presentation.slides.findIndex((s) => s.id === selectedPageId)
+  );
+  const designTargetSlide = presentation.slides[designTargetIndex] || null;
+
+  const markPagesUnsaved = (pageIds) => {
+    setSavedPages((prev) => {
+      const next = { ...prev };
+      pageIds.forEach((id) => {
+        next[id] = false;
+      });
+      return next;
+    });
+  };
+
+  // Apply a background (solid / gradient / image + overlay) — one undo-able step
+  const handleApplyDesignBackground = (bg, scope) => {
+    if (!designTargetSlide) return;
+    const patch = makeSlideBackgroundPatch(bg);
+    const targetId = designTargetSlide.id;
+    const newSlides = presentation.slides.map((s) =>
+      scope === 'all' || s.id === targetId ? { ...s, ...patch } : s
+    );
+    pushState({ ...presentation, slides: newSlides }, targetId);
+    if (scope === 'all') markPagesUnsaved(newSlides.map((s) => s.id));
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(
+        scope === 'all' ? 'پشتەوە بۆ هەموو سلایدەکان دانرا' : 'پشتەوەی ئەم سلایدە گۆڕدرا',
+        ToastAndroid.SHORT
+      );
+    }
+  };
+
+  // Apply a theme — one undo-able step; user content is kept in place
+  const handleApplyDesignTheme = (themeKey, scope) => {
+    const theme = getThemeByKey(themeKey);
+    if (!theme || !designTargetSlide) return;
+    const targetId = designTargetSlide.id;
+    const newSlides = presentation.slides.map((s) =>
+      scope === 'all' || s.id === targetId ? applyThemeToSlide(s, theme) : s
+    );
+    pushState({ ...presentation, slides: newSlides }, targetId);
+    if (scope === 'all') markPagesUnsaved(newSlides.map((s) => s.id));
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(`تێمی «${theme.name}» دانرا`, ToastAndroid.SHORT);
+    }
+  };
+
+  const handleDesignStepSlide = (delta) => {
+    const nextSlide = presentation.slides[designTargetIndex + delta];
+    if (!nextSlide) return;
+    setSelectedPageId(nextSlide.id);
+    setSelectedElementId(null);
+    setEditingElementId(null);
   };
 
   // Update Element in specific page
@@ -1759,6 +1820,17 @@ export const PptEditorModal = ({
                       setEditingElementId(null);
                     }}
                     onRequestClose={() => handleBack(false)}
+                    designProps={designTargetSlide ? {
+                      targetSlide: designTargetSlide,
+                      targetIndex: designTargetIndex,
+                      totalSlides: presentation.slides.length,
+                      aspectRatio: presentation.aspectRatio,
+                      onPrevSlide: () => handleDesignStepSlide(-1),
+                      onNextSlide: () => handleDesignStepSlide(1),
+                      onApplyBackground: handleApplyDesignBackground,
+                      onApplyTheme: handleApplyDesignTheme,
+                      fontFamily: vazirmatnFont,
+                    } : null}
                   />
                 )}
               </View>

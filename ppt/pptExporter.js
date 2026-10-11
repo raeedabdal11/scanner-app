@@ -5,6 +5,7 @@ import { planPage, reverseTableLineColumns, isTableElement, splitRuns, calculate
 import { getExportFontFamily } from './fonts';
 import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
+import { getSlideBackground } from './slideBackground';
 
 if (typeof window === 'undefined') {
   global.window = global;
@@ -411,6 +412,84 @@ export async function validatePptxZip(zip) {
  * - No references to notesSlides/notesMasters remain when notes were removed
  * Logs "[PPTX-CHECK] OK" or the exact problem.
  */
+/**
+ * Writes the slide background into a slide XML string (post-processing):
+ * - <p:bg><p:bgPr>{fill}<a:effectLst/></p:bgPr></p:bg> as the first child of <p:cSld> (before <p:spTree>)
+ * - image: JPEG in ppt/media + image relationship in the slide rels + <a:blipFill>
+ * - image overlay: a full-slide black rectangle <p:sp> (alpha inside srgbClr) placed first in spTree
+ */
+export async function applySlideBackgroundXml(zip, slideNum, slideXml, bgSpec, is43) {
+  if (!bgSpec) return slideXml;
+  let fillXml = null;
+  let overlayXml = '';
+
+  if (bgSpec.type === 'gradient') {
+    const ang = Math.round((bgSpec.angle || 0) * 60000);
+    fillXml =
+      '<a:gradFill rotWithShape="1"><a:gsLst>' +
+      `<a:gs pos="0"><a:srgbClr val="${bgSpec.hex}"/></a:gs>` +
+      `<a:gs pos="100000"><a:srgbClr val="${bgSpec.hex2}"/></a:gs>` +
+      `</a:gsLst><a:lin ang="${ang}" scaled="0"/></a:gradFill>`;
+  } else if (bgSpec.type === 'image' && bgSpec.imageBase64) {
+    const mediaName = `slideBg${slideNum}.jpeg`;
+    const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+    const relsFile = zip.file(relsPath);
+    if (!relsFile) return slideXml;
+    let relsXml = await relsFile.async('text');
+    let relId = 'rIdBg1';
+    let n = 1;
+    while (relsXml.includes(`Id="${relId}"`)) {
+      n++;
+      relId = `rIdBg${n}`;
+    }
+    relsXml = relsXml.replace(
+      '</Relationships>',
+      `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`
+    );
+    zip.file(relsPath, relsXml);
+    zip.file(`ppt/media/${mediaName}`, bgSpec.imageBase64, { base64: true, createFolders: false });
+
+    fillXml = `<a:blipFill><a:blip r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`;
+
+    const overlay = Math.max(0, Math.min(70, Math.round(bgSpec.overlay || 0)));
+    if (overlay > 0) {
+      const cx = 9144000;
+      const cy = is43 ? 6858000 : 5143500;
+      let maxId = 1;
+      slideXml.replace(/<p:cNvPr\b[^>]*\bid="(\d+)"/g, (m, id) => {
+        maxId = Math.max(maxId, parseInt(id, 10) || 0);
+        return m;
+      });
+      overlayXml =
+        '<p:sp><p:nvSpPr>' +
+        `<p:cNvPr id="${maxId + 1}" name="Background Overlay"/>` +
+        '<p:cNvSpPr/><p:nvPr userDrawn="1"/></p:nvSpPr>' +
+        `<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+        `<a:solidFill><a:srgbClr val="000000"><a:alpha val="${overlay * 1000}"/></a:srgbClr></a:solidFill>` +
+        '<a:ln><a:noFill/></a:ln></p:spPr></p:sp>';
+    }
+  } else {
+    fillXml = `<a:solidFill><a:srgbClr val="${bgSpec.hex || 'FFFFFF'}"/></a:solidFill>`;
+  }
+
+  const bgXml = `<p:bg><p:bgPr>${fillXml}<a:effectLst/></p:bgPr></p:bg>`;
+
+  // Remove any background pptxgenjs wrote, then insert ours as the first child of <p:cSld>
+  let out = slideXml.replace(/<p:bg>[\s\S]*?<\/p:bg>/, '');
+  out = out.replace(/(<p:cSld\b[^>]*>)/, `$1${bgXml}`);
+
+  if (overlayXml) {
+    // First shape in spTree, right after the mandatory <p:nvGrpSpPr>/<p:grpSpPr>
+    if (/<\/p:grpSpPr>/.test(out)) {
+      out = out.replace(/<\/p:grpSpPr>/, `</p:grpSpPr>${overlayXml}`);
+    } else {
+      out = out.replace(/<p:grpSpPr\s*\/>/, (m) => `${m}${overlayXml}`);
+    }
+  }
+  return out;
+}
+
 export async function performPptxSelfCheck(zip, uint8Array, hasNotes = false) {
   const errors = [];
 
@@ -616,6 +695,8 @@ export const exportPresentationToPptx = async (
     const slideImageElemSpecs = {};
     // Stores shape element specifications per slide
     const slideShapeElemSpecs = {};
+    // Stores the background (solid / gradient / image + overlay) per generated slide
+    const slideBgSpecs = {};
 
     for (const pageData of targetPages) {
       // Use planPage to get computed font sizes & split slides if text overflows
@@ -630,12 +711,32 @@ export const exportPresentationToPptx = async (
         slideImageElemSpecs[slideCount] = [];
         slideShapeElemSpecs[slideCount] = [];
 
-        // Set slide background color
-        if (slideData.background && slideData.background !== '#ffffff') {
-          const hexBg = normalizeHex(slideData.background, 'FFFFFF');
-          if (hexBg) {
-            slide.background = { color: hexBg };
+        // Slide background: written as <p:bg> during JSZip post-processing (every slide carries
+        // its exact app color so PowerPoint matches the editor, even the default white).
+        try {
+          const bg = getSlideBackground(slideData);
+          const bgSpec = { type: bg.type };
+          if (bg.type === 'image') {
+            const bgDataUri = await prepareImageForPptx(bg.uri);
+            const bgBase64 = bgDataUri ? bgDataUri.replace(/^data:image\/[a-z]+;base64,/, '') : null;
+            if (bgBase64) {
+              bgSpec.imageBase64 = bgBase64;
+              bgSpec.overlay = bg.overlay || 0;
+            } else {
+              bgSpec.type = 'solid';
+              bgSpec.hex = '000000';
+            }
+          } else if (bg.type === 'gradient') {
+            bgSpec.hex = normalizeHex(bg.color, 'FFFFFF');
+            bgSpec.hex2 = normalizeHex(bg.color2, '000000');
+            bgSpec.angle = bg.angle;
+          } else {
+            bgSpec.hex = normalizeHex(bg.color, 'FFFFFF');
           }
+          slideBgSpecs[slideCount] = bgSpec;
+        } catch (bgErr) {
+          console.log('[PPT Exporter] Background prepare error:', bgErr);
+          slideBgSpecs[slideCount] = { type: 'solid', hex: 'FFFFFF' };
         }
 
         // Sort elements by zIndex
@@ -1851,6 +1952,15 @@ export const exportPresentationToPptx = async (
             }
         }
 
+        // Slide background (<p:bg> before <p:spTree>, image media + rel, overlay <p:sp> first in spTree)
+        sanitizedXml = await applySlideBackgroundXml(
+          zip,
+          slideNum,
+          sanitizedXml,
+          slideBgSpecs[slideNum],
+          is43
+        );
+
         zip.file(slideFileName, sanitizedXml);
 
         if (slideNum === 1) {
@@ -1896,7 +2006,11 @@ export const exportPresentationToPptx = async (
       // Clean [Content_Types].xml: remove every <Override> whose PartName does not exist as a file in the package
       const contentTypesFile = zip.file('[Content_Types].xml');
       if (contentTypesFile) {
-        const ctXml = await contentTypesFile.async('text');
+        let ctXml = await contentTypesFile.async('text');
+        // Background images are stored as ppt/media/*.jpeg — make sure the jpeg Default is registered
+        if (!/<Default\s+Extension="jpeg"/i.test(ctXml)) {
+          ctXml = ctXml.replace(/(<Types[^>]*>)/, '$1<Default Extension="jpeg" ContentType="image/jpeg"/>');
+        }
         const ctDoc = parser.parseFromString(ctXml, 'text/xml');
         const overrideElems = Array.from(ctDoc.getElementsByTagName('Override'));
 

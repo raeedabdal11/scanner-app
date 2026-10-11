@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { getElementRuns } from './formattedText';
 import { renderSvgShape } from './shapeCatalog';
+import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -65,10 +66,11 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
             {
               width: canvasWidth,
               height: canvasHeight,
-              backgroundColor: currentSlide.background || '#ffffff',
+              backgroundColor: getSlideBaseColor(currentSlide),
             },
           ]}
         >
+          <PptSlideBackground slide={currentSlide} width={canvasWidth} height={canvasHeight} />
           {(currentSlide.elements || []).map((elem) => {
             const left = (elem.x / 100) * canvasWidth;
             const top = (elem.y / 100) * canvasHeight;
