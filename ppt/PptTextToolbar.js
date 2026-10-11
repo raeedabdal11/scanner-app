@@ -32,6 +32,7 @@ import {
 } from './formattedText';
 import { applyStyle, wordRangeAt } from './richText';
 import PptSlider from './PptSlider';
+import { PptValueCard } from './PptValueCard';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -150,6 +151,18 @@ function getShadowParams(style) {
     baseColor: currBaseColor,
   };
 }
+
+// Shadow quick settings (same values as the old light/medium/strong presets)
+const SHADOW_PRESETS = [
+  { key: 'light', label: 'نەرم', offset: 1, blur: 2, opacity: 0.4 },
+  { key: 'medium', label: 'ناوەند', offset: 2, blur: 3, opacity: 0.6 },
+  { key: 'strong', label: 'بەهێز', offset: 4, blur: 6, opacity: 0.9 },
+  { key: 'none', label: 'هیچ' },
+];
+const SHADOW_DISTANCE_CHIPS = [0, 2, 4, 6, 10].map((v) => ({ value: v, label: `${v}` }));
+const SHADOW_BLUR_CHIPS = [0, 3, 6, 10, 15].map((v) => ({ value: v, label: `${v}` }));
+const SHADOW_DARKNESS_CHIPS = [20, 40, 60, 80, 100].map((v) => ({ value: v, label: `${v}%` }));
+const SHADOW_QUICK_COLORS = ['#000000', '#3f3f3f', '#7f7f7f', '#1f497d', '#8b3a2b', '#c00000', '#ffffff'];
 
 // 1. PowerPoint Theme Colors Matrix (10 columns x 5 rows = 50 shades)
 const THEME_COLORS_GRID = [
@@ -594,13 +607,12 @@ export const PptTextToolbar = forwardRef(({
   };
 
   const applyShadowPreset = (type) => {
-    if (type === 'light') {
-      applyShadowPatch(1, 2, 0.4, shadowParams.baseColor);
-    } else if (type === 'medium') {
-      applyShadowPatch(2, 3, 0.6, shadowParams.baseColor);
-    } else if (type === 'strong') {
-      applyShadowPatch(4, 6, 0.9, shadowParams.baseColor);
+    if (type === 'none') {
+      clearShadow();
+      return;
     }
+    const preset = SHADOW_PRESETS.find((p) => p.key === type);
+    if (preset) applyShadowPatch(preset.offset, preset.blur, preset.opacity, shadowParams.baseColor);
   };
 
   const clearShadow = () => {
@@ -1098,73 +1110,100 @@ export const PptTextToolbar = forwardRef(({
 
             {colorTarget === 'shadow' && (
               <View style={styles.shadowControlPanel}>
-                {/* Quick Presets */}
-                <Text style={styles.sectionTitle}>پێشەنگە خێراکان (Quick Presets):</Text>
-                <View style={styles.presetRow}>
-                  <TouchableOpacity
-                    style={styles.presetBtn}
-                    onPressIn={handlePressIn}
-                    onPress={() => applyShadowPreset('light')}
-                  >
-                    <Text style={styles.presetBtnText}>سووک</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.presetBtn}
-                    onPressIn={handlePressIn}
-                    onPress={() => applyShadowPreset('medium')}
-                  >
-                    <Text style={styles.presetBtnText}>مامناوەند</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.presetBtn}
-                    onPressIn={handlePressIn}
-                    onPress={() => applyShadowPreset('strong')}
-                  >
-                    <Text style={styles.presetBtnText}>بەهێز</Text>
-                  </TouchableOpacity>
+                {/* Overall presets: distance + blur + darkness together, or off */}
+                <Text style={styles.sectionTitle}>ڕێکخستنی خێرا:</Text>
+                <View style={styles.shadowPresetRow}>
+                  {SHADOW_PRESETS.map((preset) => {
+                    const active = preset.key === 'none'
+                      ? !shadowParams.hasShadow
+                      : shadowParams.hasShadow &&
+                        shadowParams.offset === preset.offset &&
+                        shadowParams.blur === preset.blur &&
+                        shadowParams.opacity === preset.opacity;
+                    return (
+                      <TouchableOpacity
+                        key={`shadow_preset_${preset.key}`}
+                        style={[styles.shadowPresetChip, active && styles.shadowPresetChipActive]}
+                        onPressIn={handlePressIn}
+                        onPress={() => applyShadowPreset(preset.key)}
+                      >
+                        <Text style={[styles.shadowPresetText, active && styles.shadowPresetTextActive]}>
+                          {preset.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
-                {/* Controls: Size, Blur, Opacity */}
-                <View style={styles.shadowControlsBox}>
-                  {/* 1. Size / Offset */}
-                  <PptSlider
-                    label="قەبارە / دووری (Size)"
-                    min={0}
-                    max={10}
-                    step={1}
-                    value={shadowParams.offset}
-                    onChange={(val) => {
-                      console.log('[PptTextToolbar] Shadow Size slider val=', val);
-                      applyShadowPatch(val, shadowParams.blur, shadowParams.opacity, shadowParams.baseColor);
-                    }}
-                  />
+                {/* 1. Distance (offset) */}
+                <PptValueCard
+                  title="دووری"
+                  valueText={`${shadowParams.offset}`}
+                  dimmed={!shadowParams.hasShadow}
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={shadowParams.offset}
+                  onChange={(val) =>
+                    applyShadowPatch(val, shadowParams.blur, shadowParams.opacity, shadowParams.baseColor)
+                  }
+                  chips={SHADOW_DISTANCE_CHIPS}
+                  isChipActive={(v) => shadowParams.hasShadow && shadowParams.offset === v}
+                  onPressIn={handlePressIn}
+                />
 
-                  {/* 2. Blur / Softness */}
-                  <PptSlider
-                    label="لێڵی / نەرمی (Blur)"
-                    min={0}
-                    max={15}
-                    step={1}
-                    value={shadowParams.blur}
-                    onChange={(val) => {
-                      console.log('[PptTextToolbar] Shadow Blur slider val=', val);
-                      applyShadowPatch(shadowParams.offset, val, shadowParams.opacity, shadowParams.baseColor);
-                    }}
-                  />
+                {/* 2. Blur */}
+                <PptValueCard
+                  title="نەرمی"
+                  valueText={`${shadowParams.blur}`}
+                  dimmed={!shadowParams.hasShadow}
+                  min={0}
+                  max={15}
+                  step={1}
+                  value={shadowParams.blur}
+                  onChange={(val) =>
+                    applyShadowPatch(shadowParams.offset, val, shadowParams.opacity, shadowParams.baseColor)
+                  }
+                  chips={SHADOW_BLUR_CHIPS}
+                  isChipActive={(v) => shadowParams.hasShadow && shadowParams.blur === v}
+                  onPressIn={handlePressIn}
+                />
 
-                  {/* 3. Darkness / Opacity */}
-                  <PptSlider
-                    label="تۆخی / ڕووناکی (Darkness)"
-                    unit="%"
-                    min={10}
-                    max={100}
-                    step={1}
-                    value={Math.round(shadowParams.opacity * 100)}
-                    onChange={(val) =>
-                      applyShadowPatch(shadowParams.offset, shadowParams.blur, val / 100, shadowParams.baseColor)
-                    }
-                  />
-                </View>
+                {/* 3. Darkness (opacity, stored in 10% steps) */}
+                <PptValueCard
+                  title="تۆخی"
+                  valueText={`${Math.round(shadowParams.opacity * 100)}%`}
+                  dimmed={!shadowParams.hasShadow}
+                  min={10}
+                  max={100}
+                  step={10}
+                  stepAmount={10}
+                  value={Math.round(shadowParams.opacity * 100)}
+                  onChange={(val) =>
+                    applyShadowPatch(shadowParams.offset, shadowParams.blur, val / 100, shadowParams.baseColor)
+                  }
+                  chips={SHADOW_DARKNESS_CHIPS}
+                  isChipActive={(v) => shadowParams.hasShadow && Math.round(shadowParams.opacity * 100) === v}
+                  onPressIn={handlePressIn}
+                />
+
+                {/* 4. Color (the model stores the shadow color; full grid stays below) */}
+                <PptValueCard title="ڕەنگ" onPressIn={handlePressIn}>
+                  <View style={styles.shadowSwatchRow}>
+                    {SHADOW_QUICK_COLORS.map((hex) => {
+                      const active =
+                        shadowParams.hasShadow && (shadowParams.baseColor || '').toLowerCase() === hex.toLowerCase();
+                      return (
+                        <TouchableOpacity
+                          key={`shadow_sw_${hex}`}
+                          style={[styles.shadowSwatch, { backgroundColor: hex }, active && styles.shadowSwatchActive]}
+                          onPressIn={handlePressIn}
+                          onPress={() => handleColorSelect(hex)}
+                        />
+                      );
+                    })}
+                  </View>
+                </PptValueCard>
 
                 {/* Remove shadow button */}
                 <TouchableOpacity
@@ -1173,9 +1212,7 @@ export const PptTextToolbar = forwardRef(({
                   onPress={clearShadow}
                 >
                   <Text style={styles.noHighlightText}>
-                    {shadowParams.hasShadow
-                      ? '⊗ لابردنی سێبەر (Clear Shadow)'
-                      : '✓ بێ سێبەر (No Shadow / Transparent)'}
+                    {shadowParams.hasShadow ? '⊗ لابردنی سێبەر' : '✓ بێ سێبەر'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1198,7 +1235,7 @@ export const PptTextToolbar = forwardRef(({
             {/* 1. PowerPoint Theme Colors */}
             <Text style={styles.sectionTitle}>
               {colorTarget === 'shadow'
-                ? 'ڕەنگی سێبەر (Shadow Color)'
+                ? 'ڕەنگی سێبەر'
                 : colorTarget === 'highlight'
                 ? 'ڕەنگی هاینایت (Highlight Color)'
                 : 'ڕەنگەکانی تێمی پاوەرپۆینت (Theme Colors)'}
@@ -1879,6 +1916,50 @@ const styles = StyleSheet.create({
   },
   shadowControlPanel: {
     marginBottom: 8,
+  },
+  shadowPresetRow: {
+    flexDirection: 'row-reverse',
+    gap: 6,
+    marginBottom: 8,
+  },
+  shadowPresetChip: {
+    flex: 1,
+    minHeight: 40,
+    backgroundColor: '#2c2c2e',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shadowPresetChipActive: {
+    backgroundColor: '#8B3A2B',
+    borderColor: '#8B3A2B',
+  },
+  shadowPresetText: {
+    color: '#aaaaaa',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  shadowPresetTextActive: {
+    color: '#ffffff',
+  },
+  shadowSwatchRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  shadowSwatch: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  shadowSwatchActive: {
+    borderWidth: 3,
+    borderColor: '#30d158',
   },
   presetRow: {
     flexDirection: 'row',
