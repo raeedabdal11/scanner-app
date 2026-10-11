@@ -14,6 +14,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Keyboard,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ExpoImagePicker from 'expo-image-picker';
@@ -41,6 +42,12 @@ import { getElementRuns } from './formattedText';
 import { CUSTOM_FONT_SOURCES } from './customFonts';
 import { makeSlideBackgroundPatch } from './slideBackground';
 import { getThemeByKey, applyThemeToSlide } from './pptThemes';
+import {
+  PptSafeAreaRoot,
+  PptSafeBottomView,
+  PptKeyboardDock,
+  useEditorInsets,
+} from './useEditorInsets';
 
 // Professional PowerPoint Slide Background Color Matrices
 const PPT_THEME_BG_COLORS = [
@@ -289,25 +296,8 @@ export const PptEditorModal = ({
   const isApplyingStyleRef = useRef(false);
   const [controlledSelection, setControlledSelection] = useState(undefined);
   const [showSoftInputOnFocus, setShowSoftInputOnFocus] = useState(true);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const h = e?.endCoordinates?.height || 0;
-      setKeyboardHeight(h);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  // Keyboard placement lives in PptKeyboardDock, so keyboard events never
+  // re-render this editor (and never touch the active TextInput).
 
   // Saved state per page e.g. { [pageId]: boolean }
   const [savedPages, setSavedPages] = useState({});
@@ -336,6 +326,33 @@ export const PptEditorModal = ({
   const shapeToolbarRef = useRef(null);
 
   const scrollViewRef = useRef(null);
+  const scrollYRef = useRef(0);
+
+  // Keyboard just opened over a text box: scroll the slides so the box sits
+  // between the header and the toolbar docked above the keyboard.
+  const ensureEditingTextVisible = ({ dockTop }) => {
+    const input = inputRef.current;
+    const sv = scrollViewRef.current;
+    if (!input || typeof input.measureInWindow !== 'function' || !sv) return;
+    const svNode = typeof sv.getNativeScrollRef === 'function' ? sv.getNativeScrollRef() : sv;
+    if (!svNode || typeof svNode.measureInWindow !== 'function') return;
+    svNode.measureInWindow((sx, sy) => {
+      input.measureInWindow((ix, iy, iw, ih) => {
+        const visTop = sy + 8;
+        const visBottom = dockTop - 8;
+        if (!(visBottom > visTop) || !(ih > 0)) return;
+        let delta = 0;
+        if (iy + ih > visBottom) {
+          // Box taller than the visible strip: show its top
+          delta = ih > visBottom - visTop ? iy - visTop : iy + ih - visBottom;
+        } else if (iy < visTop) {
+          delta = iy - visTop;
+        }
+        if (Math.abs(delta) < 2) return;
+        sv.scrollTo({ y: Math.max(0, scrollYRef.current + delta), animated: true });
+      });
+    });
+  };
 
   // Font loading status
   let vazirmatnFont = undefined;
@@ -1409,49 +1426,24 @@ export const PptEditorModal = ({
       visible={visible}
       transparent
       animationType="slide"
+      statusBarTranslucent
       onRequestClose={() => handleBack(false)}
     >
-      <View style={styles.overlay}>
+      <PptSafeAreaRoot style={styles.overlay}>
         <View style={styles.container}>
 
           {/* Top Control Bar */}
-          <View style={styles.topBar}>
-            <TouchableOpacity onPress={handleTopClose} style={styles.topBtn}>
-              <Text style={{ color: '#888', fontSize: 20, fontWeight: 'bold' }}>✕</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.titleText}>دروستکەری پاوەرپۆینت 📊</Text>
-
-            <View style={styles.topActions}>
-              <TouchableOpacity
-                style={[styles.iconTopBtn, historyIndex === 0 && styles.disabledBtn]}
-                disabled={historyIndex === 0}
-                onPress={handleUndo}
-              >
-                <Text style={styles.iconTopText}>↩️</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.iconTopBtn, historyIndex === history.length - 1 && styles.disabledBtn]}
-                disabled={historyIndex === history.length - 1}
-                onPress={handleRedo}
-              >
-                <Text style={styles.iconTopText}>↪️</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.iconTopBtn} onPress={handleClearDraftPrompt}>
-                <Ionicons name="trash-outline" size={16} color="#ff453a" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.iconTopBtn} onPress={() => setPreviewVisible(true)}>
-                <Text style={styles.iconTopText}>▶️</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.exportTopBtn} onPress={handleOpenExportPreview}>
-                <Text style={styles.exportTopText}>{`پاوەرپۆینت · ${totalLiveSlides} سلاید`}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <PptEditorHeader
+            canUndo={historyIndex > 0}
+            canRedo={historyIndex < history.length - 1}
+            slideCount={totalLiveSlides}
+            onClose={handleTopClose}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClearDraft={handleClearDraftPrompt}
+            onPlay={() => setPreviewVisible(true)}
+            onExport={handleOpenExportPreview}
+          />
 
           {/* Success Box after Export */}
           {createdDoc ? (
@@ -1493,9 +1485,13 @@ export const PptEditorModal = ({
             /* Main Continuous Vertical Document Editor Area */
             <View style={styles.editorArea}>
 
+              {/* Disabled: PptKeyboardDock places the toolbar above the keyboard and the
+                  slides simply take the remaining space (avoids double offsets). The
+                  element stays so the slide/TextInput tree is never re-parented. */}
               <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                enabled={false}
               >
                 {presentation.slides.length === 0 ? (
                   /* Empty State when all pages are deleted */
@@ -1519,6 +1515,8 @@ export const PptEditorModal = ({
                     style={{ flex: 1 }}
                     contentContainerStyle={styles.documentScrollContent}
                     keyboardShouldPersistTaps="handled"
+                    onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+                    scrollEventThrottle={32}
                   >
                     {presentation.slides.map((slide, index) => {
                       const isSaved = !!savedPages[slide.id];
@@ -1774,7 +1772,10 @@ export const PptEditorModal = ({
               </KeyboardAvoidingView>
 
               {/* Contextual / Persistent Bottom Toolbar */}
-              <View style={{ marginBottom: keyboardHeight }}>
+              <PptKeyboardDock
+                style={styles.bottomDock}
+                onKeyboardPlaced={selectedElement && selectedElement.type === 'text' ? ensureEditingTextVisible : undefined}
+              >
                 {selectedElement && selectedElement.type === 'text' ? (
                   <PptTextToolbar
                     ref={textToolbarRef}
@@ -1840,7 +1841,7 @@ export const PptEditorModal = ({
                     } : null}
                   />
                 )}
-              </View>
+              </PptKeyboardDock>
 
             </View>
           )}
@@ -1872,18 +1873,22 @@ export const PptEditorModal = ({
             visible={exportModalVisible}
             transparent
             animationType="slide"
+            statusBarTranslucent
             onRequestClose={() => handleBack(false)}
           >
-            <View style={styles.exportSheetOverlay}>
+            <PptSafeAreaRoot style={styles.exportSheetOverlay}>
               <TouchableOpacity
                 style={styles.exportBackdrop}
                 activeOpacity={1}
                 onPress={() => setExportModalVisible(false)}
               />
-              <View style={styles.exportSheetBox}>
+              <PptSafeBottomView style={styles.exportSheetBox} extra={16}>
                 <View style={styles.exportSheetHeader}>
                   <Text style={styles.exportSheetTitle}>بەشی پاشەکەوتکردنی پاوەرپۆینت 📊</Text>
-                  <TouchableOpacity onPress={() => setExportModalVisible(false)}>
+                  <TouchableOpacity
+                    onPress={() => setExportModalVisible(false)}
+                    style={styles.sheetCloseBtn}
+                  >
                     <Ionicons name="close" size={22} color="#aaa" />
                   </TouchableOpacity>
                 </View>
@@ -2061,8 +2066,8 @@ export const PptEditorModal = ({
                     </View>
                   );
                 })()}
-              </View>
-            </View>
+              </PptSafeBottomView>
+            </PptSafeAreaRoot>
           </Modal>
 
           {/* Offscreen Slide Container for high-res PDF export capture */}
@@ -2090,67 +2095,164 @@ export const PptEditorModal = ({
           </View>
 
         </View>
-      </View>
+      </PptSafeAreaRoot>
     </Modal>
+  );
+};
+
+// Header widths (dp): close + 4 icon buttons + gaps, and the export button's
+// one-line minimum. Narrow phones (~360dp) get a two-line export label and no title.
+const HEADER_BTN = 44;
+const HEADER_ICON_W = 40;
+const HEADER_GAP = 4;
+const HEADER_FIXED_W = HEADER_BTN + HEADER_ICON_W * 4 + HEADER_GAP * 5;
+const EXPORT_ONE_LINE_W = 130;
+const HEADER_TITLE_W = 170;
+
+// Module-level component: it must live inside PptSafeAreaRoot to read the Modal's insets
+const PptEditorHeader = ({
+  canUndo,
+  canRedo,
+  slideCount,
+  onClose,
+  onUndo,
+  onRedo,
+  onClearDraft,
+  onPlay,
+  onExport,
+}) => {
+  const insets = useEditorInsets();
+  const { width } = useWindowDimensions();
+  const avail = width - insets.left - insets.right - 16;
+  const exportOneLine = avail - HEADER_FIXED_W >= EXPORT_ONE_LINE_W;
+  const showTitle = avail - HEADER_FIXED_W - EXPORT_ONE_LINE_W >= HEADER_TITLE_W;
+  const hit = { top: 0, bottom: 0, left: 2, right: 2 };
+
+  return (
+    <View
+      style={[
+        styles.topBar,
+        { paddingTop: insets.top, paddingLeft: 8 + insets.left, paddingRight: 8 + insets.right },
+      ]}
+    >
+      <TouchableOpacity onPress={onClose} style={styles.topBtn} accessibilityLabel="داخستن">
+        <Ionicons name="close" size={24} color="#aaaaaa" />
+      </TouchableOpacity>
+
+      {showTitle && <Text style={styles.titleText}>دروستکەری پاوەرپۆینت 📊</Text>}
+
+      <View style={styles.topActions}>
+        <TouchableOpacity
+          style={[styles.iconTopBtn, !canUndo && styles.disabledBtn]}
+          disabled={!canUndo}
+          onPress={onUndo}
+          hitSlop={hit}
+          accessibilityLabel="گەڕانەوە"
+        >
+          <Ionicons name="arrow-undo" size={19} color="#ffffff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.iconTopBtn, !canRedo && styles.disabledBtn]}
+          disabled={!canRedo}
+          onPress={onRedo}
+          hitSlop={hit}
+          accessibilityLabel="دووبارەکردنەوە"
+        >
+          <Ionicons name="arrow-redo" size={19} color="#ffffff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconTopBtn} onPress={onClearDraft} hitSlop={hit} accessibilityLabel="سڕینەوە">
+          <Ionicons name="trash-outline" size={19} color="#ff453a" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconTopBtn} onPress={onPlay} hitSlop={hit} accessibilityLabel="پێشبینین">
+          <Ionicons name="play" size={19} color="#30d158" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.exportTopBtn} onPress={onExport}>
+          <Text style={styles.exportTopText}>
+            {exportOneLine ? `پاوەرپۆینت · ${slideCount} سلاید` : `پاوەرپۆینت\n${slideCount} سلاید`}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: '#1c1c1e',
   },
   container: {
     flex: 1,
     backgroundColor: '#1c1c1e',
-    marginTop: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#2c2c2e',
+    backgroundColor: '#1c1c1e',
   },
   topBtn: {
-    padding: 6,
+    width: HEADER_BTN,
+    height: HEADER_BTN,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   titleText: {
+    flexShrink: 1,
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
+    marginHorizontal: 6,
   },
   topActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: HEADER_GAP,
     alignItems: 'center',
+    flexShrink: 1,
   },
   iconTopBtn: {
     backgroundColor: '#2c2c2e',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    width: HEADER_ICON_W,
+    height: HEADER_BTN,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledBtn: {
     opacity: 0.3,
   },
-  iconTopText: {
-    fontSize: 14,
-  },
   exportTopBtn: {
     backgroundColor: '#8B3A2B',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    minHeight: HEADER_BTN,
+    minWidth: HEADER_BTN,
+    flexShrink: 1,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   exportTopText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  bottomDock: {
+    backgroundColor: '#1c1c1e',
+  },
+  sheetCloseBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bgPickerPanel: {
     backgroundColor: '#1c1c1e',

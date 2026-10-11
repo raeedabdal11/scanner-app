@@ -12,11 +12,13 @@ import { getElementRuns } from './formattedText';
 import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
+import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, onRequestClose }) => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const insets = useEditorInsets();
 
   if (!presentation || !presentation.slides || presentation.slides.length === 0) {
     return null;
@@ -46,12 +48,13 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onRequestClose || onClose}
     >
-      <View style={styles.overlay}>
+      <PptSafeAreaRoot style={styles.overlay}>
 
-        {/* Top Header */}
-        <View style={styles.header}>
+        {/* Top Header (below the status bar / camera cutout) */}
+        <View style={[styles.header, { top: insets.top + 4 }]}>
           <Text style={styles.headerText}>
             پێشبینینی سڵایدکان ({currentSlideIndex + 1} / {slides.length})
           </Text>
@@ -210,7 +213,7 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
         </View>
 
         {/* Navigation Controls */}
-        <View style={styles.navRow}>
+        <View style={[styles.navRow, { bottom: insets.bottom + 24 }]}>
           <TouchableOpacity
             style={[styles.navBtn, currentSlideIndex === 0 && styles.disabledNav]}
             disabled={currentSlideIndex === 0}
@@ -228,7 +231,7 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
           </TouchableOpacity>
         </View>
 
-      </View>
+      </PptSafeAreaRoot>
     </Modal>
   );
 };
@@ -254,7 +257,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeBtn: {
-    padding: 8,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeText: {
     color: '#fff',
@@ -279,6 +285,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1c1e',
     paddingHorizontal: 20,
     paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#3a3a3c',

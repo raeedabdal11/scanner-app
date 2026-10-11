@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  Keyboard,
   Platform,
   ToastAndroid,
   Alert,
@@ -15,7 +14,7 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboard } from './useEditorInsets';
 import * as ExpoImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import PptSlider from './PptSlider';
@@ -76,9 +75,7 @@ export const PptDesignPanel = ({
   const [gradTarget, setGradTarget] = useState(1); // 1 | 2
   const [hexText, setHexText] = useState('');
   const [picking, setPicking] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboard();
   const { height: windowH } = useWindowDimensions();
   const scrollRef = useRef(null);
   const colorBlockYRef = useRef(0);
@@ -90,27 +87,19 @@ export const PptDesignPanel = ({
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 60), animated: true });
   };
 
+  // Keyboard opened for the hex field: wait for the dock to move above it, then reveal the row
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardHeight(e?.endCoordinates?.height || 0);
-      // Wait for the panel to re-size above the keyboard, then reveal the hex row
-      if (hexFocusedRef.current) setTimeout(scrollHexIntoView, 150);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+    if (!keyboard.visible || !hexFocusedRef.current) return undefined;
+    const t = setTimeout(scrollHexIntoView, 150);
+    return () => clearTimeout(t);
+  }, [keyboard.visible, keyboard.screenY]);
 
   // Never taller than the space left under the slides (shrinks while the keyboard is open)
-  const panelMaxHeight = keyboardHeight > 0
-    ? Math.max(PANEL_MIN_HEIGHT, Math.round((windowH - keyboardHeight) * PANEL_KEYBOARD_RATIO))
+  const panelMaxHeight = keyboard.visible
+    ? Math.max(PANEL_MIN_HEIGHT, Math.round((windowH - keyboard.height) * PANEL_KEYBOARD_RATIO))
     : Math.max(PANEL_MIN_HEIGHT, Math.round(windowH * PANEL_HEIGHT_RATIO));
-  // Keep the last row above the Android navigation bar / gesture line
-  const scrollBottomPad = (keyboardHeight > 0 ? 0 : insets.bottom || 0) + 24;
+  // The bottom dock (PptKeyboardDock) already clears the navigation bar
+  const scrollBottomPad = 24;
 
   const is43 = aspectRatio === '4:3';
   const slideAspect = is43 ? 4 / 3 : 16 / 9;
@@ -380,7 +369,7 @@ export const PptDesignPanel = ({
                     onSubmitEditing={commitHexText}
                     onFocus={() => {
                       hexFocusedRef.current = true;
-                      if (keyboardHeight > 0) setTimeout(scrollHexIntoView, 50);
+                      if (keyboard.visible) setTimeout(scrollHexIntoView, 50);
                     }}
                     onBlur={() => { hexFocusedRef.current = false; }}
                     returnKeyType="done"

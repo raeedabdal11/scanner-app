@@ -7,9 +7,11 @@ import {
   StyleSheet,
 } from 'react-native';
 import { CATEGORIES, LAYOUTS } from './layouts';
+import { useEditorInsets } from './useEditorInsets';
 
 export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
   const [selectedCategory, setSelectedCategory] = useState('هەموو');
+  const insets = useEditorInsets();
 
   const isAllCategory = (cat) =>
     cat === 'هەموو' || cat === 'هەمووی' || cat === 'All';
@@ -253,7 +255,7 @@ export const PptLayoutPickerModal = ({ visible, onClose, onSelectLayout }) => {
         activeOpacity={1}
         onPress={onClose}
       />
-      <View style={styles.bottomSheetContainer}>
+      <View style={[styles.bottomSheetContainer, { paddingBottom: 20 + insets.bottom }]}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>هەڵبژاردنی نەخشەی سڵایدی نوێ 🎨</Text>
@@ -358,7 +360,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeBtn: {
-    padding: 6,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   closeBtnText: {
     color: '#888',

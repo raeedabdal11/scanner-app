@@ -11,8 +11,10 @@ import {
   Platform,
   Keyboard,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboard } from './useEditorInsets';
 import {
   KURDISH_FONTS,
   KURDISH_FONT_GROUPS,
@@ -211,6 +213,13 @@ export const PptTextToolbar = forwardRef(({
   onRequestClose,
 }, ref) => {
   const safeInsets = useSafeAreaInsets();
+  // While the keyboard is open the tab body shrinks to a short scrollable strip,
+  // so the slide being edited stays visible between the header and the toolbar.
+  const keyboard = useKeyboard();
+  const { height: windowH } = useWindowDimensions();
+  const compactBodyH = Math.round(
+    Math.min(150, Math.max(84, (windowH - keyboard.height) * 0.22))
+  );
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
   const [editTextModal, setEditTextModal] = useState(false);
@@ -694,6 +703,15 @@ export const PptTextToolbar = forwardRef(({
         </TouchableOpacity>
       </View>
 
+      {/* Tab body: full height normally, compact + scrollable above the keyboard.
+          Always a ScrollView so opening the keyboard never remounts the controls. */}
+      <ScrollView
+        style={keyboard.visible ? { maxHeight: compactBodyH } : null}
+        scrollEnabled={keyboard.visible}
+        showsVerticalScrollIndicator={keyboard.visible}
+        keyboardShouldPersistTaps="always"
+        nestedScrollEnabled
+      >
       {/* TAB 1: "نووسین" */}
       {activeTab === 'text' && (
         <View style={styles.tabContentBox}>
@@ -1033,6 +1051,7 @@ export const PptTextToolbar = forwardRef(({
             style={{ maxHeight: 280 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="always"
+            nestedScrollEnabled
           >
             {colorTarget === 'opacity' && (
               <View style={styles.shadowControlPanel}>
@@ -1283,6 +1302,7 @@ export const PptTextToolbar = forwardRef(({
           </ScrollView>
         </View>
       )}
+      </ScrollView>
 
       {/* Edit Text Modal */}
       <Modal

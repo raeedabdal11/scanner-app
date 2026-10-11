@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SHAPE_CATEGORIES, ALL_SHAPES, renderSvgShape } from './shapeCatalog';
+import { useKeyboard, useKeyboardOverlap } from './useEditorInsets';
 
 const { width } = Dimensions.get('window');
 const GRID_ITEM_WIDTH = (width - 48) / 3;
@@ -19,6 +20,10 @@ const GRID_ITEM_WIDTH = (width - 48) / 3;
 export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "شێوەکانی پاورپۆینت" }) {
   const [selectedCategory, setSelectedCategory] = useState('lines_arrows');
   const [searchQuery, setSearchQuery] = useState('');
+  // Search keyboard: keep the shape grid's last row above the keyboard
+  const contentRef = useRef(null);
+  const keyboard = useKeyboard();
+  const { overlap, remeasure } = useKeyboardOverlap(contentRef, keyboard);
 
   const filteredShapes = ALL_SHAPES.filter((shape) => {
     const matchesCategory = searchQuery ? true : shape.category === selectedCategory;
@@ -34,17 +39,22 @@ export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "
       visible={visible}
       animationType="slide"
       transparent={true}
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View
+          ref={contentRef}
+          onLayout={remeasure}
+          style={[styles.modalContent, { paddingBottom: keyboard.visible ? overlap : 0 }]}
+        >
           {/* Header */}
           <View style={styles.headerRow}>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={24} color="#ffffff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{title}</Text>
-            <View style={{ width: 32 }} />
+            <View style={{ width: 44 }} />
           </View>
 
           {/* Search Bar */}
@@ -90,7 +100,7 @@ export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "
           )}
 
           {/* Shape Grid */}
-          <ScrollView contentContainerStyle={styles.gridContainer}>
+          <ScrollView contentContainerStyle={styles.gridContainer} keyboardShouldPersistTaps="handled">
             {filteredShapes.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyText}>هیچ شێوەیەک نەدۆزرایەوە</Text>
@@ -159,7 +169,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   closeBtn: {
-    padding: 4,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchBox: {
     flexDirection: 'row',
