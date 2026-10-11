@@ -13,6 +13,7 @@ import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
 import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from './formattedText';
 import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
+import { getDisplayFontFamily } from './fonts';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -193,7 +194,7 @@ function renderStyledTextChildren(formattedRuns, scaledBaseSize, fontFamily, ele
         }}
       >
         {(scriptRuns ?? []).map((sRun, sIdx) => (
-          <Text key={`tsrun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+          <Text key={`tsrun_${rIdx}_${sIdx}`} style={{ fontFamily: getDisplayFontFamily(sRun.fontFamily) }}>
             {sRun.text}
           </Text>
         ))}
@@ -313,7 +314,7 @@ const InlineTextInput = React.memo(({
     textAlign: elem?.textAlign || 'right',
     writingDirection: elem?.writingDirection || 'rtl',
     lineHeight: scaledBaseSize * (elem?.lineSpacing || 1.35),
-    fontFamily: elem?.kurdishFont || elem?.englishFont || fontFamily || undefined,
+    fontFamily: elem?.kurdishFont ? getDisplayFontFamily(elem.kurdishFont) : (fontFamily || undefined),
     paddingHorizontal: 6,
     paddingVertical: 6,
     borderRadius: 4,
@@ -731,8 +732,8 @@ export const PptCanvas = ({
                         const runLineHeight = runScaledFontSize * 1.35;
                         const scriptRuns = splitRuns(
                           run.text || '',
-                          run.kurdishFont || elem.kurdishFont || 'Tahoma',
-                          run.englishFont || elem.englishFont || 'Calibri'
+                          run.kurdishFont || run.kuFont || elem.kurdishFont || 'Tahoma',
+                          run.englishFont || run.enFont || elem.englishFont || 'Calibri'
                         );
                         const hasOwnHighlight = (run.highlight || run.highlightColor) && (run.highlight || run.highlightColor) !== 'transparent';
                         const runHighlight = run.isStickySelected
@@ -761,7 +762,7 @@ export const PptCanvas = ({
                             }}
                           >
                             {scriptRuns.map((sRun, sIdx) => (
-                              <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+                              <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: getDisplayFontFamily(sRun.fontFamily) }}>
                                 {sRun.text}
                               </Text>
                             ))}

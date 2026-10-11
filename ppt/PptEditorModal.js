@@ -22,7 +22,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { PptCanvas } from './PptCanvas';
-import { PptCleanSlide, renderSlideToHtml } from './PptCleanSlide';
+import { PptCleanSlide, renderSlideToHtml, getPdfFontFaceCss } from './PptCleanSlide';
 import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
 import { PptShapeToolbar } from './PptShapeToolbar';
@@ -38,6 +38,7 @@ import {
   createDefaultPresentation,
 } from './pptDraftStorage';
 import { getElementRuns } from './formattedText';
+import { CUSTOM_FONT_SOURCES } from './customFonts';
 import { makeSlideBackgroundPatch } from './slideBackground';
 import { getThemeByKey, applyThemeToSlide } from './pptThemes';
 
@@ -340,7 +341,11 @@ export const PptEditorModal = ({
   let vazirmatnFont = undefined;
   try {
     const { useFonts, Vazirmatn_400Regular } = require('@expo-google-fonts/vazirmatn');
+    // Bundled Unicode Kurdish fonts load here in the background (this modal stays mounted), so app
+    // launch never waits for them; Vazirmatn gates the default UI font as before.
     const [fontsLoaded] = useFonts({ Vazirmatn: Vazirmatn_400Regular });
+    // Separate call: a failing custom font never blocks Vazirmatn
+    useFonts(CUSTOM_FONT_SOURCES);
     if (fontsLoaded) vazirmatnFont = 'Vazirmatn';
   } catch (e) {
     // Fallback if font package is not present
@@ -1302,6 +1307,7 @@ export const PptEditorModal = ({
       const widthPt = 960;
       const heightPt = is43 ? 720 : 540;
 
+      const pdfFontCss = await getPdfFontFaceCss(allSlidesToRender);
       const slideHtmls = [];
       for (let i = 0; i < allSlidesToRender.length; i++) {
         const slideObj = allSlidesToRender[i];
@@ -1316,6 +1322,7 @@ export const PptEditorModal = ({
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
+  ${pdfFontCss}
   @page {
     size: ${widthPt}pt ${heightPt}pt;
     margin: 0;

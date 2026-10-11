@@ -6,6 +6,8 @@ import { getElementRuns } from './formattedText';
 import { renderSvgShape, getShapeSvgHtml, SHAPE_MAP } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getSlideBackground, getBackgroundCss } from './slideBackground';
+import { getDisplayFontFamily, getCssFontStack } from './fonts';
+import { CUSTOM_KURDISH_FONTS } from './customFonts';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -160,7 +162,7 @@ export const PptCleanSlide = React.forwardRef(({
                         }}
                       >
                         {scriptRuns.map((sRun, sIdx) => (
-                          <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: sRun.fontFamily }}>
+                          <Text key={`srun_${rIdx}_${sIdx}`} style={{ fontFamily: getDisplayFontFamily(sRun.fontFamily) }}>
                             {sRun.text}
                           </Text>
                         ))}
@@ -362,6 +364,60 @@ function colorToRgba(colorStr, opacity = 1.0) {
   return colorStr;
 }
 
+// @font-face for the fonts the app bundles (Vazirmatn + the Unicode Kurdish TTFs in assets/font),
+// so the PDF uses the same fonts as the canvas. Windows-only fonts use the same generic families
+// as on screen.
+const PDF_EMBED_FONTS = {
+  Vazirmatn: () => require('@expo-google-fonts/vazirmatn').Vazirmatn_400Regular,
+  ShBaibwnKurdish: () => require('../assets/font/ShBaibwnKurdish.ttf'),
+  ShKhaldarKurdish: () => require('../assets/font/ShKhaldarKurdish.ttf'),
+  ShSharifKurdish: () => require('../assets/font/ShSharifKurdish.ttf'),
+  ShSamikKurdish: () => require('../assets/font/ShSamikKurdish.ttf'),
+  // Bundled Unicode Kurdish fonts (customFonts.js)
+  ...CUSTOM_KURDISH_FONTS.reduce((acc, f) => {
+    acc[f.id] = () => f.file;
+    return acc;
+  }, {}),
+};
+const pdfFontFaceCache = {};
+
+async function loadPdfFontFace(family) {
+  if (pdfFontFaceCache[family] !== undefined) return pdfFontFaceCache[family];
+  try {
+    const { Asset } = require('expo-asset');
+    const asset = Asset.fromModule(PDF_EMBED_FONTS[family]());
+    if (!asset.localUri) await asset.downloadAsync();
+    const fontBase64 = await FileSystem.readAsStringAsync(asset.localUri || asset.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    pdfFontFaceCache[family] = `@font-face { font-family: '${family}'; src: url(data:font/ttf;base64,${fontBase64}) format('truetype'); font-weight: normal; font-style: normal; }`;
+  } catch (err) {
+    console.log('[PDF Export] Font embed error:', family, err?.message || err);
+    pdfFontFaceCache[family] = '';
+  }
+  return pdfFontFaceCache[family];
+}
+
+// slides: the slides being exported — only the bundled fonts they use are embedded
+export async function getPdfFontFaceCss(slides = []) {
+  const used = new Set(['Vazirmatn']);
+  for (const slide of slides) {
+    for (const elem of slide?.elements || []) {
+      if (elem.type !== 'text') continue;
+      const names = [elem.kurdishFont, ...getElementRuns(elem).map((r) => r.kurdishFont || r.kuFont)];
+      for (const n of names) {
+        const display = getDisplayFontFamily(n);
+        if (PDF_EMBED_FONTS[display]) used.add(display);
+      }
+    }
+  }
+  const faces = [];
+  for (const family of used) {
+    faces.push(await loadPdfFontFace(family));
+  }
+  return faces.join('\n');
+}
+
 export async function renderSlideToHtml(slide, width = 960, height = 540, fontFamily = 'Tahoma', slideIndex = 0) {
   const canvasWidth = width;
   const canvasHeight = height;
@@ -426,7 +482,7 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
             color: ${run.color || '#1c1c1e'};
             ${runHighlight ? `background-color: ${runHighlight};` : ''}
             ${runShadow ? `text-shadow: ${textShadowCss};` : ''}
-            font-family: '${sRun.fontFamily}', sans-serif;
+            font-family: ${getCssFontStack(sRun.fontFamily)};
           ">${escapeHtml(sRun.text)}</span>
         `).join('');
       }).join('');

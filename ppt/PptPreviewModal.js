@@ -11,6 +11,7 @@ import {
 import { getElementRuns } from './formattedText';
 import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
+import { getDisplayFontFamily } from './fonts';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -120,7 +121,7 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
                               textDecorationLine: run.underline ? 'underline' : elem.textDecorationLine || 'none',
                               color: run.color || '#1c1c1e',
                               backgroundColor: runHighlight,
-                              fontFamily: fontFamily || undefined,
+                              fontFamily: getDisplayFontFamily(run.kurdishFont || run.kuFont || elem.kurdishFont || 'Tahoma'),
                             }}
                           >
                             {run.text}

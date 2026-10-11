@@ -12,7 +12,15 @@ import {
   Keyboard,
   KeyboardAvoidingView,
 } from 'react-native';
-import { KURDISH_FONTS, ENGLISH_FONTS } from './fonts';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  KURDISH_FONTS,
+  KURDISH_FONT_GROUPS,
+  ENGLISH_FONTS,
+  KURDISH_SAMPLE_TEXT,
+  LATIN_SAMPLE_TEXT,
+  getDisplayFontFamily,
+} from './fonts';
 import {
   getElementRuns,
   updateElementText,
@@ -202,6 +210,7 @@ export const PptTextToolbar = forwardRef(({
   setShowSoftInputOnFocus,
   onRequestClose,
 }, ref) => {
+  const safeInsets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
   const [editTextModal, setEditTextModal] = useState(false);
@@ -417,6 +426,41 @@ export const PptTextToolbar = forwardRef(({
     restoreSelection(savedRange);
   }
 
+  // Font choice: applies to the selected range (sticky selection kept). With no range selected
+  // (only a cursor), the font is applied to the whole text box instead of doing nothing.
+  function applyFontChoice(fontKey, fontName) {
+    const plain = runs.map((r) => r.text).join('');
+    const sticky = stickyRangeRef.current;
+    const hasRange =
+      !!plain && !!sticky && sticky.start !== undefined && sticky.end !== undefined && sticky.start !== sticky.end;
+    if (hasRange) {
+      applyRunStyle({ [fontKey]: fontName }, fontKey);
+      return;
+    }
+    if (!plain) {
+      showNoSelectionToast();
+      return;
+    }
+    const legacyKey = fontKey === 'kuFont' ? 'kurdishFont' : 'englishFont';
+    const newRuns = runs.map((r) => {
+      const next = { ...r, [fontKey]: fontName };
+      delete next[legacyKey];
+      return next;
+    });
+    const { color: _c, highlight: _h, highlightColor: _hc, shadowColor: _sc, shadow: _s, ...elemClean } = element;
+    onChangeElement({
+      ...elemClean,
+      [legacyKey]: fontName,
+      runs: newRuns,
+      formattedRuns: newRuns,
+      text: plain,
+    });
+    if (sticky) restoreSelection({ start: sticky.start ?? 0, end: sticky.end ?? 0 });
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('فۆنت بۆ هەموو دەقەکە دانرا', ToastAndroid.SHORT);
+    }
+  }
+
   // Active selection/word style query
   const currentSel = stickyRangeRef.current || pendingSelRef.current || selRef.current || selection;
   const currentStyle = getSelectionStyle(element, currentSel);
@@ -596,8 +640,9 @@ export const PptTextToolbar = forwardRef(({
     );
   });
 
-  const activeKurdishObj = KURDISH_FONTS.find((f) => f.name === currentKurdishFont) || KURDISH_FONTS[0];
-  const activeEnglishObj = ENGLISH_FONTS.find((f) => f.name === currentEnglishFont) || ENGLISH_FONTS[0];
+  const OLD_FONT_LABEL = 'فۆنتێکی کۆن';
+  const activeKurdishLabel = (KURDISH_FONTS.find((f) => f.name === currentKurdishFont) || { label: OLD_FONT_LABEL }).label;
+  const activeEnglishLabel = (ENGLISH_FONTS.find((f) => f.name === currentEnglishFont) || { label: OLD_FONT_LABEL }).label;
 
   const handleCloseFontModal = () => {
     setFontModalVisible(false);
@@ -634,7 +679,7 @@ export const PptTextToolbar = forwardRef(({
           onPress={() => setActiveTab('font')}
         >
           <Text style={[styles.tabHeaderBtnText, activeTab === 'font' && styles.tabHeaderBtnTextActive]}>
-            {`فۆنت 🔤 (${activeKurdishObj.name})`}
+            فۆنت
           </Text>
         </TouchableOpacity>
 
@@ -831,11 +876,11 @@ export const PptTextToolbar = forwardRef(({
                 setFontModalVisible(true);
               }}
             >
-              <Text style={styles.fontCardSub}>فۆنتی کوردی (Kurdish)</Text>
-              <Text style={[styles.fontCardTitle, { fontFamily: currentKurdishFont }]}>
-                {activeKurdishObj.label}
+              <Text style={styles.fontCardSub}>فۆنتی کوردی</Text>
+              <Text style={[styles.fontCardTitle, { fontFamily: getDisplayFontFamily(currentKurdishFont) }]}>
+                {activeKurdishLabel}
               </Text>
-              <Text style={styles.fontCardAction}>گۆڕین و بینینی ڕاستەوخۆ 🔤 〉</Text>
+              <Text style={styles.fontCardAction}>گۆڕینی فۆنت 〈</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -846,32 +891,32 @@ export const PptTextToolbar = forwardRef(({
                 setFontModalVisible(true);
               }}
             >
-              <Text style={styles.fontCardSub}>فۆنتی ئینگلیزی (English)</Text>
-              <Text style={[styles.fontCardTitle, { fontFamily: currentEnglishFont }]}>
-                {activeEnglishObj.label}
+              <Text style={styles.fontCardSub}>فۆنتی ئینگلیزی</Text>
+              <Text style={[styles.fontCardTitle, { fontFamily: getDisplayFontFamily(currentEnglishFont) }]}>
+                {activeEnglishLabel}
               </Text>
-              <Text style={styles.fontCardAction}>گۆڕین و بینینی ڕاستەوخۆ 🔤 〉</Text>
+              <Text style={styles.fontCardAction}>گۆڕینی فۆنت 〈</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.sectionTitle, { marginTop: 6 }]}>فۆنتە خێرا و باوەکان (Quick Pick):</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 6 }]}>هەڵبژاردنی خێرا:</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             keyboardShouldPersistTaps="always"
             contentContainerStyle={{ gap: 6 }}
           >
-            {KURDISH_FONTS.slice(0, 10).map((font) => {
+            {KURDISH_FONTS.filter((f) => f.group !== 'legacy').map((font) => {
               const isSelected = currentKurdishFont === font.name;
               return (
                 <TouchableOpacity
                   key={`quick_ku_${font.name}`}
                   style={[styles.fontChip, isSelected && styles.fontChipActive]}
                   onPressIn={handlePressIn}
-                  onPress={() => applyRunStyle({ kuFont: font.name }, 'kuFont')}
+                  onPress={() => applyFontChoice('kuFont', font.name)}
                 >
-                  <Text style={[styles.fontChipText, { fontFamily: font.name }, isSelected && styles.fontChipTextActive]}>
-                    {isSelected ? `✓ ${font.name}` : font.name}
+                  <Text style={[styles.fontChipText, { fontFamily: font.display }, isSelected && styles.fontChipTextActive]}>
+                    {isSelected ? `✓ ${font.label}` : font.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -1405,7 +1450,7 @@ export const PptTextToolbar = forwardRef(({
           activeOpacity={1}
           onPress={handleCloseFontModal}
         >
-          <TouchableOpacity style={styles.bottomSheetBox} activeOpacity={1}>
+          <View style={styles.bottomSheetBox} onStartShouldSetResponder={() => true}>
             <View style={styles.bottomSheetHandle} />
 
             <View style={styles.fontModalHeader}>
@@ -1413,10 +1458,10 @@ export const PptTextToolbar = forwardRef(({
                 style={styles.doneBtn}
                 onPress={handleCloseFontModal}
               >
-                <Text style={styles.doneBtnText}>تەواو (Done) ✓</Text>
+                <Text style={styles.doneBtnText}>تەواو ✓</Text>
               </TouchableOpacity>
 
-              <Text style={styles.fontModalTitle}>هەڵبژاردنی فۆنت 🔤</Text>
+              <Text style={styles.fontModalTitle}>هەڵبژاردنی فۆنت</Text>
 
               <TouchableOpacity onPress={handleCloseFontModal}>
                 <Text style={styles.fontModalClose}>✕</Text>
@@ -1424,15 +1469,14 @@ export const PptTextToolbar = forwardRef(({
             </View>
 
             <View style={styles.livePreviewBox}>
-              <Text style={styles.livePreviewLabel}>پێشاندانی ڕاستەوخۆی دەقەکەت (Live Canvas Text):</Text>
+              <Text style={styles.livePreviewLabel}>پێشاندانی ڕاستەوخۆ</Text>
               <Text
                 style={[
                   styles.livePreviewText,
                   {
-                    fontFamily:
-                      fontModalCategory === 'kurdish'
-                        ? currentKurdishFont
-                        : currentEnglishFont,
+                    fontFamily: getDisplayFontFamily(
+                      fontModalCategory === 'kurdish' ? currentKurdishFont : currentEnglishFont
+                    ),
                     color: currentColor !== 'transparent' ? currentColor : '#ffffff',
                   },
                 ]}
@@ -1441,15 +1485,15 @@ export const PptTextToolbar = forwardRef(({
                 {element.text && element.text.trim()
                   ? element.text
                   : fontModalCategory === 'kurdish'
-                  ? 'ئەبجەد هەوز (دەقەکەت لێرەیە)'
-                  : 'Abc 123 (Your Text Here)'}
+                  ? KURDISH_SAMPLE_TEXT
+                  : LATIN_SAMPLE_TEXT}
               </Text>
             </View>
 
             <View style={styles.fontSearchBox}>
               <TextInput
                 style={styles.fontSearchInput}
-                placeholder="گەڕان لە فۆنتەکان... / Search fonts..."
+                placeholder="گەڕان لە فۆنتەکان..."
                 placeholderTextColor="#777"
                 value={fontSearchQuery}
                 onChangeText={setFontSearchQuery}
@@ -1475,7 +1519,7 @@ export const PptTextToolbar = forwardRef(({
                     fontModalCategory === 'kurdish' && styles.fontTabTextActive,
                   ]}
                 >
-                  فۆنتی کوردی (Kurdish)
+                  فۆنتی کوردی
                 </Text>
               </TouchableOpacity>
 
@@ -1492,47 +1536,76 @@ export const PptTextToolbar = forwardRef(({
                     fontModalCategory === 'english' && styles.fontTabTextActive,
                   ]}
                 >
-                  فۆنتی ئینگلیزی (English)
+                  فۆنتی ئینگلیزی
                 </Text>
               </TouchableOpacity>
             </View>
 
+            <Text style={styles.fontNoteText}>
+              فۆنتەکانی ویندۆز لە مۆبایلدا بە فۆنتێکی نزیک پیشان دەدرێن و لە پاوەرپۆینتدا وەک خۆیان دەردەکەون.
+            </Text>
+
             <ScrollView
-              style={{ flex: 1 }}
+              style={styles.fontListScroll}
+              contentContainerStyle={{ paddingBottom: 24 + (safeInsets?.bottom || 0) }}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="always"
+              nestedScrollEnabled
             >
-              {filteredFontList.map((font) => {
-                const isKurdishTab = fontModalCategory === 'kurdish';
-                const currentSelected = isKurdishTab ? currentKurdishFont : currentEnglishFont;
-                const isSelected = currentSelected === font.name;
-                const sampleText = isKurdishTab ? 'ئەبجەد هەوز' : 'Abc 123';
+              {filteredFontList.length === 0 ? (
+                <Text style={styles.fontEmptyText}>
+                  {fontSearchQuery.trim() ? 'هیچ فۆنتێک بەم ناوە نەدۆزرایەوە' : 'هیچ فۆنتێک لەم بەشەدا نییە'}
+                </Text>
+              ) : (
+                (fontModalCategory === 'kurdish'
+                  ? KURDISH_FONT_GROUPS.map((g) => ({
+                      key: g.key,
+                      title: g.title,
+                      fonts: filteredFontList.filter((f) => f.group === g.key),
+                    }))
+                  : [{ key: 'english', title: null, fonts: filteredFontList }]
+                )
+                  .filter((section) => section.fonts.length > 0)
+                  .map((section) => (
+                    <View key={`font_section_${section.key}`}>
+                      {!!section.title && (
+                        <Text style={styles.fontSectionTitle}>{section.title}</Text>
+                      )}
+                      {section.fonts.map((font) => {
+                        const isKurdishTab = fontModalCategory === 'kurdish';
+                        const currentSelected = isKurdishTab ? currentKurdishFont : currentEnglishFont;
+                        const isSelected = currentSelected === font.name;
+                        const sampleText = isKurdishTab ? KURDISH_SAMPLE_TEXT : LATIN_SAMPLE_TEXT;
 
-                return (
-                  <TouchableOpacity
-                    key={font.name}
-                    style={[styles.fontRowItem, isSelected && styles.fontRowItemActive]}
-                    onPressIn={handlePressIn}
-                    onPress={() => {
-                      if (isKurdishTab) {
-                        applyRunStyle({ kuFont: font.name }, 'kuFont');
-                      } else {
-                        applyRunStyle({ enFont: font.name }, 'enFont');
-                      }
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.fontRowLabel, { fontFamily: font.name }, isSelected && styles.fontRowLabelActive]}>
-                        {font.label}
-                      </Text>
-                      <Text style={styles.fontRowSample}>{sampleText}</Text>
+                        return (
+                          <TouchableOpacity
+                            key={font.name}
+                            style={[styles.fontRowItem, isSelected && styles.fontRowItemActive]}
+                            onPressIn={handlePressIn}
+                            onPress={() => applyFontChoice(isKurdishTab ? 'kuFont' : 'enFont', font.name)}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <View style={styles.fontRowHeader}>
+                                <Text style={[styles.fontRowLabel, { fontFamily: font.display }, isSelected && styles.fontRowLabelActive]}>
+                                  {font.label}
+                                </Text>
+                                {!!font.badge && (
+                                  <View style={styles.fontBadge}>
+                                    <Text style={styles.fontBadgeText}>{font.badge}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text style={[styles.fontRowSample, { fontFamily: font.display }]}>{sampleText}</Text>
+                            </View>
+                            {isSelected && <Text style={styles.checkIcon}>✓</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                    {isSelected && <Text style={styles.checkIcon}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
+                  ))
+              )}
             </ScrollView>
-          </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </Modal>
     </View>
@@ -1955,7 +2028,26 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
-    maxHeight: '80%',
+    paddingBottom: 0,
+    height: '68%',
+  },
+  fontListScroll: {
+    flex: 1,
+    minHeight: 120,
+  },
+  fontSectionTitle: {
+    color: '#8B3A2B',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  fontEmptyText: {
+    color: '#8e8e93',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 24,
   },
   bottomSheetHandle: {
     width: 36,
@@ -2043,8 +2135,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  fontNoteText: {
+    color: '#8e8e93',
+    fontSize: 10,
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  fontRowHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  fontBadge: {
+    backgroundColor: '#8B3A2B44',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  fontBadgeText: {
+    color: '#ffb4a6',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
   fontRowItem: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 8,
@@ -2057,16 +2171,18 @@ const styles = StyleSheet.create({
   },
   fontRowLabel: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
+    textAlign: 'right',
   },
   fontRowLabelActive: {
     color: '#30d158',
     fontWeight: 'bold',
   },
   fontRowSample: {
-    color: '#777',
-    fontSize: 11,
+    color: '#c7c7cc',
+    fontSize: 14,
     marginTop: 2,
+    textAlign: 'right',
   },
   checkIcon: {
     color: '#30d158',
