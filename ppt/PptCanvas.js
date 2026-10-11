@@ -16,16 +16,127 @@ import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// 8 resize handles. sx/sy: which side of the box the handle moves (-1 = left/top, 1 = right/bottom,
+// 0 = that axis is untouched). fx/fy: handle position as a fraction of the box size.
 const RESIZE_HANDLES = [
-  { key: 'tl', style: { left: -16, top: -16 } },
-  { key: 'tc', style: { left: '50%', marginLeft: -16, top: -16 } },
-  { key: 'tr', style: { right: -16, top: -16 } },
-  { key: 'ml', style: { left: -16, top: '50%', marginTop: -16 } },
-  { key: 'mr', style: { right: -16, top: '50%', marginTop: -16 } },
-  { key: 'bl', style: { left: -16, bottom: -16 } },
-  { key: 'bc', style: { left: '50%', marginLeft: -16, bottom: -16 } },
-  { key: 'br', style: { right: -16, bottom: -16 } },
+  { key: 'tl', sx: -1, sy: -1, fx: 0, fy: 0 },
+  { key: 'tc', sx: 0, sy: -1, fx: 0.5, fy: 0 },
+  { key: 'tr', sx: 1, sy: -1, fx: 1, fy: 0 },
+  { key: 'ml', sx: -1, sy: 0, fx: 0, fy: 0.5 },
+  { key: 'mr', sx: 1, sy: 0, fx: 1, fy: 0.5 },
+  { key: 'bl', sx: -1, sy: 1, fx: 0, fy: 1 },
+  { key: 'bc', sx: 0, sy: 1, fx: 0.5, fy: 1 },
+  { key: 'br', sx: 1, sy: 1, fx: 1, fy: 1 },
 ];
+const HANDLE_TOUCH_SIZE = 44;
+const MIN_ELEM_PERCENT = 5;
+
+/**
+ * Shared resize math for every element type (text, image, shape).
+ * g: gesture snapshot { handle, elem, geom: {x,y,w,h} in %, rotation, minY, fontPt, cw, ch }
+ * (dx, dy): finger movement in screen px. Works in the element's own (rotated) axes and keeps the
+ * opposite side / corner fixed on screen. Returns { x, y, width, height, keepAspect } in %.
+ */
+export function computeResizeGeometry(g, dx, dy) {
+  const { handle, elem, geom, cw, ch } = g;
+  const { sx, sy } = handle;
+  const W0 = (geom.w / 100) * cw;
+  const H0 = (geom.h / 100) * ch;
+  const cx0 = (geom.x / 100) * cw + W0 / 2;
+  const cy0 = (geom.y / 100) * ch + H0 / 2;
+  const th = ((g.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
+
+  // Finger movement in the element's local axes
+  const lx = dx * cos + dy * sin;
+  const ly = -dx * sin + dy * cos;
+
+  const isCorner = sx !== 0 && sy !== 0;
+  const keepAspect =
+    elem.type === 'image' && (isCorner || !!(elem.lockAspect ?? elem.keepAspect));
+  const minW = (MIN_ELEM_PERCENT / 100) * cw;
+  const minH = (MIN_ELEM_PERCENT / 100) * ch;
+  const hasText = elem.type === 'text' && elem.text && elem.text.trim();
+
+  const textMinHeightPx = (wPx) => {
+    if (!hasText) return 0;
+    const meas = measureElementLayout({ ...elem, width: (wPx / cw) * 100 }, g.fontPt);
+    const neededPercent = Math.ceil((meas.totalHeightPt / SLIDE.heightPt) * 100) + 2;
+    return (neededPercent / 100) * ch;
+  };
+
+  const sizeFor = (tx, ty) => {
+    const mx = lx * tx;
+    const my = ly * ty;
+    let w = W0;
+    let h = H0;
+    if (keepAspect) {
+      let s;
+      if (isCorner) {
+        // Project the drag onto the box diagonal
+        s = 1 + (sx * mx * W0 + sy * my * H0) / (W0 * W0 + H0 * H0);
+      } else if (sx !== 0) {
+        s = (W0 + sx * mx) / W0;
+      } else {
+        s = (H0 + sy * my) / H0;
+      }
+      s = Math.max(s, minW / W0, minH / H0);
+      w = W0 * s;
+      h = H0 * s;
+    } else {
+      if (sx !== 0) w = Math.max(minW, W0 + sx * mx);
+      if (sy !== 0) h = Math.max(minH, H0 + sy * my);
+    }
+    // Text: width re-wraps, font size stays; height never smaller than the text needs
+    if (hasText) h = Math.max(h, textMinHeightPx(w));
+
+    // Opposite side/corner stays fixed on screen (local anchor rotated into screen space).
+    // A text box that auto-grows from a left/right handle keeps its top edge fixed.
+    const vy = sy !== 0 ? sy : (hasText && h !== H0 ? 1 : 0);
+    const ax = (-sx * W0) / 2;
+    const ay = (-vy * H0) / 2;
+    const anchorX = cx0 + ax * cos - ay * sin;
+    const anchorY = cy0 + ax * sin + ay * cos;
+    const bx = (-sx * w) / 2;
+    const by = (-vy * h) / 2;
+    const ncx = anchorX - (bx * cos - by * sin);
+    const ncy = anchorY - (bx * sin + by * cos);
+
+    return {
+      x: ((ncx - w / 2) / cw) * 100,
+      y: ((ncy - h / 2) / ch) * 100,
+      width: (w / cw) * 100,
+      height: (h / ch) * 100,
+      keepAspect,
+    };
+  };
+
+  const EPS = 0.05;
+  const inside = (r) =>
+    r.x >= -EPS &&
+    r.y >= (g.minY || 0) - EPS &&
+    r.x + r.width <= 100 + EPS &&
+    r.y + r.height <= 100 + EPS;
+
+  const full = sizeFor(1, 1);
+  if (inside(full) || !inside(sizeFor(0, 0))) return full;
+
+  // Keep the element inside the slide: shrink the drag per local axis as little as needed
+  const maxT = (fn) => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (inside(fn(mid))) lo = mid;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const tx = inside(sizeFor(1, 0)) ? 1 : maxT((t) => sizeFor(t, 0));
+  const ty = inside(sizeFor(tx, 1)) ? 1 : maxT((t) => sizeFor(tx, t));
+  return sizeFor(tx, ty);
+}
 
 function useRenderWhy(name, props) {
   const prevRef = useRef(null);
@@ -291,7 +402,6 @@ export const PptCanvas = ({
   onCanvasTap,
   onShapeDoubleTap,
 }) => {
-  const [resizingElement, setResizingElement] = useState(null);
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
   const touchTimeoutRef = React.useRef(null);
@@ -372,124 +482,88 @@ export const PptCanvas = ({
     });
   };
 
-  // 8-Way Resize Drag Handler
-  const create8WayResizePanResponder = (element, handleKey) => {
-    let initialX = element.x;
-    let initialY = element.y;
-    let initialW = element.width;
-    let initialH = element.height;
+  // ---- Unified 8-handle resize (all element types) ----
+  // Responders are created once (stable across renders) so an active drag never loses its
+  // gesture state. During the drag only a local draft geometry changes; the element is committed
+  // once on release => one drag = one undo step.
+  const [resizeDraft, setResizeDraft] = useState(null); // { id, x, y, width, height }
+  const resizeCtxRef = useRef(null); // selected element + its on-screen geometry (set during render)
+  const resizeGestureRef = useRef(null);
+  const resizeEnvRef = useRef({});
+  resizeEnvRef.current = { onChangeElement, canvasWidth, canvasHeight };
 
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => !element.locked,
-      onMoveShouldSetPanResponder: () => !element.locked,
-      onPanResponderGrant: () => {
-        if (element.locked) return;
-        initialX = element.x;
-        initialY = element.y;
-        initialW = element.width;
-        initialH = element.height;
-        setResizingElement({ id: element.id, width: element.width, height: element.height });
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (element.locked) return;
-
-        const deltaXPercent = (gestureState.dx / canvasWidth) * 100;
-        const deltaYPercent = (gestureState.dy / canvasHeight) * 100;
-
-        let newX = initialX;
-        let newY = initialY;
-        let newW = initialW;
-        let newH = initialH;
-
-        const MIN_W = 5;
-        const MIN_H = 3;
-
-        let minAllowedY = 0;
-        if (element.type === 'text') {
-          const titleElem = (slide.elements || []).find(
-            (e) => e.id !== element.id && e.type === 'text' && e.y < element.y && e.fontSize >= 20
-          );
-          if (titleElem) {
-            minAllowedY = Math.min(90, titleElem.y + titleElem.height + 2);
-          }
-        }
-
-        const isAspectLocked = !!(element.lockAspect ?? element.keepAspect);
-        const aspect = element.aspectRatio && element.aspectRatio > 0
-          ? element.aspectRatio
-          : (initialW / Math.max(0.1, initialH));
-
-        if (isAspectLocked) {
-          // Maintain aspect ratio for ALL handle types when locked
-          if (handleKey === 'r' || handleKey === 'br' || handleKey === 'tr') {
-            newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
-            newH = Math.max(MIN_H, newW / aspect);
-            if (handleKey === 'tr') {
-              newY = Math.max(minAllowedY, initialY + (initialH - newH));
-            }
-          } else if (handleKey === 'l' || handleKey === 'bl' || handleKey === 'tl') {
-            const maxLeft = initialX + initialW - MIN_W;
-            newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
-            newW = initialW + (initialX - newX);
-            newH = Math.max(MIN_H, newW / aspect);
-            if (handleKey === 'tl') {
-              newY = Math.max(minAllowedY, initialY + (initialH - newH));
-            }
-          } else if (handleKey === 'b') {
-            newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
-            newW = Math.max(MIN_W, newH * aspect);
-          } else if (handleKey === 't') {
-            const maxTop = initialY + initialH - MIN_H;
-            let targetY = initialY + deltaYPercent;
-            if (minAllowedY > 0 && targetY < minAllowedY) {
-              targetY = minAllowedY;
-            }
-            newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
-            newH = initialH + (initialY - newY);
-            newW = Math.max(MIN_W, newH * aspect);
-          }
-        } else {
-          // Unlocked freeform resizing
-          if (handleKey.includes('r')) {
-            newW = Math.max(MIN_W, Math.min(100 - initialX, initialW + deltaXPercent));
-          }
-          if (handleKey.includes('l')) {
-            const maxLeft = initialX + initialW - MIN_W;
-            newX = Math.max(0, Math.min(maxLeft, initialX + deltaXPercent));
-            newW = initialW + (initialX - newX);
-          }
-          if (handleKey.includes('b')) {
-            newH = Math.max(MIN_H, Math.min(100 - initialY, initialH + deltaYPercent));
-          }
-          if (handleKey.includes('t')) {
-            const maxTop = initialY + initialH - MIN_H;
-            let targetY = initialY + deltaYPercent;
-            if (minAllowedY > 0 && targetY < minAllowedY) {
-              targetY = minAllowedY;
-            }
-            newY = Math.max(minAllowedY, Math.min(maxTop, targetY));
-            newH = initialH + (initialY - newY);
-          }
-        }
-
-        const currentAspect = isAspectLocked ? aspect : (newH > 0 ? (newW / newH) : (element.aspectRatio || 1));
+  const resizeResponders = useMemo(() => {
+    const map = {};
+    RESIZE_HANDLES.forEach((handle) => {
+      const finish = () => {
+        const g = resizeGestureRef.current;
+        resizeGestureRef.current = null;
+        setResizeDraft(null);
+        if (!g || !g.last) return;
+        const r = g.last;
+        const elem = g.elem;
         const updated = {
-          ...element,
-          x: Math.round(newX * 10) / 10,
-          y: Math.round(newY * 10) / 10,
-          width: Math.round(newW * 10) / 10,
-          height: Math.round(newH * 10) / 10,
-          aspectRatio: currentAspect,
+          ...elem,
+          x: Math.round(r.x * 10) / 10,
+          y: Math.round(r.y * 10) / 10,
+          width: Math.round(r.width * 10) / 10,
+          height: elem.type === 'text' ? Math.ceil(r.height * 10) / 10 : Math.round(r.height * 10) / 10,
         };
+        if (!r.keepAspect) {
+          updated.aspectRatio = updated.width / Math.max(0.1, updated.height);
+        }
+        if (elem.type === 'text') {
+          // Resizing a text box never changes its font size
+          updated.fontMode = 'manual';
+          updated.fontSize = Math.round(g.fontPt);
+        }
+        const env = resizeEnvRef.current;
+        if (env.onChangeElement) env.onChangeElement(updated);
+      };
 
-        setResizingElement({ id: element.id, width: updated.width, height: updated.height });
-        onChangeElement(updated);
-      },
-      onPanResponderRelease: () => {
-        setResizingElement(null);
-      },
+      map[handle.key] = PanResponder.create({
+        onStartShouldSetPanResponder: () => {
+          const ctx = resizeCtxRef.current;
+          return !!ctx && !ctx.elem.locked;
+        },
+        onMoveShouldSetPanResponder: () => false,
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
+        onPanResponderGrant: () => {
+          const ctx = resizeCtxRef.current;
+          if (!ctx || ctx.elem.locked) {
+            resizeGestureRef.current = null;
+            return;
+          }
+          const env = resizeEnvRef.current;
+          resizeGestureRef.current = {
+            ...ctx,
+            handle,
+            cw: env.canvasWidth,
+            ch: env.canvasHeight,
+            last: null,
+          };
+          setResizeDraft({
+            id: ctx.elem.id,
+            x: ctx.geom.x,
+            y: ctx.geom.y,
+            width: ctx.geom.w,
+            height: ctx.geom.h,
+          });
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const g = resizeGestureRef.current;
+          if (!g) return;
+          const r = computeResizeGeometry(g, gestureState.dx, gestureState.dy);
+          g.last = r;
+          setResizeDraft({ id: g.elem.id, x: r.x, y: r.y, width: r.width, height: r.height });
+        },
+        onPanResponderRelease: finish,
+        onPanResponderTerminate: finish,
+      });
     });
-  };
+    return map;
+  }, []);
 
   if (!slide) {
     return (
@@ -503,6 +577,7 @@ export const PptCanvas = ({
   const planned = planPage(slide);
   const elements = (planned.computedPage && planned.computedPage.elements) || slide.elements || [];
   const splitCount = planned.splitCount || 0;
+  resizeCtxRef.current = null;
 
   return (
     <View style={styles.container}>
@@ -539,10 +614,6 @@ export const PptCanvas = ({
             }
           }
 
-          const left = (elem.x / 100) * canvasWidth;
-          const top = (effectiveY / 100) * canvasHeight;
-          const elemWidth = (elem.width / 100) * canvasWidth;
-
           let effectiveHeight = elem.height;
           if (elem.type === 'text' && elem.text && elem.text.trim()) {
             const computedPt = elem.computedFontSize || elem.fontSize || 18;
@@ -553,7 +624,17 @@ export const PptCanvas = ({
             }
           }
 
-          const elemHeight = (effectiveHeight / 100) * canvasHeight;
+          // While a resize handle is dragged, the box follows the live draft geometry
+          const draft = resizeDraft && resizeDraft.id === elem.id ? resizeDraft : null;
+          const boxX = draft ? draft.x : elem.x;
+          const boxY = draft ? draft.y : effectiveY;
+          const boxW = draft ? draft.width : elem.width;
+          const boxH = draft ? draft.height : effectiveHeight;
+
+          const left = (boxX / 100) * canvasWidth;
+          const top = (boxY / 100) * canvasHeight;
+          const elemWidth = (boxW / 100) * canvasWidth;
+          const elemHeight = (boxH / 100) * canvasHeight;
 
           const dragResponder = createMovePanResponder(elem);
 
@@ -565,6 +646,23 @@ export const PptCanvas = ({
           const displayRuns = getDisplayRunsWithSelection(formattedRuns, activeStickyRange);
 
           const rotation = elem.rotation || 0;
+          const showHandles = isSelected && !elem.locked;
+          if (isSelected && !draft) {
+            let minY = 0;
+            if (elem.type === 'text') {
+              const titleAbove = elements.find(
+                (e) => e.id !== elem.id && e.type === 'text' && e.y < elem.y && (e.fontSize >= 20 || e.fontWeight === 'bold')
+              );
+              if (titleAbove) minY = Math.min(90, titleAbove.y + titleAbove.height + 2);
+            }
+            resizeCtxRef.current = {
+              elem,
+              geom: { x: boxX, y: boxY, w: boxW, h: boxH },
+              rotation,
+              minY,
+              fontPt: computedPt,
+            };
+          }
           const opacity = elem.opacity !== undefined ? elem.opacity : 1.0;
           const borderRadiusPct = elem.borderRadius || 0;
           const borderWidth = elem.border?.width || 0;
@@ -592,7 +690,6 @@ export const PptCanvas = ({
                   transform: rotation ? [{ rotate: `${rotation}deg` }] : [],
                   opacity: elem.type === 'shape' ? 1 : opacity,
                 },
-                isSelected && styles.selectedWrapper,
               ]}
               {...(isEditing ? {} : dragResponder.panHandlers)}
             >
@@ -776,6 +873,9 @@ export const PptCanvas = ({
                 </View>
               )}
 
+              {/* Selection outline drawn exactly on the element box (no layout offset) */}
+              {isSelected && <View style={styles.selectionOutline} pointerEvents="none" />}
+
               {/* Lock badge if element is locked */}
               {elem.locked && (
                 <View style={styles.lockBadge}>
@@ -783,23 +883,20 @@ export const PptCanvas = ({
                 </View>
               )}
 
-              {/* Dimension Tooltip Badge when dragging resize */}
-              {resizingElement && resizingElement.id === elem.id && (
-                <View style={styles.sizeTooltip}>
-                  <Text style={styles.sizeTooltipText}>
-                    {`W: ${elem.width}% | H: ${elem.height}%`}
-                  </Text>
-                </View>
-              )}
-
-              {/* 8-Way Touch Handles for Selected Element */}
-              {isSelected && (
+              {/* 8 resize handles, positioned exactly on the box (they rotate with the element) */}
+              {showHandles && (
                 <>
                   {RESIZE_HANDLES.map((handle) => (
                     <View
                       key={handle.key}
-                      style={[styles.handleTouchTarget, handle.style]}
-                      {...create8WayResizePanResponder(elem, handle.key).panHandlers}
+                      style={[
+                        styles.handleTouchTarget,
+                        {
+                          left: handle.fx * elemWidth - HANDLE_TOUCH_SIZE / 2,
+                          top: handle.fy * elemHeight - HANDLE_TOUCH_SIZE / 2,
+                        },
+                      ]}
+                      {...resizeResponders[handle.key].panHandlers}
                     >
                       <View style={styles.handleDot} />
                     </View>
@@ -809,6 +906,15 @@ export const PptCanvas = ({
             </View>
           );
         })}
+
+        {/* Live size label while a resize handle is dragged */}
+        {resizeDraft && (
+          <View style={styles.sizeTooltip} pointerEvents="none">
+            <Text style={styles.sizeTooltipText}>
+              {`W: ${Math.round(resizeDraft.width)}% H: ${Math.round(resizeDraft.height)}%`}
+            </Text>
+          </View>
+        )}
 
         {/* Small badge showing extra slides when text splits */}
         {splitCount > 0 && (
@@ -887,11 +993,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     padding: 0,
   },
-  selectedWrapper: {
+  selectionOutline: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
     borderWidth: 1.5,
     borderColor: '#8B3A2B',
     borderStyle: 'dashed',
-    margin: -1.5,
+    zIndex: 998,
   },
   textContainer: {
     flex: 1,
@@ -921,8 +1032,8 @@ const styles = StyleSheet.create({
   },
   handleTouchTarget: {
     position: 'absolute',
-    width: 32,
-    height: 32,
+    width: HANDLE_TOUCH_SIZE,
+    height: HANDLE_TOUCH_SIZE,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999,
@@ -937,7 +1048,7 @@ const styles = StyleSheet.create({
   },
   sizeTooltip: {
     position: 'absolute',
-    top: -24,
+    top: 6,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.8)',
     paddingHorizontal: 8,
