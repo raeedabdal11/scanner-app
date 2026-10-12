@@ -212,9 +212,19 @@ export const SHAPE_MAP = ALL_SHAPES.reduce((acc, shape) => {
 }, {});
 
 // --- OpenXML Preset Geometry Names Mapping ---
+// Values must be valid ST_ShapeType names (checked by ppt/scripts/checkShapePrst.mjs).
+// Shape ids that are already valid names are written as-is.
 export const OPENXML_SHAPE_PRST_MAP = {
-  ellipse: 'oval',
-  circle: 'oval',
+  ellipse: 'ellipse',
+  circle: 'ellipse',
+  elbowConnector: 'bentConnector3',
+  curvedConnector: 'curvedConnector3',
+  snipRound1Rect: 'snipRoundRect',
+  lShape: 'corner',
+  diagonalStripe: 'diagStripe',
+  bezel: 'bevel',
+  explosion1: 'irregularSeal1',
+  explosion2: 'irregularSeal2',
   roundRect: 'roundRect',
   rect: 'rect',
   line: 'line',

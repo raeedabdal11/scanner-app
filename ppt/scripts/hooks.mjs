@@ -37,6 +37,10 @@ export async function load(url, context, next) {
       const m = src.match(/export const OPENXML_SHAPE_PRST_MAP = \{[\s\S]*?\n\};/);
       src = m[0];
     } else {
+      if (path.endsWith('customFonts.js')) {
+        // Metro bundles the .ttf assets; node cannot require them, and the exporter only needs the names.
+        src = src.replace(/require\('[^']+\.ttf'\)/g, 'null');
+      }
       src = `import { createRequire as __cr } from 'node:module'; const require = __cr(${JSON.stringify(url)});\n` + src;
     }
     return { format: 'module', source: src, shortCircuit: true };

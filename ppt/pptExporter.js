@@ -1461,6 +1461,8 @@ export const exportPresentationToPptx = async (
           shapeExportCount++;
           const shapeType = spec.shapeType || 'rect';
           const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow';
+          // Connectors (bentConnector3 / curvedConnector3) are open paths: outline only, never a fill
+          const isConnector = shapeType === 'elbowConnector' || shapeType === 'curvedConnector';
 
           let spPrNodes = shapeNode.getElementsByTagName('p:spPr');
           if (spPrNodes.length === 0) {
@@ -1533,7 +1535,7 @@ export const exportPresentationToPptx = async (
             }
 
             const fillParsed = parseColor(spec.fill, null);
-            if (!isLineOrArrow && fillParsed && fillParsed.hex) {
+            if (!isLineOrArrow && !isConnector && fillParsed && fillParsed.hex) {
               const solidFill = slideDoc.createElementNS(DRAWINGML_NS, 'a:solidFill');
               const srgbClr = slideDoc.createElementNS(DRAWINGML_NS, 'a:srgbClr');
               srgbClr.setAttribute('val', fillParsed.hex);
