@@ -1,3 +1,5 @@
+import { makeId } from './makeId';
+
 export const CATEGORIES = [
   'هەموو',
   'سەرەتا',
@@ -10,11 +12,7 @@ export const CATEGORIES = [
 // Builders for the simple PowerPoint-style layouts. Positions/sizes are slide
 // percentages; `maxFontPt` is the starting (largest) size the auto-fit uses.
 // Colors are the stock layout colors, so an active theme recolors them.
-let layoutElemSeq = 0;
-const newElemId = (prefix) => {
-  layoutElemSeq += 1;
-  return `${prefix}_${Date.now()}_${layoutElemSeq}_${Math.random().toString().slice(2, 6)}`;
-};
+const newElemId = (prefix) => makeId(prefix);
 
 const textBox = (x, y, width, height, text, opts = {}) => ({
   id: newElemId('elem'),
@@ -101,7 +99,7 @@ export const LAYOUTS = [
     desc: 'سەردێڕی سەرەکی و ژێرنووس بۆ پەڕەی دەستپێک',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -120,7 +118,7 @@ export const LAYOUTS = [
         lineSpacing: 1.2,
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 10,
         y: 55,
@@ -147,7 +145,7 @@ export const LAYOUTS = [
     desc: 'سەردێڕی سەرەکی بۆ جیاکردنەوەی بەشەکان',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 32,
@@ -165,7 +163,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 15,
         y: 58,
@@ -191,7 +189,7 @@ export const LAYOUTS = [
     desc: 'لیستی تەوەرە سەرەکییەکانی پاوەرپۆینتەکە',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 8,
@@ -209,7 +207,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -323,7 +321,7 @@ export const LAYOUTS = [
     desc: 'سەردێڕ لەگەڵ لیستی خاڵەکان',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 8,
@@ -341,7 +339,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -368,7 +366,7 @@ export const LAYOUTS = [
     desc: 'دابەشکردنی دەق بەسەر دوو ستوونی تەریب',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 8,
@@ -383,7 +381,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 52,
         y: 28,
@@ -399,7 +397,7 @@ export const LAYOUTS = [
         lineSpacing: 1.3,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -423,7 +421,7 @@ export const LAYOUTS = [
     desc: 'بەراوردکردنی دوو بیرۆکە یان بابەت',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -438,7 +436,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 52,
         y: 22,
@@ -453,7 +451,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 52,
         y: 36,
@@ -468,7 +466,7 @@ export const LAYOUTS = [
         lineSpacing: 1.3,
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 22,
@@ -483,7 +481,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_5`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 36,
@@ -506,7 +504,7 @@ export const LAYOUTS = [
     desc: 'پیشاندانی وتە یان دەقێکی گرنگ بە شێوازی جوان',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 10,
         y: 25,
@@ -523,7 +521,7 @@ export const LAYOUTS = [
         lineSpacing: 1.4,
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 20,
         y: 68,
@@ -546,7 +544,7 @@ export const LAYOUTS = [
     desc: 'دەقێکی زۆر گەورە بۆ ڕاکێشانی سەرنجی ئامادەبووان',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -608,7 +606,7 @@ export const LAYOUTS = [
     desc: 'وێنە لە دەستی ڕاست و دەق لە دەستی چەپ',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -623,7 +621,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'image',
         x: 52,
         y: 22,
@@ -633,7 +631,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 22,
@@ -656,7 +654,7 @@ export const LAYOUTS = [
     desc: 'وێنە لە دەستی چەپ و دەق لە دەستی ڕاست',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -671,7 +669,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 52,
         y: 22,
@@ -686,7 +684,7 @@ export const LAYOUTS = [
         lineSpacing: 1.3,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 22,
@@ -704,7 +702,7 @@ export const LAYOUTS = [
     desc: 'وێنەیەکی گەورە لەگەڵ نووسین لە خوارەوە',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 5,
@@ -714,7 +712,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 80,
@@ -737,7 +735,7 @@ export const LAYOUTS = [
     desc: 'دوو وێنەی تەریب لە تەنیشت یەکتر',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 5,
@@ -752,7 +750,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'image',
         x: 52,
         y: 20,
@@ -762,7 +760,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 20,
@@ -780,7 +778,7 @@ export const LAYOUTS = [
     desc: 'سێ وێنە لە تەنیشت یەکتر',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 5,
@@ -795,7 +793,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'image',
         x: 68,
         y: 20,
@@ -805,7 +803,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'image',
         x: 36,
         y: 20,
@@ -815,7 +813,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 20,
@@ -833,7 +831,7 @@ export const LAYOUTS = [
     desc: 'چوار وێنە لە دوو ڕیز و دوو ستووندا',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 4,
@@ -848,7 +846,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'image',
         x: 52,
         y: 16,
@@ -858,7 +856,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 16,
@@ -868,7 +866,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'image',
         x: 52,
         y: 57,
@@ -878,7 +876,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_5`,
+        id: makeId('elem'),
         type: 'image',
         x: 5,
         y: 57,
@@ -896,7 +894,7 @@ export const LAYOUTS = [
     desc: 'سەردێڕ و وێنە لە سەرەوە، وەسف لە خوارەوە',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 5,
@@ -911,7 +909,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'image',
         x: 10,
         y: 20,
@@ -921,7 +919,7 @@ export const LAYOUTS = [
         uri: null,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 75,
@@ -1009,7 +1007,7 @@ export const LAYOUTS = [
     desc: 'پیشاندانی سێ ئاماری سەرەکی و بەرچاو',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -1024,7 +1022,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 68,
         y: 28,
@@ -1039,7 +1037,7 @@ export const LAYOUTS = [
         writingDirection: 'ltr',
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 68,
         y: 52,
@@ -1053,7 +1051,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'text',
         x: 36,
         y: 28,
@@ -1068,7 +1066,7 @@ export const LAYOUTS = [
         writingDirection: 'ltr',
       },
       {
-        id: `elem_${Date.now()}_5`,
+        id: makeId('elem'),
         type: 'text',
         x: 36,
         y: 52,
@@ -1082,7 +1080,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_6`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 28,
@@ -1097,7 +1095,7 @@ export const LAYOUTS = [
         writingDirection: 'ltr',
       },
       {
-        id: `elem_${Date.now()}_7`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 52,
@@ -1119,7 +1117,7 @@ export const LAYOUTS = [
     desc: 'چوار هەنگاوی زنجیرەیی بەپێی کات',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -1134,7 +1132,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 74,
         y: 25,
@@ -1149,7 +1147,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 74,
         y: 42,
@@ -1163,7 +1161,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'text',
         x: 51,
         y: 25,
@@ -1178,7 +1176,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_5`,
+        id: makeId('elem'),
         type: 'text',
         x: 51,
         y: 42,
@@ -1192,7 +1190,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_6`,
+        id: makeId('elem'),
         type: 'text',
         x: 28,
         y: 25,
@@ -1207,7 +1205,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_7`,
+        id: makeId('elem'),
         type: 'text',
         x: 28,
         y: 42,
@@ -1221,7 +1219,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_8`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 25,
@@ -1236,7 +1234,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_9`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 42,
@@ -1258,7 +1256,7 @@ export const LAYOUTS = [
     desc: 'سێ هەنگاوی زنجیرەیی بە ڕیز',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -1273,7 +1271,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 68,
         y: 25,
@@ -1290,7 +1288,7 @@ export const LAYOUTS = [
         lineSpacing: 1.3,
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         x: 36,
         y: 25,
@@ -1307,7 +1305,7 @@ export const LAYOUTS = [
         lineSpacing: 1.3,
       },
       {
-        id: `elem_${Date.now()}_4`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 25,
@@ -1332,7 +1330,7 @@ export const LAYOUTS = [
     desc: 'ڕێکخستنی زانیاری لە شێوەی خشتە',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 6,
@@ -1347,7 +1345,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         isTable: true,
         x: 5,
@@ -1364,7 +1362,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_3`,
+        id: makeId('elem'),
         type: 'text',
         isTable: true,
         x: 5,
@@ -1425,7 +1423,7 @@ export const LAYOUTS = [
     desc: 'پەڕەی کۆتایی و زانیاری پەیوەندیکردن',
     createElements: () => [
       {
-        id: `elem_${Date.now()}_1`,
+        id: makeId('elem'),
         type: 'text',
         x: 5,
         y: 22,
@@ -1440,7 +1438,7 @@ export const LAYOUTS = [
         writingDirection: 'rtl',
       },
       {
-        id: `elem_${Date.now()}_2`,
+        id: makeId('elem'),
         type: 'text',
         x: 10,
         y: 52,

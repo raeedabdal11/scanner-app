@@ -11,6 +11,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
 import { PptDesignPanel } from './PptDesignPanel';
+import { PptValueCard } from './PptValueCard';
+import { TABLE_LIMITS } from './tableModel';
 
 // Theme Colors for Border/Outline Picker Grid (Matches PptShapeToolbar)
 const COLOR_PALETTE = [
@@ -22,6 +24,7 @@ const COLOR_PALETTE = [
 export const PptImageToolbar = forwardRef(({
   selectedElement,
   onAddText,
+  onAddTable,
   onPickGallery,
   onPickCamera,
   onAddShape,
@@ -34,6 +37,9 @@ export const PptImageToolbar = forwardRef(({
 }, ref) => {
   const [activeSubTab, setActiveSubTab] = useState('insert'); // 'insert' | 'design' | 'size' | 'style' | 'crop' | 'border' | 'tools'
   const [showShapesPanel, setShowShapesPanel] = useState(false);
+  const [showTablePanel, setShowTablePanel] = useState(false);
+  const [tableRows, setTableRows] = useState(3);
+  const [tableCols, setTableCols] = useState(3);
   const [keepAspect, setKeepAspect] = useState(false);
 
   useEffect(() => {
@@ -50,6 +56,10 @@ export const PptImageToolbar = forwardRef(({
         setShowShapesPanel(false);
         return 'shapes panel';
       }
+      if (showTablePanel) {
+        setShowTablePanel(false);
+        return 'table picker';
+      }
       return null;
     },
     closeTabPanel: () => {
@@ -57,13 +67,17 @@ export const PptImageToolbar = forwardRef(({
         setShowShapesPanel(false);
         return 'shapes panel';
       }
+      if (showTablePanel) {
+        setShowTablePanel(false);
+        return 'table picker';
+      }
       if (activeSubTab !== 'insert') {
         setActiveSubTab('insert');
         return 'image toolbar tab (' + activeSubTab + ')';
       }
       return null;
     },
-  }), [activeSubTab, showShapesPanel]);
+  }), [activeSubTab, showShapesPanel, showTablePanel]);
 
   const isImageSelected = selectedElement && selectedElement.type === 'image';
 
@@ -365,6 +379,7 @@ export const PptImageToolbar = forwardRef(({
               style={[styles.insertActionBtn, { backgroundColor: '#2e7d32' }]}
               onPress={() => {
                 setShowShapesPanel(false);
+                setShowTablePanel(false);
                 if (onAddText) onAddText();
               }}
             >
@@ -387,12 +402,63 @@ export const PptImageToolbar = forwardRef(({
                 styles.insertActionBtn,
                 { backgroundColor: showShapesPanel ? '#8B3A2B' : '#2c2c2e', borderWidth: 1, borderColor: '#3a3a3c' },
               ]}
-              onPress={() => setShowShapesPanel(!showShapesPanel)}
+              onPress={() => {
+                setShowTablePanel(false);
+                setShowShapesPanel(!showShapesPanel);
+              }}
             >
               <Ionicons name="shapes-outline" size={18} color="#ffffff" />
               <Text style={styles.insertActionBtnText}>شێوەکان</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.insertActionBtn,
+                { backgroundColor: showTablePanel ? '#8B3A2B' : '#2c2c2e', borderWidth: 1, borderColor: '#3a3a3c' },
+              ]}
+              onPress={() => {
+                setShowShapesPanel(false);
+                setShowTablePanel(!showTablePanel);
+              }}
+            >
+              <Ionicons name="grid-outline" size={18} color="#ffffff" />
+              <Text style={styles.insertActionBtnText}>خشتە</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Table picker: rows x columns, then insert */}
+          {showTablePanel && (
+            <View style={styles.shapesPanelBox}>
+              <PptValueCard
+                title="ژمارەی ڕیز"
+                valueText={`${tableRows}`}
+                min={TABLE_LIMITS.minRows}
+                max={TABLE_LIMITS.maxRows}
+                value={tableRows}
+                onChange={setTableRows}
+                chips={[2, 3, 4, 5, 6].map((v) => ({ value: v, label: `${v}` }))}
+              />
+              <PptValueCard
+                title="ژمارەی ستوون"
+                valueText={`${tableCols}`}
+                min={TABLE_LIMITS.minCols}
+                max={TABLE_LIMITS.maxCols}
+                value={tableCols}
+                onChange={setTableCols}
+                chips={[2, 3, 4, 5, 6].map((v) => ({ value: v, label: `${v}` }))}
+              />
+              <TouchableOpacity
+                style={[styles.insertActionBtn, { backgroundColor: '#2e7d32', flex: 0 }]}
+                onPress={() => {
+                  setShowTablePanel(false);
+                  if (onAddTable) onAddTable(tableRows, tableCols);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#ffffff" />
+                <Text style={styles.insertActionBtnText}>{`زیادکردنی خشتەی ${tableRows} × ${tableCols}`}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Small Panel for Shapes Options */}
           {showShapesPanel && (

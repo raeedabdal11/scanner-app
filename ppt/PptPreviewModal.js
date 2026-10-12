@@ -13,6 +13,7 @@ import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
 import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
+import { PptTableView } from './PptTableView';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -133,6 +134,12 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
                       })}
                     </Text>
                   </View>
+                ) : elem.type === 'table' ? (
+                  <PptTableView
+                    elem={elem}
+                    scale={canvasWidth / 720}
+                    slideHeightPt={canvasHeight / (canvasWidth / 720)}
+                  />
                 ) : elem.type === 'shape' ? (
                   <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
                     {(() => {

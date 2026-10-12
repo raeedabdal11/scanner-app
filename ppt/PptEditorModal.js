@@ -27,6 +27,9 @@ import { PptCleanSlide, renderSlideToHtml, getPdfFontFaceCss } from './PptCleanS
 import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
 import { PptShapeToolbar } from './PptShapeToolbar';
+import { PptTableToolbar } from './PptTableToolbar';
+import { createTableElement } from './tableModel';
+import { makeId, ensureUniqueIds } from './makeId';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
 import { PptShapePickerModal } from './PptShapePickerModal';
@@ -126,6 +129,8 @@ const PageCard = React.memo(({
   onCanvasTap,
   onCanvasDoubleTap,
   onShapeDoubleTap,
+  selectedTableCell,
+  onTableCellTap,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -271,6 +276,8 @@ const PageCard = React.memo(({
         onCanvasTap={onCanvasTap}
         onCanvasDoubleTap={onCanvasDoubleTap}
         onShapeDoubleTap={onShapeDoubleTap}
+        selectedTableCell={selectedTableCell}
+        onTableCellTap={onTableCellTap}
       />
     </View>
   );
@@ -326,6 +333,9 @@ export const PptEditorModal = ({
   const textToolbarRef = useRef(null);
   const imageToolbarRef = useRef(null);
   const shapeToolbarRef = useRef(null);
+  const tableToolbarRef = useRef(null);
+  // Selected table cell { elemId, r, c } (drawn on the canvas, edited by PptTableToolbar)
+  const [selectedTableCell, setSelectedTableCell] = useState(null);
 
   const scrollViewRef = useRef(null);
   const scrollYRef = useRef(0);
@@ -379,7 +389,8 @@ export const PptEditorModal = ({
 
   const loadInitialDraft = async () => {
     try {
-      const draft = await loadPptDraft();
+      // Saved drafts may hold duplicate ids (old Date.now() ids): repair before rendering
+      const draft = ensureUniqueIds(await loadPptDraft());
       if (draft && draft.slides && draft.slides.length > 0) {
         setPresentation(draft);
         setHistory([draft]);
@@ -477,7 +488,7 @@ export const PptEditorModal = ({
 
   const handleUndo = () => {
     if (historyIndex > 0) {
-      const prev = history[historyIndex - 1];
+      const prev = ensureUniqueIds(history[historyIndex - 1]);
       setHistoryIndex(historyIndex - 1);
       setPresentation(prev);
       savePptDraft(prev);
@@ -487,7 +498,7 @@ export const PptEditorModal = ({
 
   const handleRedo = () => {
     if (historyIndex < history.length - 1) {
-      const next = history[historyIndex + 1];
+      const next = ensureUniqueIds(history[historyIndex + 1]);
       setHistoryIndex(historyIndex + 1);
       setPresentation(next);
       savePptDraft(next);
@@ -508,6 +519,7 @@ export const PptEditorModal = ({
     textToolbarRef,
     imageToolbarRef,
     shapeToolbarRef,
+    tableToolbarRef,
     inputRef,
   };
 
@@ -532,6 +544,7 @@ export const PptEditorModal = ({
       textToolbarRef,
       imageToolbarRef,
       shapeToolbarRef,
+    tableToolbarRef,
       inputRef,
     } = backStateRef.current;
 
@@ -581,6 +594,11 @@ export const PptEditorModal = ({
       console.log('[Back] handled: sub-modal / picker (' + shapeSubModal + ')');
       return true;
     }
+    const tableSubModal = tableToolbarRef.current?.closeSubModal?.();
+    if (tableSubModal) {
+      console.log('[Back] handled: sub-modal / picker (' + tableSubModal + ')');
+      return true;
+    }
 
     // 2 (2b). A TextInput is being edited: Keyboard.dismiss() and blur, keep text
     if (editingElementId !== null) {
@@ -609,6 +627,11 @@ export const PptEditorModal = ({
       const shapeTab = shapeToolbarRef.current?.closeTabPanel?.();
       if (shapeTab) {
         console.log('[Back] handled: toolbar tab/panel (' + shapeTab + ')');
+        return true;
+      }
+      const tableTab = tableToolbarRef.current?.closeTabPanel?.();
+      if (tableTab) {
+        console.log('[Back] handled: toolbar tab/panel (' + tableTab + ')');
         return true;
       }
 
@@ -672,7 +695,7 @@ export const PptEditorModal = ({
   const handleAddSlidePreset = (preset) => {
     const newElements = preset.createElements(presentation.aspectRatio);
     const baseSlide = {
-      id: `slide_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+      id: makeId('slide'),
       layout: preset.key,
       background: '#ffffff',
       elements: newElements,
@@ -878,7 +901,7 @@ export const PptEditorModal = ({
 
       const cloned = {
         ...target,
-        id: `elem_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+        id: makeId('elem'),
         x: Math.min(80, target.x + 4),
         y: Math.min(80, target.y + 4),
       };
@@ -954,7 +977,7 @@ export const PptEditorModal = ({
       }
 
       const newElem = {
-        id: `img_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+        id: makeId('img'),
         type: 'image',
         uri: finalUri,
         x: Math.round((100 - initW) / 2),
@@ -1009,7 +1032,7 @@ export const PptEditorModal = ({
     const clampPct = (v, size) => Math.round(Math.max(2, Math.min(98 - size, v)) * 10) / 10;
     const sampleText = 'دەقەکەت لێرە بنووسە';
     let newElem = {
-      id: `elem_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+      id: makeId('elem'),
       type: 'text',
       x: pos ? clampPct(pos.x - w / 2, w) : (100 - w) / 2,
       y: pos ? clampPct(pos.y - h / 2, h) : (100 - h) / 2,
@@ -1055,6 +1078,46 @@ export const PptEditorModal = ({
     }, 150);
   };
 
+  // Add a table (insert tab "خشتە") to the current slide and select it
+  const handleAddTable = (rows, cols) => {
+    const targetPageId = resolveTargetPageId();
+    if (!targetPageId) {
+      Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+      return;
+    }
+    const targetPage = presentation.slides.find((s) => s.id === targetPageId);
+    const table = createTableElement({
+      rows,
+      cols,
+      zIndex: ((targetPage?.elements || []).length || 0) + 1,
+    });
+    const newSlides = presentation.slides.map((s) =>
+      s.id === targetPageId ? { ...s, elements: [...(s.elements || []), table] } : s
+    );
+    pushState({ ...presentation, slides: newSlides }, targetPageId);
+    setSelectedPageId(targetPageId);
+    setSelectedElementId(table.id);
+    setEditingElementId(null);
+    setSelectedTableCell({ elemId: table.id, r: 0, c: 0 });
+  };
+
+  // Tap on a table cell: select it; a second tap on the same cell opens its text sheet
+  const handleTableCellTap = (pageId, elemId, r, c) => {
+    const again =
+      selectedElementId === elemId &&
+      selectedTableCell &&
+      selectedTableCell.elemId === elemId &&
+      selectedTableCell.r === r &&
+      selectedTableCell.c === c;
+    setSelectedPageId(pageId);
+    setSelectedElementId(elemId);
+    setEditingElementId(null);
+    setSelectedTableCell({ elemId, r, c });
+    if (again) {
+      setTimeout(() => tableToolbarRef.current?.openCellEditor?.(r, c), 0);
+    }
+  };
+
   // Add Shape to Slide
   const handleAddShape = (shapeType) => {
     try {
@@ -1072,7 +1135,7 @@ export const PptEditorModal = ({
       const h = isLineOrArrow ? 6 : (shapeType === 'ellipse' ? 25 : 20);
 
       const newElem = {
-        id: `shape_${Date.now()}_${Math.random().toString().slice(2, 6)}`,
+        id: makeId('shape'),
         type: 'shape',
         shapeType: shapeType, // 'rect' | 'roundRect' | 'ellipse' | 'line' | 'arrow'
         x: Math.round((100 - w) / 2),
@@ -1191,7 +1254,7 @@ export const PptEditorModal = ({
             posY = Math.max(0, Math.min(posY, maxAllowedY));
 
             const newElem = {
-              id: `img_${Date.now()}_${i}_${Math.random().toString().slice(2, 6)}`,
+              id: makeId('img'),
               type: 'image',
               uri: finalUri,
               x: Math.round(posX * 10) / 10,
@@ -1355,7 +1418,7 @@ export const PptEditorModal = ({
       const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
 
       const newDoc = {
-        id: Date.now().toString(),
+        id: makeId('doc'),
         name: `PPT_${dateStr}`,
         date: new Date().toLocaleDateString('ku-IQ') || new Date().toLocaleDateString(),
         fileUri: result.fileUri,
@@ -1476,7 +1539,7 @@ export const PptEditorModal = ({
       const dateStr = `${now.getFullYear()}_${now.getMonth() + 1}_${now.getDate()}_${now.getTime()}`;
 
       const newDoc = {
-        id: Date.now().toString(),
+        id: makeId('doc'),
         name: `PDF_${dateStr}`,
         date: new Date().toLocaleDateString('ku-IQ') || new Date().toLocaleDateString(),
         fileUri: pdfUri,
@@ -1841,6 +1904,8 @@ export const PptEditorModal = ({
                             }}
                             onCanvasDoubleTap={(pos) => handleAddText(slide.id, pos)}
                             onShapeDoubleTap={(elem) => handleShapeDoubleTap(slide.id, elem)}
+                            selectedTableCell={selectedPageId === slide.id ? selectedTableCell : null}
+                            onTableCellTap={(elemId, r, c) => handleTableCellTap(slide.id, elemId, r, c)}
                           />
 
                           {/* Page Divider between pages */}
@@ -1896,6 +1961,18 @@ export const PptEditorModal = ({
                     setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                     onRequestClose={() => handleBack(false)}
                   />
+                ) : selectedElement && selectedElement.type === 'table' ? (
+                  <PptTableToolbar
+                    ref={tableToolbarRef}
+                    element={selectedElement}
+                    selectedCell={
+                      selectedTableCell && selectedTableCell.elemId === selectedElement.id ? selectedTableCell : null
+                    }
+                    onSelectCell={(cell) =>
+                      setSelectedTableCell(cell ? { elemId: selectedElement.id, r: cell.r, c: cell.c } : null)
+                    }
+                    onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                  />
                 ) : selectedElement && selectedElement.type === 'shape' ? (
                   <PptShapeToolbar
                     ref={shapeToolbarRef}
@@ -1915,6 +1992,7 @@ export const PptEditorModal = ({
                     ref={imageToolbarRef}
                     selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
                     onAddText={() => handleAddText()}
+                    onAddTable={handleAddTable}
                     onPickGallery={handlePickGalleryImages}
                     onPickCamera={handlePickCameraImage}
                     onAddShape={handleAddShape}

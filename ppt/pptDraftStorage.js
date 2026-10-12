@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { makeId } from './makeId';
 import { LAYOUTS } from './layouts';
 
 const DRAFT_KEY = 'ppt_editor_draft_v1';
@@ -38,12 +39,12 @@ export const createDefaultPresentation = () => {
   const initialElements = titleLayout ? titleLayout.createElements() : [];
 
   return {
-    id: `ppt_${Date.now()}`,
+    id: makeId('ppt'),
     title: 'پێشاندانی نوێ',
     aspectRatio: '16:9',
     slides: [
       {
-        id: `slide_${Date.now()}_1`,
+        id: makeId('slide'),
         layout: 'title',
         background: '#ffffff',
         elements: initialElements,

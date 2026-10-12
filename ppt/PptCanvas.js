@@ -14,6 +14,8 @@ import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from 
 import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
+import { PptTableView } from './PptTableView';
+import { layoutTable } from './tableModel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // Double tap on an empty slide area (ms, px)
@@ -409,6 +411,8 @@ export const PptCanvas = ({
   onCanvasTap,
   onCanvasDoubleTap,
   onShapeDoubleTap,
+  selectedTableCell,
+  onTableCellTap,
 }) => {
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
@@ -416,6 +420,8 @@ export const PptCanvas = ({
   const lastShapeTapRef = React.useRef({ id: null, time: 0 });
   // Last tap on an empty slide area (elements and handles take their own touches)
   const lastEmptyTapRef = React.useRef({ time: 0, x: 0, y: 0 });
+  // Cell under the finger (set by the cell's onTouchStart, read when the table tap is released)
+  const lastTableCellTouchRef = React.useRef(null);
 
   const is43 = aspectRatio === '4:3';
   const canvasWidth = SCREEN_WIDTH - 24;
@@ -474,6 +480,9 @@ export const PptCanvas = ({
             onStartInlineEditing(element.id);
           } else if (element.type === 'image' && !element.uri) {
             onChangeImageElement(element);
+          } else if (element.type === 'table') {
+            const t = lastTableCellTouchRef.current;
+            if (t && t.elemId === element.id && onTableCellTap) onTableCellTap(element.id, t.r, t.c);
           } else if (element.type === 'shape') {
             const shapeType = element.shapeType || 'rect';
             if (shapeType !== 'line' && shapeType !== 'arrow') {
@@ -652,6 +661,11 @@ export const PptCanvas = ({
           }
 
           let effectiveHeight = elem.height;
+          if (elem.type === 'table') {
+            // Rows grow with wrapped text: the table is never shorter than its content
+            const tableLay = layoutTable(elem, SLIDE.widthPt, canvasHeight / (canvasWidth / SLIDE.widthPt));
+            effectiveHeight = Math.max(elem.height, tableLay.heightPct);
+          }
           if (elem.type === 'text' && elem.text && elem.text.trim()) {
             const computedPt = elem.computedFontSize || elem.fontSize || 18;
             const layoutMeas = measureElementLayout(elem, computedPt);
@@ -808,6 +822,18 @@ export const PptCanvas = ({
                     </Text>
                   )}
                 </View>
+              ) : elem.type === 'table' ? (
+                <PptTableView
+                  elem={elem}
+                  scale={canvasWidth / SLIDE.widthPt}
+                  slideHeightPt={canvasHeight / (canvasWidth / SLIDE.widthPt)}
+                  selectedCell={
+                    isSelected && selectedTableCell && selectedTableCell.elemId === elem.id ? selectedTableCell : null
+                  }
+                  onCellTouch={(r, c) => {
+                    lastTableCellTouchRef.current = { elemId: elem.id, r, c };
+                  }}
+                />
               ) : elem.type === 'shape' ? (
                 <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
                   {(() => {

@@ -35,10 +35,31 @@ import { performOnDeviceOCR } from './ocrHelper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { PptEditorModal } from './ppt';
+import { makeId } from './ppt/makeId';
 
 // Firebase Setup
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, get, remove } from 'firebase/database';
+
+// Saved documents are listed with key={doc.id}: two documents with the same id give React
+// "two children with the same key". Keep the first (newest) and give later copies a fresh id.
+const dedupeDocumentIds = (docs) => {
+  if (!Array.isArray(docs)) return { docs: [], changed: false };
+  const seen = new Set();
+  let changed = false;
+  const fixed = docs.map((doc) => {
+    if (!doc) return doc;
+    if (!doc.id || seen.has(String(doc.id))) {
+      changed = true;
+      const next = { ...doc, id: makeId('doc') };
+      seen.add(next.id);
+      return next;
+    }
+    seen.add(String(doc.id));
+    return doc;
+  });
+  return { docs: fixed, changed };
+};
 
 const firebaseConfig = {
   apiKey: "AIzaSyA0xGTOWPRykyjoPAJ4sno5ydzAeDa3Paw",
@@ -235,7 +256,11 @@ export default function App() {
   const loadInitialData = async () => {
     try {
       const savedDocs = await AsyncStorage.getItem('saved_documents');
-      if (savedDocs) setDocuments(JSON.parse(savedDocs));
+      if (savedDocs) {
+        const { docs, changed } = dedupeDocumentIds(JSON.parse(savedDocs));
+        setDocuments(docs);
+        if (changed) await AsyncStorage.setItem('saved_documents', JSON.stringify(docs));
+      }
       const vipStatus = await AsyncStorage.getItem('is_vip');
       if (vipStatus === 'true') setIsVip(true);
       const count = await AsyncStorage.getItem('free_use_count');
@@ -409,7 +434,7 @@ export default function App() {
     try {
       const res = await DocumentScanner.scanDocument({ maxNumDocuments: 10, responseType: 'imageFilePath', letUserAdjustCrop: true });
       if (res.scannedImages?.length > 0) {
-        const newDoc = {id: Date.now().toString(), name: "سکان_" + Date.now(), date: new Date().toLocaleDateString(), pages: res.scannedImages, thumbnail: res.scannedImages[0], password: ''};
+        const newDoc = {id: makeId('doc'), name: "سکان_" + Date.now(), date: new Date().toLocaleDateString(), pages: res.scannedImages, thumbnail: res.scannedImages[0], password: ''};
         setDocuments([newDoc, ...documents]);
         await AsyncStorage.setItem('saved_documents', JSON.stringify([newDoc, ...documents]));
         setEditingDoc(newDoc);
@@ -437,7 +462,7 @@ export default function App() {
   };
 
   const saveIDDoc = async (pages) => {
-    const newIdDoc = { id: Date.now().toString(), name: idCategory + "_" + Date.now(), date: new Date().toLocaleDateString(), pages: pages, thumbnail: pages[0], password: '', type: 'id_card' };
+    const newIdDoc = { id: makeId('doc'), name: idCategory + "_" + Date.now(), date: new Date().toLocaleDateString(), pages: pages, thumbnail: pages[0], password: '', type: 'id_card' };
     const updatedDocs = [newIdDoc, ...documents];
     setDocuments(updatedDocs);
     await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
@@ -594,7 +619,7 @@ export default function App() {
       if (!res.canceled && res.assets && res.assets[0]) {
         const docUri = res.assets[0].uri;
         setSigningDoc({
-          id: Date.now().toString(),
+          id: makeId('doc'),
           name: "واژۆکراو_" + Date.now(),
           date: new Date().toLocaleDateString(),
           pages: [docUri],
@@ -626,7 +651,7 @@ export default function App() {
     }
 
     const newSig = {
-      id: Date.now().toString(),
+      id: makeId('sig'),
       uri: uriToUse,
       x: (signingLayout.width / 2) - 75,
       y: (signingLayout.height / 2) - 50,
@@ -784,7 +809,7 @@ export default function App() {
         thumbnail: finalUri
       };
 
-      const updatedDocs = [completedDoc, ...documents];
+      const updatedDocs = [completedDoc, ...documents.filter((d) => d.id !== completedDoc.id)];
       setDocuments(updatedDocs);
       await AsyncStorage.setItem('saved_documents', JSON.stringify(updatedDocs));
       Alert.alert("سەرکەوتوو", "واژۆ و پاشەکەوت کردن سەرکەوتوو بوو ✅");
@@ -1634,7 +1659,7 @@ export default function App() {
       setLoading(true);
 
       const newDoc = {
-        id: Date.now().toString(),
+        id: makeId('doc'),
         name: "خێرا_سڕاوە_" + Date.now(),
         date: new Date().toLocaleDateString(),
         pages: [eraseImage],
@@ -2724,7 +2749,7 @@ export default function App() {
                     } else {
                       const todayDate = new Date().toLocaleDateString();
                       const newDoc = {
-                        id: Date.now().toString(),
+                        id: makeId('doc'),
                         name: "بەڵگە_" + todayDate,
                         date: todayDate,
                         pages: [textPage],

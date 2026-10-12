@@ -6,6 +6,7 @@ import { getExportFontFamily } from './fonts';
 import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 import { getSlideBackground } from './slideBackground';
+import { layoutTable, getCell, getCellStyle, getTableBorder, TABLE_CELL_PAD_PT } from './tableModel';
 
 // Shapes drawn as open outlines on screen (shapeCatalog `open`, plus the two connectors):
 // exported with <a:noFill/> so PowerPoint matches the editor
@@ -117,6 +118,95 @@ const normalizeHex = (colorStr, defaultHex = null) => {
   const parsed = parseColor(colorStr, defaultHex);
   return parsed ? parsed.hex : defaultHex;
 };
+
+// ---------------------------------------------------------------------------------------------
+// Tables: written as a real <p:graphicFrame> + <a:tbl>. pptxgenjs only places a named placeholder
+// (APP_TABLE_n) at the right z-order; after the slide XML is final the placeholder <p:sp> is
+// replaced by the frame below. Same layout as the canvas / PDF (tableModel.layoutTable).
+// <a:tblPr rtl="1">: column 0 is drawn on the right, like the editor.
+// ---------------------------------------------------------------------------------------------
+const PT_EMU = 12700;
+const TABLE_ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
+const xmlEscape = (str) =>
+  String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+const ALGN = { right: 'r', center: 'ctr', left: 'l' };
+
+const tableBorderXml = (tag, widthEmu, hex) =>
+  widthEmu > 0
+    ? `<a:${tag} w="${widthEmu}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:prstDash val="solid"/></a:${tag}>`
+    : `<a:${tag} w="0"><a:noFill/></a:${tag}>`;
+
+export function buildTableFrameXml(elem, xIn, yIn, slideHeightPt, frameId) {
+  const lay = layoutTable(elem, 720, slideHeightPt);
+  const border = getTableBorder(elem);
+  const borderEmu = Math.round(border.width * PT_EMU);
+  const borderHex = normalizeHex(border.color, '7F7F7F');
+  const font = xmlEscape(getExportFontFamily(elem.kurdishFont || 'Tahoma', true));
+  const padEmu = Math.round(TABLE_CELL_PAD_PT * PT_EMU);
+
+  const colEmu = lay.colWidthsPt.map((w) => Math.max(1, Math.round(w * PT_EMU)));
+  const rowEmu = lay.rowHeightsPt.map((h) => Math.max(1, Math.round(h * PT_EMU)));
+  const cx = colEmu.reduce((a, b) => a + b, 0);
+  const cy = rowEmu.reduce((a, b) => a + b, 0);
+
+  const rowsXml = rowEmu.map((h, r) => {
+    const cellsXml = colEmu.map((_, c) => {
+      const cs = getCellStyle(elem, r, c);
+      const text = String(getCell(elem, r, c).text || '');
+      const sz = Math.max(100, Math.round(cs.fontSize * 100));
+      const colorHex = normalizeHex(cs.color, '1C1C1E');
+      const algn = ALGN[cs.align] || 'r';
+      const paras = text.split('\n').map((line) => {
+        const lang = TABLE_ARABIC_RE.test(line || text) ? 'ar-IQ' : 'en-US';
+        const pPr = `<a:pPr algn="${algn}" rtl="1"/>`;
+        if (!line) return `<a:p>${pPr}<a:endParaRPr lang="${lang}" sz="${sz}" dirty="0"/></a:p>`;
+        return `<a:p>${pPr}<a:r><a:rPr lang="${lang}" sz="${sz}" b="${cs.bold ? 1 : 0}" i="${cs.italic ? 1 : 0}" dirty="0">` +
+          `<a:solidFill><a:srgbClr val="${colorHex}"/></a:solidFill>` +
+          `<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>` +
+          `</a:rPr><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`;
+      }).join('');
+      const fillHex = normalizeHex(cs.fill, null);
+      const fillXml = fillHex ? `<a:solidFill><a:srgbClr val="${fillHex}"/></a:solidFill>` : '<a:noFill/>';
+      return `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>${paras}</a:txBody>` +
+        `<a:tcPr marL="${padEmu}" marR="${padEmu}" marT="${padEmu}" marB="${padEmu}" anchor="ctr">` +
+        tableBorderXml('lnL', borderEmu, borderHex) +
+        tableBorderXml('lnR', borderEmu, borderHex) +
+        tableBorderXml('lnT', borderEmu, borderHex) +
+        tableBorderXml('lnB', borderEmu, borderHex) +
+        `${fillXml}</a:tcPr></a:tc>`;
+    }).join('');
+    return `<a:tr h="${h}">${cellsXml}</a:tr>`;
+  }).join('');
+
+  const locks = elem.locked ? ' noMove="1" noResize="1"' : '';
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${frameId}" name="Table ${frameId}"/>` +
+    `<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"${locks}/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>` +
+    `<p:xfrm><a:off x="${Math.round(xIn * 914400)}" y="${Math.round(yIn * 914400)}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm>` +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' +
+    `<a:tblPr rtl="1" firstRow="${elem.headerRow ? 1 : 0}" bandRow="${elem.bandRows ? 1 : 0}"/>` +
+    `<a:tblGrid>${colEmu.map((w) => `<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>` +
+    `${rowsXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+}
+
+// Replaces each APP_TABLE_n placeholder <p:sp> in the final slide XML with its table frame
+function injectTableFrames(xml, specs) {
+  let out = xml;
+  (specs || []).forEach((spec, i) => {
+    const nameIdx = out.indexOf(`name="APP_TABLE_${i}"`);
+    if (nameIdx < 0) return;
+    const start = out.lastIndexOf('<p:sp>', nameIdx);
+    const endTag = out.indexOf('</p:sp>', nameIdx);
+    if (start < 0 || endTag < 0) return;
+    const frame = buildTableFrameXml(spec.elem, spec.xIn, spec.yIn, spec.slideHeightPt, 9000 + i);
+    out = out.slice(0, start) + frame + out.slice(endTag + '</p:sp>'.length);
+  });
+  return out;
+}
 
 /**
  * Converts any image URI (WEBP, HEIC, PNG, JPEG, file, data URI)
@@ -702,6 +792,8 @@ export const exportPresentationToPptx = async (
     const slideImageElemSpecs = {};
     // Stores shape element specifications per slide
     const slideShapeElemSpecs = {};
+    // Table elements per slide (placeholder APP_TABLE_n -> <a:tbl> frame)
+    const slideTableSpecs = {};
     // Stores the background (solid / gradient / image + overlay) per generated slide
     const slideBgSpecs = {};
 
@@ -717,6 +809,7 @@ export const exportPresentationToPptx = async (
         slideTextElemSpecs[slideCount] = [];
         slideImageElemSpecs[slideCount] = [];
         slideShapeElemSpecs[slideCount] = [];
+        slideTableSpecs[slideCount] = [];
 
         // Slide background: written as <p:bg> during JSZip post-processing (every slide carries
         // its exact app color so PowerPoint matches the editor, even the default white).
@@ -927,6 +1020,23 @@ export const exportPresentationToPptx = async (
               });
             } catch (imgErr) {
               console.log('[PPT Exporter] Failed to add image:', imgErr);
+            }
+          } else if (elem.type === 'table') {
+            // Placeholder keeps the z-order; replaced by a real <a:tbl> during post-processing
+            const tableIdx = slideTableSpecs[slideCount].length;
+            const slideHeightPt = slideH * 72;
+            const lay = layoutTable(elem, 720, slideHeightPt);
+            slideTableSpecs[slideCount].push({ elem, xIn, yIn, slideHeightPt });
+            try {
+              slide.addShape(pptx.shapes ? pptx.shapes.RECTANGLE : 'rect', {
+                objectName: `APP_TABLE_${tableIdx}`,
+                x: xIn,
+                y: yIn,
+                w: wIn,
+                h: lay.totalHeightPt / 72,
+              });
+            } catch (tableErr) {
+              console.log('[PPT Exporter] Failed to add table placeholder:', tableErr);
             }
           } else if (elem.type === 'shape') {
             const shapeType = elem.shapeType || 'rect';
@@ -1960,6 +2070,9 @@ export const exportPresentationToPptx = async (
                 console.log(`[SHAPE-XML][Slide ${slideNum}] ${spXml.substring(i, i + 800)}`);
             }
         }
+
+        // Real tables replace their placeholders (after sanitizing: the frame XML uses integer EMUs only)
+        sanitizedXml = injectTableFrames(sanitizedXml, slideTableSpecs[slideNum]);
 
         // Slide background (<p:bg> before <p:spTree>, image media + rel, overlay <p:sp> first in spTree)
         sanitizedXml = await applySlideBackgroundXml(

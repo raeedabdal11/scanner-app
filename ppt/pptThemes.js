@@ -10,6 +10,7 @@
 
 import { makeSlideBackgroundPatch } from './slideBackground';
 import { getElementRuns } from './formattedText';
+import { makeId } from './makeId';
 
 export const PPT_THEMES = [
   {
@@ -169,11 +170,9 @@ const lc = (c) => (typeof c === 'string' ? c.trim().toLowerCase() : '');
 const isTitleElement = (elem) =>
   elem.fontWeight === 'bold' || (elem.y || 0) < 20 || (elem.fontSize && elem.fontSize >= 24);
 
-let decorCounter = 0;
 const makeDecor = (shapeType, x, y, width, height, fill, extra = {}) => {
-  decorCounter += 1;
   return {
-    id: `decor_${Date.now()}_${decorCounter}_${Math.random().toString().slice(2, 6)}`,
+    id: makeId('decor'),
     type: 'shape',
     shapeType,
     x: Math.round(x * 10) / 10,

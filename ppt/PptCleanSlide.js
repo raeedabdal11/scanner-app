@@ -8,6 +8,8 @@ import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getSlideBackground, getBackgroundCss } from './slideBackground';
 import { getDisplayFontFamily, getCssFontStack } from './fonts';
 import { CUSTOM_KURDISH_FONTS } from './customFonts';
+import { PptTableView } from './PptTableView';
+import { layoutTable, getCell, getCellStyle, getTableBorder, TABLE_CELL_PAD_PT } from './tableModel';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -50,6 +52,10 @@ export const PptCleanSlide = React.forwardRef(({
           if (neededPercent > elem.height) {
             effectiveHeight = Math.min(96 - (top / canvasHeight) * 100, neededPercent + 2);
           }
+        }
+
+        if (elem.type === 'table') {
+          effectiveHeight = Math.max(elem.height, layoutTable(elem, SLIDE.widthPt, canvasHeight / (canvasWidth / SLIDE.widthPt)).heightPct);
         }
 
         const elemHeight = (effectiveHeight / 100) * canvasHeight;
@@ -171,6 +177,12 @@ export const PptCleanSlide = React.forwardRef(({
                   })}
                 </Text>
               </View>
+            ) : elem.type === 'table' ? (
+              <PptTableView
+                elem={elem}
+                scale={canvasWidth / SLIDE.widthPt}
+                slideHeightPt={canvasHeight / (canvasWidth / SLIDE.widthPt)}
+              />
             ) : elem.type === 'shape' ? (
               <View style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
                 {(() => {
@@ -293,6 +305,45 @@ const styles = StyleSheet.create({
   },
 });
 
+// Table -> HTML for the PDF (same layout as the canvas: tableModel.layoutTable, column 0 on the right)
+function tableToHtml(elem, scale, slideHeightPt) {
+  const lay = layoutTable(elem, SLIDE.widthPt, slideHeightPt);
+  const border = getTableBorder(elem);
+  const borderCss = border.width > 0 ? `${(border.width * scale).toFixed(2)}pt solid ${border.color}` : 'none';
+  const fontStack = getCssFontStack(elem.kurdishFont || 'Tahoma');
+  const cols = lay.colWidthsPt.map((w) => `<col style="width:${(w * scale).toFixed(2)}pt">`).join('');
+  const rowsHtml = lay.rowHeightsPt.map((h, r) => {
+    const tds = lay.colWidthsPt.map((_, c) => {
+      const cs = getCellStyle(elem, r, c);
+      const text = escapeHtml(getCell(elem, r, c).text || '');
+      return `<td style="
+        background:${cs.fill};
+        color:${cs.color};
+        border:${borderCss};
+        padding:0 ${(TABLE_CELL_PAD_PT * scale).toFixed(2)}pt;
+        font-family:${fontStack};
+        font-size:${(cs.fontSize * scale).toFixed(2)}pt;
+        line-height:1.25;
+        font-weight:${cs.bold ? 'bold' : 'normal'};
+        font-style:${cs.italic ? 'italic' : 'normal'};
+        text-align:${cs.align};
+        vertical-align:middle;
+        white-space:pre-wrap;
+        word-break:break-word;
+        overflow:hidden;
+      ">${text}</td>`;
+    }).join('');
+    return `<tr style="height:${(h * scale).toFixed(2)}pt">${tds}</tr>`;
+  }).join('');
+  return `<table dir="rtl" style="
+    width:${(lay.totalWidthPt * scale).toFixed(2)}pt;
+    height:${(lay.totalHeightPt * scale).toFixed(2)}pt;
+    border-collapse:collapse;
+    table-layout:fixed;
+    box-sizing:border-box;
+  "><colgroup>${cols}</colgroup>${rowsHtml}</table>`;
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -403,6 +454,11 @@ export async function getPdfFontFaceCss(slides = []) {
   const used = new Set(['Vazirmatn']);
   for (const slide of slides) {
     for (const elem of slide?.elements || []) {
+      if (elem.type === 'table') {
+        const display = getDisplayFontFamily(elem.kurdishFont || 'Tahoma');
+        if (PDF_EMBED_FONTS[display]) used.add(display);
+        continue;
+      }
       if (elem.type !== 'text') continue;
       const names = [elem.kurdishFont, ...getElementRuns(elem).map((r) => r.kurdishFont || r.kuFont)];
       for (const n of names) {
@@ -442,6 +498,10 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
       if (neededPercent > elem.height) {
         effectiveHeight = Math.min(96 - (uncroppedTop / canvasHeight) * 100, neededPercent + 2);
       }
+    }
+
+    if (elem.type === 'table') {
+      effectiveHeight = Math.max(elem.height, layoutTable(elem, SLIDE.widthPt, canvasHeight / (canvasWidth / SLIDE.widthPt)).heightPct);
     }
 
     const uncroppedHeight = (effectiveHeight / 100) * canvasHeight;
@@ -517,6 +577,17 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
             ${runsHtml}
           </div>
         </div>
+      `);
+    } else if (elem.type === 'table') {
+      elementHtmls.push(`
+        <div style="
+          position: absolute;
+          left: ${uncroppedLeft.toFixed(2)}pt;
+          top: ${uncroppedTop.toFixed(2)}pt;
+          width: ${uncroppedWidth.toFixed(2)}pt;
+          z-index: ${zIndex};
+          opacity: ${opacity};
+        ">${tableToHtml(elem, canvasWidth / SLIDE.widthPt, canvasHeight / (canvasWidth / SLIDE.widthPt))}</div>
       `);
     } else if (elem.type === 'shape') {
       const shapeType = elem.shapeType || 'rect';
