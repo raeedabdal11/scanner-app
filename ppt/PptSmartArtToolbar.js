@@ -22,6 +22,7 @@ import { KURDISH_FONTS } from './fonts';
 import { makeId } from './makeId';
 import {
   SMARTART_LAYOUTS,
+  SMARTART_CATEGORIES,
   COLOR_SCHEMES,
   SMARTART_STYLES,
   SMARTART_MAX_ITEMS,
@@ -132,6 +133,11 @@ export const PptSmartArtToolbar = forwardRef(({
     if (sel === 0 && lvl > 0) return; // the first item is always a main item
     setItems(items.map((it, i) => (i === sel ? { ...it, level: lvl } : it)));
   };
+  // Indent one step at a time: at most one level deeper than the item above (hierarchies, max 4)
+  const curLevel = items[sel] ? items[sel].level || 0 : 0;
+  const prevLevel = sel > 0 && items[sel - 1] ? items[sel - 1].level || 0 : -1;
+  const canDemote = sel > 0 && curLevel <= prevLevel && curLevel < 4;
+  const canPromote = curLevel > 0;
   const deleteItem = () => {
     if (items.length <= 1) return;
     setItems(items.filter((_, i) => i !== sel));
@@ -194,7 +200,7 @@ export const PptSmartArtToolbar = forwardRef(({
               {items.map((it, i) => (
                 <TouchableOpacity
                   key={it.id || `item_${i}`}
-                  style={[styles.itemRow, i === sel && styles.itemRowActive, { marginRight: (it.level || 0) > 0 ? 22 : 0 }]}
+                  style={[styles.itemRow, i === sel && styles.itemRowActive, { marginRight: Math.min(4, it.level || 0) * 18 }]}
                   onPress={() => setSelIdx(i)}
                   onLongPress={() => setEditor({ index: i, text: it.text || '' })}
                 >
@@ -210,8 +216,8 @@ export const PptSmartArtToolbar = forwardRef(({
               <ActionBtn icon="add-circle-outline" label="زیادکردن" onPress={addItem} />
               <ActionBtn icon="arrow-up-outline" label="سەرەوە" onPress={() => moveItem(-1)} disabled={sel <= 0} />
               <ActionBtn icon="arrow-down-outline" label="خوارەوە" onPress={() => moveItem(1)} disabled={sel >= items.length - 1} />
-              <ActionBtn icon="return-down-back-outline" label="خاڵی لاوەکی" onPress={() => setLevel(1)} disabled={sel === 0 || (items[sel] && items[sel].level > 0)} />
-              <ActionBtn icon="return-up-forward-outline" label="خاڵی سەرەکی" onPress={() => setLevel(0)} disabled={!items[sel] || !(items[sel].level > 0)} />
+              <ActionBtn icon="return-down-back-outline" label="خاڵی لاوەکی" onPress={() => setLevel(curLevel + 1)} disabled={!canDemote} />
+              <ActionBtn icon="return-up-forward-outline" label="پلە بەرزکردنەوە" onPress={() => setLevel(curLevel - 1)} disabled={!canPromote} />
               <ActionBtn icon="trash-outline" label="سڕینەوە" onPress={deleteItem} disabled={items.length <= 1} danger />
             </View>
             <Text style={styles.hint}>کرتە بۆ هەڵبژاردن، کرتەی درێژ بۆ دەستکاریکردنی دەق.</Text>
@@ -222,7 +228,7 @@ export const PptSmartArtToolbar = forwardRef(({
         {activeTab === 'layout' && (
           <View>
             <ActionBtn icon="apps-outline" label="هەموو شێوەکان..." onPress={onOpenLayoutPicker} />
-            <SectionTitle>{`شێوەکانی هەمان جۆر (${layout.category === 'list' ? 'لیست' : 'پڕۆسە'}):`}</SectionTitle>
+            <SectionTitle>{`شێوەکانی هەمان جۆر (${(SMARTART_CATEGORIES.find((c) => c.key === layout.category) || {}).label || ''}):`}</SectionTitle>
             <View style={styles.chipRow}>
               {sameCategory.map((l) => (
                 <TouchableOpacity

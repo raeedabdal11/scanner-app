@@ -16,7 +16,7 @@ const THUMB_H_PT = (THUMB_BOX.height / 100) * 405;
 const LayoutThumb = React.memo(({ layout, width, selected, onPick, items, accents }) => {
   const elem = useMemo(() => ({
     layoutId: layout.id,
-    items: items || SAMPLE_ITEMS,
+    items: items || layout.sample || SAMPLE_ITEMS,
     colorScheme: 'colorful1',
     style: 'simple',
     accents: accents || DEFAULT_ACCENTS,

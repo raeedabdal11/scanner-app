@@ -15,6 +15,9 @@
 import { makeId } from '../makeId';
 import { LIST_LAYOUTS } from './listLayouts';
 import { PROCESS_LAYOUTS } from './processLayouts';
+import { CYCLE_LAYOUTS } from './cycleLayouts';
+import { HIERARCHY_LAYOUTS } from './hierarchyLayouts';
+import { RELATIONSHIP_LAYOUTS } from './relationshipLayouts';
 
 // ---------------------------------------------------------------- catalog
 
@@ -22,15 +25,15 @@ export const SMARTART_CATEGORIES = [
   { key: 'all', label: 'هەموو', ready: true },
   { key: 'list', label: 'لیست', ready: true },
   { key: 'process', label: 'پڕۆسە', ready: true },
-  { key: 'cycle', label: 'خولگە', ready: false },
-  { key: 'hierarchy', label: 'پلەبەندی', ready: false },
-  { key: 'relationship', label: 'پەیوەندی', ready: false },
+  { key: 'cycle', label: 'خولگە', ready: true },
+  { key: 'hierarchy', label: 'پلەبەندی', ready: true },
+  { key: 'relationship', label: 'پەیوەندی', ready: true },
   { key: 'matrix', label: 'ماتریکس', ready: false },
   { key: 'pyramid', label: 'هەرەم', ready: false },
   { key: 'picture', label: 'وێنە', ready: false },
 ];
 
-export const SMARTART_LAYOUTS = [...LIST_LAYOUTS, ...PROCESS_LAYOUTS];
+export const SMARTART_LAYOUTS = [...LIST_LAYOUTS, ...PROCESS_LAYOUTS, ...CYCLE_LAYOUTS, ...HIERARCHY_LAYOUTS, ...RELATIONSHIP_LAYOUTS];
 const LAYOUT_MAP = SMARTART_LAYOUTS.reduce((m, l) => { m[l.id] = l; return m; }, {});
 export const getSmartArtLayout = (id) => LAYOUT_MAP[id] || SMARTART_LAYOUTS[0];
 
@@ -114,6 +117,22 @@ const STYLE_MAP = SMARTART_STYLES.reduce((m, s) => { m[s.key] = s; return m; }, 
 // ---------------------------------------------------------------- data helpers
 
 /** Flat items -> groups: [{ text, children: [text] }] (level >= 1 = child of the last main item) */
+/** Flat items -> tree by level: an item is the child of the previous item with a lower level. */
+export const toTree = (items) => {
+  const roots = [];
+  const stack = [];
+  (items || []).slice(0, 40).forEach((it) => {
+    const level = Math.max(0, Math.min(4, (it && it.level) || 0));
+    const node = { text: (it && it.text) || '', level, children: [] };
+    while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+    if (stack.length) stack[stack.length - 1].children.push(node);
+    else roots.push(node);
+    stack.push(node);
+  });
+  if (roots.length === 0) roots.push({ text: '', level: 0, children: [] });
+  return roots;
+};
+
 export const toGroups = (items) => {
   const groups = [];
   (items || []).forEach((it) => {
@@ -129,7 +148,7 @@ export const createSmartArtElement = ({ layoutId, items, x, y, width = 80, heigh
   id: makeId('smartart'),
   type: 'smartart',
   layoutId: getSmartArtLayout(layoutId).id,
-  items: (items || SAMPLE_ITEMS).map((it) => ({ id: makeId('item'), text: it.text, level: it.level || 0 })),
+  items: (items || getSmartArtLayout(layoutId).sample || SAMPLE_ITEMS).map((it) => ({ id: makeId('item'), text: it.text, level: it.level || 0 })),
   colorScheme: 'colorful1',
   style: 'simple',
   accents: (accents || DEFAULT_ACCENTS).slice(0, 6),
@@ -180,18 +199,31 @@ export const fitFontSize = (text, w, h, maxPt, inset) => {
 export const buildSmartArtNodes = (elem, W, H) => {
   const layout = getSmartArtLayout(elem.layoutId);
   const groups = toGroups(elem.items);
-  const raw = layout.build(groups, W, H) || [];
+  const tree = toTree(elem.items);
+  const raw = layout.build(groups, W, H, { items: elem.items || [], tree }) || [];
   const A = (elem.accents && elem.accents.length >= 6 ? elem.accents : DEFAULT_ACCENTS);
   const scheme = SCHEME_MAP[elem.colorScheme] || SCHEME_MAP.colorful1;
   const st = STYLE_MAP[elem.style] || STYLE_MAP.simple;
   const fillOf = scheme.fill(A);
-  const n = groups.length;
+  const n = Math.max(groups.length, raw.reduce((m, nd) => Math.max(m, (nd.idx || 0) + 1), 0));
   const maxPt = elem.fontSize || 20;
 
-  const nodes = raw.map((nd) => {
+  // A rotated shape never carries text (PowerPoint would rotate it): the text becomes a label on top
+  const expanded = [];
+  raw.forEach((nd) => {
+    if (nd.rotation && nd.text && nd.role !== 'line') {
+      expanded.push({ ...nd, text: '' });
+      expanded.push({ ...nd, shape: 'rect', rotation: 0, flipH: false, role: nd.role === 'main' || nd.role === 'accent' ? 'label' : 'text' });
+    } else {
+      expanded.push(nd);
+    }
+  });
+
+  const nodes = expanded.map((nd) => {
     const main = fillOf(nd.idx || 0, n);
     let fill = null;
     let textColor = '#1c1c1e';
+    let alpha = 100;
     switch (nd.role) {
       case 'main':
         fill = main;
@@ -214,11 +246,18 @@ export const buildSmartArtNodes = (elem, W, H) => {
         fill = null;
         textColor = readableText(main);
         break;
-      default: // 'text': text only, on the slide background
+      case 'venn': // semi-transparent circle (Venn): overlaps mix
+        fill = main;
+        alpha = nd.alpha !== undefined ? nd.alpha : 55;
+        textColor = '#1c1c1e';
+        break;
+      default: // 'text' (text only), 'ring' (outline only), 'line' (straight connector)
         fill = null;
     }
     let line = null;
-    if (fill && nd.role !== 'connector' && nd.role !== 'bg') {
+    if (nd.role === 'ring') line = { color: main, width: nd.lineWidth || 2.5 };
+    if (nd.role === 'line') line = { color: nd.lineColor || shade(fillOf(0, n), 0.15), width: nd.lineWidth || 1.5 };
+    if (fill && nd.role !== 'connector' && nd.role !== 'bg' && nd.role !== 'venn') {
       if (st.line === 'light') line = { color: '#ffffff', width: 1 };
       if (st.line === 'accent') line = { color: main, width: 2 };
       if (st.line === 'dark') line = { color: shade(main, 0.45), width: st.lineWidth || 3 };
@@ -231,19 +270,23 @@ export const buildSmartArtNodes = (elem, W, H) => {
     if (st.outlineOnly && nd.role === 'label') textColor = shade(main, 0.2);
     if (elem.textColor) textColor = elem.textColor;
     const gradient = fill && (nd.role === 'main' || nd.role === 'accent') ? st.gradient : null;
+    const isLine = nd.role === 'line';
     return {
-      shape: nd.shape || 'rect',
+      shape: isLine ? 'line' : nd.shape || 'rect',
+      isLine,
       x: nd.x,
       y: nd.y,
-      w: Math.max(1, nd.w),
-      h: Math.max(1, nd.h),
+      // Lines keep a zero width / height (horizontal / vertical); every other shape is at least 1pt
+      w: isLine ? Math.max(0, nd.w) : Math.max(1, nd.w),
+      h: isLine ? Math.max(0, nd.h) : Math.max(1, nd.h),
       rotation: nd.rotation || 0,
       flipH: !!nd.flipH,
       fill,
+      alpha,
       fill2: gradient ? tint(fill, gradient === 'glossy' ? 0.55 : 0.3) : null,
       gloss: gradient,
       line,
-      shadow: !!st.shadow && !!fill && nd.role !== 'connector' && nd.role !== 'bg',
+      shadow: !!st.shadow && !!fill && alpha === 100 && nd.role !== 'connector' && nd.role !== 'bg',
       text: nd.text || '',
       textColor,
       bold: nd.bold !== undefined ? nd.bold : !!elem.bold,
@@ -277,7 +320,28 @@ export const getSmartArtBox = (elem, slideHeightPt = 405) => ({
 /** "گۆڕین بۆ شێوە": independent shape elements at the same place (slide %). */
 export const smartArtToShapes = (elem, slideHeightPt = 405) => {
   const { W, H } = getSmartArtBox(elem, slideHeightPt);
-  const nodes = buildSmartArtNodes(elem, W, H);
+  const nodes = buildSmartArtNodes(elem, W, H).map((nd) => {
+    if (!nd.isLine) return nd;
+    // A straight line becomes a thin rectangle rotated along the segment (any direction)
+    const x1 = nd.flipH ? nd.x + nd.w : nd.x;
+    const x2 = nd.flipH ? nd.x : nd.x + nd.w;
+    const len = Math.max(1, Math.hypot(nd.w, nd.h));
+    const t = Math.max(1, nd.line ? nd.line.width : 1.5);
+    const cx = (x1 + x2) / 2;
+    const cy = nd.y + nd.h / 2;
+    return {
+      ...nd,
+      shape: 'rect',
+      x: cx - len / 2,
+      y: cy - t / 2,
+      w: len,
+      h: t,
+      rotation: (Math.atan2(nd.y + nd.h - nd.y, x2 - x1) * 180) / Math.PI,
+      flipH: false,
+      fill: nd.line ? nd.line.color : '#7f7f7f',
+      line: null,
+    };
+  });
   return nodes.map((nd, k) => ({
     id: makeId('shape'),
     type: 'shape',
@@ -290,7 +354,7 @@ export const smartArtToShapes = (elem, slideHeightPt = 405) => {
     flipH: nd.flipH || false,
     fill: nd.fill || 'none',
     outline: nd.line ? { color: nd.line.color, width: nd.line.width } : { color: '#000000', width: 0 },
-    opacity: 1,
+    opacity: nd.alpha !== undefined && nd.alpha < 100 ? nd.alpha / 100 : 1,
     cornerRadius: nd.shape === 'roundRect' ? nd.cornerRadius : 0,
     locked: false,
     zIndex: (elem.zIndex || 1) + k * 0.001,

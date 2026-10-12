@@ -281,6 +281,11 @@ const saFillXml = (nd) => {
       `<a:gs pos="100000"><a:srgbClr val="${normalizeHex(nd.fill, '4472C4')}"/></a:gs>` +
       '</a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>';
   }
+  // Venn circles: semi-transparent fill
+  if (nd.alpha !== undefined && nd.alpha < 100) {
+    const alphaVal = Math.max(0, Math.min(100000, Math.round(nd.alpha * 1000)));
+    return `<a:solidFill><a:srgbClr val="${normalizeHex(nd.fill, '4472C4')}"><a:alpha val="${alphaVal}"/></a:srgbClr></a:solidFill>`;
+  }
   return `<a:solidFill><a:srgbClr val="${normalizeHex(nd.fill, '4472C4')}"/></a:solidFill>`;
 };
 

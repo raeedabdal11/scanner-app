@@ -53,6 +53,7 @@ const items = [
   { text: 'دیزاین', level: 0 },
   { text: 'جێبەجێکردن', level: 0 },
   { text: 'تاقیکردنەوە', level: 1 },
+  { text: 'وردەکاری', level: 2 },
   { text: 'هەڵسەنگاندن', level: 0 },
   { text: 'Launch & <Review>', level: 0 },
 ];
@@ -90,6 +91,8 @@ const zip = await JSZip.loadAsync(bytes);
 
 const failures = [];
 let shapeTotal = 0;
+let alphaTotal = 0;
+let lineTotal = 0;
 for (let i = 0; i < slides.length; i++) {
   const layout = E.SMARTART_LAYOUTS[i];
   const xml = await zip.file(`ppt/slides/slide${i + 1}.xml`).async('string');
@@ -115,6 +118,14 @@ for (let i = 0; i < slides.length; i++) {
     if (!/^\d+$/.test(m[2])) fail(`negative / non-integer EMU ${m[1]}="${m[2]}"`);
   }
   if (!/<a:pPr algn="[a-z]+" rtl="1"\/>/.test(grp)) fail('no rtl="1" paragraphs');
+  for (const m of grp.matchAll(/<a:alpha val="([^"]*)"\/>/g)) {
+    if (!/^\d+$/.test(m[1]) || Number(m[1]) > 100000) fail(`invalid alpha val="${m[1]}"`);
+  }
+  const alphaFill = /<a:solidFill><a:srgbClr val="[0-9A-F]{6}"><a:alpha val="\d+"\/><\/a:srgbClr><\/a:solidFill>/g;
+  if (/Venn$/.test(layout.id) && !(grp.match(alphaFill) || []).length) fail('Venn without semi-transparent fill');
+  if (layout.category === 'hierarchy' && !/^(tableHierarchy)$/.test(layout.id) && !/<a:prstGeom prst="line"/.test(grp)) fail('hierarchy without connector lines');
+  alphaTotal += (grp.match(alphaFill) || []).length;
+  lineTotal += (grp.match(/<a:prstGeom prst="line"/g) || []).length;
   if (!/<a:rPr lang="ar-IQ"/.test(grp)) fail('no lang="ar-IQ" runs');
   if (xml.includes('APP_SMARTART_')) fail('placeholder left in the slide');
   const errors = [];
@@ -133,10 +144,10 @@ for (let i = 0; i < slides.length; i++) {
   console.log(`convert to shapes: ${chevronCount} independent chevron shapes, ${flipped} mirrored (flipH)`);
 }
 
-const list = E.SMARTART_LAYOUTS.filter((l) => l.category === 'list').length;
-const proc = E.SMARTART_LAYOUTS.filter((l) => l.category === 'process').length;
-console.log(`layouts exported: ${slides.length} (list ${list}, process ${proc})`);
-console.log(`shapes exported: ${shapeTotal}`);
+const perCat = {};
+E.SMARTART_LAYOUTS.forEach((l) => { perCat[l.category] = (perCat[l.category] || 0) + 1; });
+console.log(`layouts exported: ${slides.length} (${Object.entries(perCat).map(([k, v]) => `${k} ${v}`).join(', ')})`);
+console.log(`shapes exported: ${shapeTotal} (straight lines: ${lineTotal}, semi-transparent fills: ${alphaTotal})`);
 console.log(`styles used: ${styles.length}, color schemes used: ${Math.min(schemes.length, slides.length)} of ${schemes.length}`);
 if (failures.length) {
   failures.slice(0, 30).forEach((f) => console.log(`FAIL ${f}`));

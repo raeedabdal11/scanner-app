@@ -42,6 +42,34 @@ export function generatePolygonPath(sides) {
 }
 
 // --- Irregular Burst / Explosion Generator ---
+// --- Gear Generator (prst gear6 / gear9): teeth around a ring with a center hole (even-odd) ---
+export function generateGearPath(teeth) {
+  const cx = 50;
+  const cy = 50;
+  const outerR = 50;
+  const rootR = 39;
+  const holeR = 14;
+  let d = '';
+  const step = (2 * Math.PI) / teeth;
+  for (let i = 0; i < teeth; i++) {
+    const a = i * step - Math.PI / 2;
+    const pts = [
+      [rootR, a - step * 0.32],
+      [outerR, a - step * 0.18],
+      [outerR, a + step * 0.18],
+      [rootR, a + step * 0.32],
+    ];
+    pts.forEach(([r, ang], k) => {
+      const x = (cx + r * Math.cos(ang)).toFixed(2);
+      const y = (cy + r * Math.sin(ang)).toFixed(2);
+      d += i === 0 && k === 0 ? `M ${x},${y}` : ` L ${x},${y}`;
+    });
+  }
+  d += ' Z';
+  d += ` M ${cx - holeR},${cy} A ${holeR},${holeR} 0 1,0 ${cx + holeR},${cy} A ${holeR},${holeR} 0 1,0 ${cx - holeR},${cy} Z`;
+  return d;
+}
+
 export function generateBurstPath(points = 8) {
   const cx = 50;
   const cy = 50;
@@ -165,6 +193,8 @@ export const ALL_SHAPES = [
   { id: 'bezel', category: 'basic_shapes', name: 'قەباخ', path: 'M 0,0 L 100,0 L 80,20 L 20,20 Z M 100,0 L 100,100 L 80,80 L 80,20 Z M 100,100 L 0,100 L 20,80 L 80,80 Z M 0,100 L 0,0 L 20,20 L 20,80 Z' },
   { id: 'foldedCorner', category: 'basic_shapes', name: 'پەڕەی پێچراوە', path: 'M 0,0 L 70,0 L 100,30 L 100,100 L 0,100 Z M 70,0 L 70,30 L 100,30 Z' },
   { id: 'heart', category: 'basic_shapes', name: 'دڵ', path: 'M 50,25 C 50,10 25,0 10,20 C -10,50 35,80 50,100 C 65,80 110,50 90,20 C 75,0 50,10 50,25 Z' },
+  { id: 'gear6', category: 'basic_shapes', name: 'چەرخی ٦ ددان', evenOdd: true, path: generateGearPath(6) },
+  { id: 'gear9', category: 'basic_shapes', name: 'چەرخی ٩ ددان', evenOdd: true, path: generateGearPath(9) },
   { id: 'lightningBolt', category: 'basic_shapes', name: 'بروسکە', path: 'M 55,0 L 15,55 L 45,55 L 30,100 L 85,40 L 55,40 Z' },
   { id: 'sun', category: 'basic_shapes', name: 'خۆر', path: 'M 50,20 A 30,30 0 1,0 50,80 A 30,30 0 1,0 50,20 M 50,0 L 50,12 M 50,88 L 50,100 M 0,50 L 12,50 M 88,50 L 100,50 M 15,15 L 24,24 M 76,76 L 85,85 M 15,85 L 24,76 M 76,24 L 85,15' },
   { id: 'moon', category: 'basic_shapes', name: 'مانگ', path: 'M 60,0 C 20,0 0,25 0,50 C 0,75 25,100 65,100 C 35,85 25,50 40,20 C 48,7 60,0 60,0 Z' },
