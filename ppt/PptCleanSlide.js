@@ -9,7 +9,7 @@ import { getSlideBackground, getBackgroundCss } from './slideBackground';
 import { getDisplayFontFamily, getCssFontStack } from './fonts';
 import { CUSTOM_KURDISH_FONTS } from './customFonts';
 import { PptTableView } from './PptTableView';
-import { layoutTable, getCell, getCellStyle, getTableBorder, TABLE_CELL_PAD_PT } from './tableModel';
+import { layoutTable, getCell, getCellStyle, getCellBorders, resolveTableStyle } from './tableModel';
 
 export const PptCleanSlide = React.forwardRef(({
   slide,
@@ -305,43 +305,80 @@ const styles = StyleSheet.create({
   },
 });
 
-// Table -> HTML for the PDF (same layout as the canvas: tableModel.layoutTable, column 0 on the right)
+// Table -> HTML for the PDF (same layout as the canvas: tableModel.layoutTable). Written in
+// PHYSICAL column order (left to right) so colspan / rowspan and left / right borders match the
+// canvas exactly; each cell keeps its own text direction.
+const CSS_DASH = { solid: 'solid', dash: 'dashed', dot: 'dotted' };
+const cssRgba = (hex, alphaPct) => {
+  const h = (hex || '#000000').replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16) || 0;
+  const g = parseInt(h.slice(2, 4), 16) || 0;
+  const b = parseInt(h.slice(4, 6), 16) || 0;
+  return `rgba(${r}, ${g}, ${b}, ${(alphaPct / 100).toFixed(3)})`;
+};
+
 function tableToHtml(elem, scale, slideHeightPt) {
   const lay = layoutTable(elem, SLIDE.widthPt, slideHeightPt);
-  const border = getTableBorder(elem);
-  const borderCss = border.width > 0 ? `${(border.width * scale).toFixed(2)}pt solid ${border.color}` : 'none';
+  const st = resolveTableStyle(elem);
   const fontStack = getCssFontStack(elem.kurdishFont || 'Tahoma');
-  const cols = lay.colWidthsPt.map((w) => `<col style="width:${(w * scale).toFixed(2)}pt">`).join('');
+  const pt = (v) => `${(v * scale).toFixed(2)}pt`;
+  const byStart = {};
+  lay.cells.forEach((cell) => { byStart[`${cell.r}_${cell.physCol}`] = cell; });
+  const physCols = lay.colWidthsPt.slice().reverse();
+  const cols = physCols.map((w) => `<col style="width:${pt(w)}">`).join('');
+
   const rowsHtml = lay.rowHeightsPt.map((h, r) => {
-    const tds = lay.colWidthsPt.map((_, c) => {
-      const cs = getCellStyle(elem, r, c);
-      const text = escapeHtml(getCell(elem, r, c).text || '');
-      return `<td style="
-        background:${cs.fill};
+    let tds = '';
+    for (let p = 0; p < lay.cols; p++) {
+      const cell = byStart[`${r}_${p}`];
+      if (!cell) continue; // covered by a merge
+      const cs = getCellStyle(elem, cell.r, cell.c);
+      const b = getCellBorders(elem, cell);
+      const side = (s) => (b[s] && b[s].width > 0 ? `${pt(b[s].width)} ${CSS_DASH[b[s].dash] || 'solid'} ${b[s].color}` : 'none');
+      let background = 'transparent';
+      if (cs.fill && cs.fill2) background = `linear-gradient(to bottom, ${cssRgba(cs.fill, cs.fillAlpha)}, ${cssRgba(cs.fill2, cs.fillAlpha)})`;
+      else if (cs.fill) background = cssRgba(cs.fill, cs.fillAlpha);
+      const text = escapeHtml(getCell(elem, cell.r, cell.c).text || '');
+      tds += `<td colspan="${cell.cs}" rowspan="${cell.rs}" style="
+        background:${background};
         color:${cs.color};
-        border:${borderCss};
-        padding:0 ${(TABLE_CELL_PAD_PT * scale).toFixed(2)}pt;
+        border-top:${side('top')};
+        border-bottom:${side('bottom')};
+        border-left:${side('left')};
+        border-right:${side('right')};
+        padding:${pt(cs.pad)};
         font-family:${fontStack};
-        font-size:${(cs.fontSize * scale).toFixed(2)}pt;
+        font-size:${pt(cs.fontSize)};
         line-height:1.25;
         font-weight:${cs.bold ? 'bold' : 'normal'};
         font-style:${cs.italic ? 'italic' : 'normal'};
         text-align:${cs.align};
-        vertical-align:middle;
+        vertical-align:${cs.valign};
+        direction:${cs.dir};
         white-space:pre-wrap;
         word-break:break-word;
         overflow:hidden;
       ">${text}</td>`;
-    }).join('');
-    return `<tr style="height:${(h * scale).toFixed(2)}pt">${tds}</tr>`;
+    }
+    return `<tr style="height:${pt(h)}">${tds}</tr>`;
   }).join('');
-  return `<table dir="rtl" style="
-    width:${(lay.totalWidthPt * scale).toFixed(2)}pt;
-    height:${(lay.totalHeightPt * scale).toFixed(2)}pt;
+
+  const shadow = elem.shadow && elem.shadow.opacity > 0
+    ? `box-shadow:${pt(elem.shadow.offset || 0)} ${pt(elem.shadow.offset || 0)} ${pt(elem.shadow.blur || 0)} ${cssRgba(elem.shadow.color || '#000000', (elem.shadow.opacity || 0.3) * 100)};`
+    : '';
+  return `<div style="
+    width:${pt(lay.totalWidthPt)};
+    height:${pt(lay.totalHeightPt)};
+    border-radius:${pt(st.cornerRadius || 0)};
+    overflow:hidden;
+    background:${elem.bgFill || 'transparent'};
+    ${shadow}
+  "><table dir="ltr" style="
+    width:${pt(lay.totalWidthPt)};
+    height:${pt(lay.totalHeightPt)};
     border-collapse:collapse;
     table-layout:fixed;
-    box-sizing:border-box;
-  "><colgroup>${cols}</colgroup>${rowsHtml}</table>`;
+  "><colgroup>${cols}</colgroup>${rowsHtml}</table></div>`;
 }
 
 function escapeHtml(str) {

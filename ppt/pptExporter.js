@@ -6,7 +6,7 @@ import { getExportFontFamily } from './fonts';
 import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 import { getSlideBackground } from './slideBackground';
-import { layoutTable, getCell, getCellStyle, getTableBorder, TABLE_CELL_PAD_PT } from './tableModel';
+import { layoutTable, getCell, getCellStyle, getCellBorders } from './tableModel';
 
 // Shapes drawn as open outlines on screen (shapeCatalog `open`, plus the two connectors):
 // exported with <a:noFill/> so PowerPoint matches the editor
@@ -123,7 +123,9 @@ const normalizeHex = (colorStr, defaultHex = null) => {
 // Tables: written as a real <p:graphicFrame> + <a:tbl>. pptxgenjs only places a named placeholder
 // (APP_TABLE_n) at the right z-order; after the slide XML is final the placeholder <p:sp> is
 // replaced by the frame below. Same layout as the canvas / PDF (tableModel.layoutTable).
-// <a:tblPr rtl="1">: column 0 is drawn on the right, like the editor.
+// Columns are written in PHYSICAL order (left to right): logical column 0 is the last gridCol,
+// so the table looks like the editor and lnL / lnR / gridSpan are unambiguous.
+// Merges: anchor <a:tc gridSpan rowSpan>, covered cells <a:tc hMerge="1"> / <a:tc vMerge="1">.
 // ---------------------------------------------------------------------------------------------
 const PT_EMU = 12700;
 const TABLE_ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
@@ -135,61 +137,116 @@ const xmlEscape = (str) =>
     .replace(/"/g, '&quot;')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 const ALGN = { right: 'r', center: 'ctr', left: 'l' };
+const ANCHOR = { top: 't', middle: 'ctr', bottom: 'b' };
+const PRST_DASH = { solid: 'solid', dash: 'dash', dot: 'sysDot' };
 
-const tableBorderXml = (tag, widthEmu, hex) =>
-  widthEmu > 0
-    ? `<a:${tag} w="${widthEmu}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:srgbClr val="${hex}"/></a:solidFill><a:prstDash val="solid"/></a:${tag}>`
+const srgbXml = (hex, alphaPct = 100) => {
+  const val = normalizeHex(hex, '000000');
+  return alphaPct < 100
+    ? `<a:srgbClr val="${val}"><a:alpha val="${Math.round(Math.max(0, alphaPct) * 1000)}"/></a:srgbClr>`
+    : `<a:srgbClr val="${val}"/>`;
+};
+
+const tableBorderXml = (tag, pen) =>
+  pen && pen.width > 0
+    ? `<a:${tag} w="${Math.max(1, Math.round(pen.width * PT_EMU))}" cap="flat" cmpd="sng" algn="ctr">` +
+      `<a:solidFill>${srgbXml(pen.color)}</a:solidFill><a:prstDash val="${PRST_DASH[pen.dash] || 'solid'}"/></a:${tag}>`
     : `<a:${tag} w="0"><a:noFill/></a:${tag}>`;
+
+const cellFillXml = (cs) => {
+  if (!cs.fill) return '<a:noFill/>';
+  if (cs.fill2) {
+    return '<a:gradFill rotWithShape="1"><a:gsLst>' +
+      `<a:gs pos="0">${srgbXml(cs.fill, cs.fillAlpha)}</a:gs>` +
+      `<a:gs pos="100000">${srgbXml(cs.fill2, cs.fillAlpha)}</a:gs>` +
+      '</a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>';
+  }
+  return `<a:solidFill>${srgbXml(cs.fill, cs.fillAlpha)}</a:solidFill>`;
+};
+
+const coveredCellXml = (hMerge, vMerge) =>
+  `<a:tc${hMerge ? ' hMerge="1"' : ''}${vMerge ? ' vMerge="1"' : ''}>` +
+  '<a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ar-IQ" dirty="0"/></a:p></a:txBody><a:tcPr/></a:tc>';
 
 export function buildTableFrameXml(elem, xIn, yIn, slideHeightPt, frameId) {
   const lay = layoutTable(elem, 720, slideHeightPt);
-  const border = getTableBorder(elem);
-  const borderEmu = Math.round(border.width * PT_EMU);
-  const borderHex = normalizeHex(border.color, '7F7F7F');
   const font = xmlEscape(getExportFontFamily(elem.kurdishFont || 'Tahoma', true));
-  const padEmu = Math.round(TABLE_CELL_PAD_PT * PT_EMU);
-
-  const colEmu = lay.colWidthsPt.map((w) => Math.max(1, Math.round(w * PT_EMU)));
+  const physColEmu = lay.colWidthsPt.slice().reverse().map((w) => Math.max(1, Math.round(w * PT_EMU)));
   const rowEmu = lay.rowHeightsPt.map((h) => Math.max(1, Math.round(h * PT_EMU)));
-  const cx = colEmu.reduce((a, b) => a + b, 0);
+  const cx = physColEmu.reduce((a, b) => a + b, 0);
   const cy = rowEmu.reduce((a, b) => a + b, 0);
 
-  const rowsXml = rowEmu.map((h, r) => {
-    const cellsXml = colEmu.map((_, c) => {
-      const cs = getCellStyle(elem, r, c);
-      const text = String(getCell(elem, r, c).text || '');
-      const sz = Math.max(100, Math.round(cs.fontSize * 100));
-      const colorHex = normalizeHex(cs.color, '1C1C1E');
-      const algn = ALGN[cs.align] || 'r';
-      const paras = text.split('\n').map((line) => {
-        const lang = TABLE_ARABIC_RE.test(line || text) ? 'ar-IQ' : 'en-US';
-        const pPr = `<a:pPr algn="${algn}" rtl="1"/>`;
-        if (!line) return `<a:p>${pPr}<a:endParaRPr lang="${lang}" sz="${sz}" dirty="0"/></a:p>`;
-        return `<a:p>${pPr}<a:r><a:rPr lang="${lang}" sz="${sz}" b="${cs.bold ? 1 : 0}" i="${cs.italic ? 1 : 0}" dirty="0">` +
-          `<a:solidFill><a:srgbClr val="${colorHex}"/></a:solidFill>` +
-          `<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>` +
-          `</a:rPr><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`;
-      }).join('');
-      const fillHex = normalizeHex(cs.fill, null);
-      const fillXml = fillHex ? `<a:solidFill><a:srgbClr val="${fillHex}"/></a:solidFill>` : '<a:noFill/>';
-      return `<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>${paras}</a:txBody>` +
-        `<a:tcPr marL="${padEmu}" marR="${padEmu}" marT="${padEmu}" marB="${padEmu}" anchor="ctr">` +
-        tableBorderXml('lnL', borderEmu, borderHex) +
-        tableBorderXml('lnR', borderEmu, borderHex) +
-        tableBorderXml('lnT', borderEmu, borderHex) +
-        tableBorderXml('lnB', borderEmu, borderHex) +
-        `${fillXml}</a:tcPr></a:tc>`;
+  const byStart = {};
+  lay.cells.forEach((cell) => { byStart[`${cell.r}_${cell.physCol}`] = cell; });
+  // Physical grid -> covering anchor
+  const ownerAt = (r, p) => {
+    const o = lay.owner[r][lay.cols - 1 - p];
+    return lay.cells.find((cell) => cell.r === o.r && cell.c === o.c);
+  };
+
+  const anchorCellXml = (cell) => {
+    const cs = getCellStyle(elem, cell.r, cell.c);
+    const b = getCellBorders(elem, cell);
+    const text = String(getCell(elem, cell.r, cell.c).text || '');
+    const sz = Math.max(100, Math.round(cs.fontSize * 100));
+    const colorHex = normalizeHex(cs.color, '1C1C1E');
+    const algn = ALGN[cs.align] || 'r';
+    const rtl = cs.dir === 'ltr' ? '0' : '1';
+    const paras = text.split('\n').map((line) => {
+      const lang = TABLE_ARABIC_RE.test(line || text) ? 'ar-IQ' : 'en-US';
+      const pPr = `<a:pPr algn="${algn}" rtl="${rtl}"/>`;
+      if (!line) return `<a:p>${pPr}<a:endParaRPr lang="${lang}" sz="${sz}" dirty="0"/></a:p>`;
+      return `<a:p>${pPr}<a:r><a:rPr lang="${lang}" sz="${sz}" b="${cs.bold ? 1 : 0}" i="${cs.italic ? 1 : 0}" dirty="0">` +
+        `<a:solidFill><a:srgbClr val="${colorHex}"/></a:solidFill>` +
+        `<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>` +
+        `</a:rPr><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`;
     }).join('');
-    return `<a:tr h="${h}">${cellsXml}</a:tr>`;
+    const padEmu = Math.round(cs.pad * PT_EMU);
+    const spans = `${cell.cs > 1 ? ` gridSpan="${cell.cs}"` : ''}${cell.rs > 1 ? ` rowSpan="${cell.rs}"` : ''}`;
+    // <a:tcPr> children in schema order: lnL, lnR, lnT, lnB, fill
+    return `<a:tc${spans}><a:txBody><a:bodyPr/><a:lstStyle/>${paras}</a:txBody>` +
+      `<a:tcPr marL="${padEmu}" marR="${padEmu}" marT="${padEmu}" marB="${padEmu}" anchor="${ANCHOR[cs.valign] || 'ctr'}">` +
+      tableBorderXml('lnL', b.left) +
+      tableBorderXml('lnR', b.right) +
+      tableBorderXml('lnT', b.top) +
+      tableBorderXml('lnB', b.bottom) +
+      `${cellFillXml(cs)}</a:tcPr></a:tc>`;
+  };
+
+  const rowsXml = rowEmu.map((h, r) => {
+    let tcs = '';
+    for (let p = 0; p < lay.cols; p++) {
+      const start = byStart[`${r}_${p}`];
+      if (start) {
+        tcs += anchorCellXml(start);
+      } else {
+        const a = ownerAt(r, p);
+        tcs += coveredCellXml(!!a && p > a.physCol, !!a && r > a.r);
+      }
+    }
+    return `<a:tr h="${h}">${tcs}</a:tr>`;
   }).join('');
+
+  // <a:tblPr>: table background fill, then the shadow effect
+  const bgXml = elem.bgFill ? `<a:solidFill>${srgbXml(elem.bgFill)}</a:solidFill>` : '';
+  const sh = elem.shadow;
+  const shadowXml = sh && sh.opacity > 0
+    ? '<a:effectLst>' +
+      `<a:outerShdw blurRad="${Math.round((sh.blur || 0) * PT_EMU)}" dist="${Math.round(Math.SQRT2 * (sh.offset || 0) * PT_EMU)}" dir="2700000" algn="tl" rotWithShape="0">` +
+      `${srgbXml(sh.color || '#000000', Math.round((sh.opacity || 0.3) * 100))}</a:outerShdw></a:effectLst>`
+    : '';
+  const flags =
+    ` firstRow="${elem.headerRow ? 1 : 0}" lastRow="${elem.totalRow ? 1 : 0}"` +
+    ` firstCol="${elem.lastCol ? 1 : 0}" lastCol="${elem.firstCol ? 1 : 0}"` +
+    ` bandRow="${elem.bandRows ? 1 : 0}" bandCol="${elem.bandCols ? 1 : 0}"`;
 
   const locks = elem.locked ? ' noMove="1" noResize="1"' : '';
   return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${frameId}" name="Table ${frameId}"/>` +
     `<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"${locks}/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>` +
     `<p:xfrm><a:off x="${Math.round(xIn * 914400)}" y="${Math.round(yIn * 914400)}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm>` +
     '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' +
-    `<a:tblPr rtl="1" firstRow="${elem.headerRow ? 1 : 0}" bandRow="${elem.bandRows ? 1 : 0}"/>` +
-    `<a:tblGrid>${colEmu.map((w) => `<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>` +
+    `<a:tblPr${flags}>${bgXml}${shadowXml}</a:tblPr>` +
+    `<a:tblGrid>${physColEmu.map((w) => `<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>` +
     `${rowsXml}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
 }
 

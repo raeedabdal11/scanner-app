@@ -28,7 +28,7 @@ import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
 import { PptShapeToolbar } from './PptShapeToolbar';
 import { PptTableToolbar } from './PptTableToolbar';
-import { createTableElement } from './tableModel';
+import { createTableElement, getThemeAccents } from './tableModel';
 import { makeId, ensureUniqueIds } from './makeId';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
@@ -1090,6 +1090,7 @@ export const PptEditorModal = ({
       rows,
       cols,
       zIndex: ((targetPage?.elements || []).length || 0) + 1,
+      accents: getThemeAccents(targetPage?.themeKey ? getThemeByKey(targetPage.themeKey) : null),
     });
     const newSlides = presentation.slides.map((s) =>
       s.id === targetPageId ? { ...s, elements: [...(s.elements || []), table] } : s
@@ -1103,12 +1104,21 @@ export const PptEditorModal = ({
 
   // Tap on a table cell: select it; a second tap on the same cell opens its text sheet
   const handleTableCellTap = (pageId, elemId, r, c) => {
+    const cur = selectedTableCell;
+    if (cur && cur.rangeMode && cur.elemId === elemId) {
+      setSelectedPageId(pageId);
+      setSelectedElementId(elemId);
+      setEditingElementId(null);
+      setSelectedTableCell({ elemId, r: cur.r, c: cur.c, r2: r, c2: c });
+      return;
+    }
     const again =
       selectedElementId === elemId &&
       selectedTableCell &&
       selectedTableCell.elemId === elemId &&
       selectedTableCell.r === r &&
-      selectedTableCell.c === c;
+      selectedTableCell.c === c &&
+      (selectedTableCell.r2 === undefined || (selectedTableCell.r2 === r && selectedTableCell.c2 === c));
     setSelectedPageId(pageId);
     setSelectedElementId(elemId);
     setEditingElementId(null);
@@ -1969,9 +1979,11 @@ export const PptEditorModal = ({
                       selectedTableCell && selectedTableCell.elemId === selectedElement.id ? selectedTableCell : null
                     }
                     onSelectCell={(cell) =>
-                      setSelectedTableCell(cell ? { elemId: selectedElement.id, r: cell.r, c: cell.c } : null)
+                      setSelectedTableCell(cell ? { ...cell, elemId: selectedElement.id } : null)
                     }
                     onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                    theme={selectedPage?.themeKey ? getThemeByKey(selectedPage.themeKey) : null}
+                    slideHeightPt={presentation.aspectRatio === '4:3' ? 540 : 405}
                   />
                 ) : selectedElement && selectedElement.type === 'shape' ? (
                   <PptShapeToolbar

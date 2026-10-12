@@ -60,7 +60,8 @@ export function computeResizeGeometry(g, dx, dy) {
 
   const isCorner = sx !== 0 && sy !== 0;
   const keepAspect =
-    elem.type === 'image' && (isCorner || !!(elem.lockAspect ?? elem.keepAspect));
+    (elem.type === 'image' && (isCorner || !!(elem.lockAspect ?? elem.keepAspect))) ||
+    (elem.type === 'table' && !!elem.lockAspect);
   const minW = (MIN_ELEM_PERCENT / 100) * cw;
   const minH = (MIN_ELEM_PERCENT / 100) * ch;
   const hasText = elem.type === 'text' && elem.text && elem.text.trim();

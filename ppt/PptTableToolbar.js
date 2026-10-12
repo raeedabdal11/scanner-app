@@ -1,6 +1,8 @@
-// Toolbar for a selected table element: rows/columns, ready styles, cell formatting, borders,
-// plus a small sheet that edits ONE cell's text (no TextInput ever lives on the canvas).
-import React, { useState, useImperativeHandle, forwardRef } from 'react';
+// Toolbar for a selected table: PowerPoint "Table Design" + "Layout" in Kurdish.
+// Tabs: دیزاین (style gallery + style options), خانە (merge / fill / text), هێڵ (borders),
+// قەبارە (row / column size), ڕیز و ستوون (insert / delete), کاریگەری (shadow / background / clear).
+// Cell text is edited in a small sheet with ONE TextInput (no TextInput ever lives on the canvas).
+import React, { useState, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -10,69 +12,85 @@ import {
   Modal,
   StyleSheet,
   Platform,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PptValueCard } from './PptValueCard';
 import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
-import {
-  TABLE_STYLES,
-  TABLE_LIMITS,
-  getCell,
-  getCellStyle,
-  getTableBorder,
-  insertRow,
-  deleteRow,
-  insertCol,
-  deleteCol,
-  equalizeColumns,
-  getTargetCells,
-  setCellProps,
-  setCellText,
-  applyTableStyle,
-  setTableBorder,
-} from './tableModel';
+import * as T from './tableModel';
+
+const kd = T.toKurdishDigits;
 
 const TABS = [
-  { key: 'rowcol', label: 'ڕیز و ستوون', icon: 'grid-outline' },
-  { key: 'style', label: 'ستایل', icon: 'color-palette-outline' },
+  { key: 'design', label: 'دیزاین', icon: 'color-palette-outline' },
   { key: 'cell', label: 'خانە', icon: 'square-outline' },
-  { key: 'border', label: 'هێڵ', icon: 'remove-outline' },
+  { key: 'border', label: 'هێڵ', icon: 'grid-outline' },
+  { key: 'size', label: 'قەبارە', icon: 'resize-outline' },
+  { key: 'rowcol', label: 'ڕیز و ستوون', icon: 'add-circle-outline' },
+  { key: 'effects', label: 'کاریگەری', icon: 'sparkles-outline' },
+];
+
+const OPTIONS = [
+  { key: 'headerRow', label: 'ڕیزی سەرەوە' },
+  { key: 'totalRow', label: 'ڕیزی کۆتایی' },
+  { key: 'firstCol', label: 'ستوونی یەکەم' },
+  { key: 'lastCol', label: 'ستوونی کۆتایی' },
+  { key: 'bandRows', label: 'ڕیزی هێڵدار' },
+  { key: 'bandCols', label: 'ستوونی هێڵدار' },
 ];
 
 const SCOPES = [
-  { key: 'cell', label: 'خانە' },
-  { key: 'row', label: 'هەموو ڕیزەکە' },
-  { key: 'col', label: 'هەموو ستوونەکە' },
+  { key: 'cell', label: 'خانە / ناوچە' },
+  { key: 'row', label: 'ڕیز' },
+  { key: 'col', label: 'ستوون' },
+  { key: 'table', label: 'هەموو خشتە' },
 ];
 
 const ALIGNS = [
-  { key: 'right', label: 'ڕاست', icon: 'reorder-three-outline' },
-  { key: 'center', label: 'ناوەڕاست', icon: 'menu-outline' },
-  { key: 'left', label: 'چەپ', icon: 'reorder-three-outline' },
+  { key: 'right', label: 'ڕاست' },
+  { key: 'center', label: 'ناوەڕاست' },
+  { key: 'left', label: 'چەپ' },
+];
+const VALIGNS = [
+  { key: 'top', label: 'سەرەوە' },
+  { key: 'middle', label: 'ناوەڕاست' },
+  { key: 'bottom', label: 'خوارەوە' },
+];
+const DIRS = [
+  { key: 'rtl', label: 'ڕاست بۆ چەپ' },
+  { key: 'ltr', label: 'چەپ بۆ ڕاست' },
+];
+const DASHES = [
+  { key: 'solid', label: 'هێڵی تەواو' },
+  { key: 'dash', label: 'پچڕپچڕ' },
+  { key: 'dot', label: 'خاڵخاڵ' },
+];
+const BORDER_PRESETS = [
+  { key: 'all', label: 'هەموو', icon: 'grid-outline' },
+  { key: 'outside', label: 'دەرەوە', icon: 'square-outline' },
+  { key: 'inside', label: 'ناوەوە', icon: 'add-outline' },
+  { key: 'none', label: 'هیچ', icon: 'close-outline' },
+  { key: 'top', label: 'سەرەوە', icon: 'arrow-up-outline' },
+  { key: 'bottom', label: 'خوارەوە', icon: 'arrow-down-outline' },
+  { key: 'right', label: 'ڕاست', icon: 'arrow-forward-outline' },
+  { key: 'left', label: 'چەپ', icon: 'arrow-back-outline' },
 ];
 
-const TABLE_PALETTE = [
+const PALETTE = [
   '#ffffff', '#f2f2f2', '#bfbfbf', '#7f7f7f', '#404040', '#000000',
   '#dae3f3', '#4472c4', '#1f497d', '#fbe5d6', '#ed7d31', '#c00000',
   '#e2efd9', '#70ad47', '#fff2cc', '#ffc000', '#e5e0ec', '#7030a0',
 ];
 
-const FONT_CHIPS = [10, 12, 14, 18, 24].map((v) => ({ value: v, label: `${v}` }));
-const BORDER_CHIPS = [0, 1, 2, 3, 4].map((v) => ({ value: v, label: `${v}` }));
+const chips = (list, suffix = '') => list.map((v) => ({ value: v, label: `${v}${suffix}` }));
 
-const KURDISH_DIGITS = '٠١٢٣٤٥٦٧٨٩';
-const kd = (n) => String(n).replace(/\d/g, (d) => KURDISH_DIGITS[Number(d)]);
+// ---- small module-level pieces ----
 
-// Row of color swatches; `onReset` adds a "بێ گۆڕین" chip that removes the cell override
-const ColorRow = ({ value, onPick, onReset }) => (
+const ColorRow = ({ value, onPick, extra }) => (
   <View style={styles.swatchRow}>
-    {onReset && (
-      <TouchableOpacity style={styles.resetChip} onPress={onReset}>
-        <Text style={styles.resetChipText}>ڕەنگی ستایل</Text>
-      </TouchableOpacity>
-    )}
-    {TABLE_PALETTE.map((hex) => {
+    {extra}
+    {PALETTE.map((hex) => {
       const active = (value || '').toLowerCase() === hex;
       return (
         <TouchableOpacity
@@ -82,6 +100,26 @@ const ColorRow = ({ value, onPick, onReset }) => (
         />
       );
     })}
+  </View>
+);
+
+const SmallChip = ({ label, onPress, active }) => (
+  <TouchableOpacity style={[styles.smallChip, active && styles.chipActive]} onPress={onPress}>
+    <Text style={[styles.smallChipText, active && styles.chipTextActive]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const ChipRow = ({ items, value, onPick }) => (
+  <View style={styles.chipRow}>
+    {items.map((it) => (
+      <TouchableOpacity
+        key={it.key}
+        style={[styles.chip, value === it.key && styles.chipActive]}
+        onPress={() => onPick(it.key)}
+      >
+        <Text style={[styles.chipText, value === it.key && styles.chipTextActive]}>{it.label}</Text>
+      </TouchableOpacity>
+    ))}
   </View>
 );
 
@@ -96,39 +134,92 @@ const ActionBtn = ({ icon, label, onPress, disabled, danger, active }) => (
   </TouchableOpacity>
 );
 
-// Mini preview of a ready table style
-const StyleCard = ({ style, active, onPress }) => (
-  <TouchableOpacity style={[styles.styleCard, active && styles.styleCardActive]} onPress={onPress}>
-    <View style={[styles.stylePreview, { borderColor: style.borderColor }]}>
-      <View style={[styles.stylePreviewRow, { backgroundColor: style.headerFill }]}>
-        <View style={[styles.stylePreviewBar, { backgroundColor: style.headerTextColor }]} />
-      </View>
-      <View style={[styles.stylePreviewRow, { backgroundColor: style.bodyFill }]}>
-        <View style={[styles.stylePreviewBar, { backgroundColor: style.bodyTextColor, opacity: 0.5 }]} />
-      </View>
-      <View style={[styles.stylePreviewRow, { backgroundColor: style.altRowFill }]}>
-        <View style={[styles.stylePreviewBar, { backgroundColor: style.bodyTextColor, opacity: 0.5 }]} />
-      </View>
-    </View>
-    <Text style={[styles.styleCardText, active && styles.styleCardTextActive]} numberOfLines={1}>{style.label}</Text>
+const CheckBox = ({ label, value, onToggle }) => (
+  <TouchableOpacity style={styles.checkRow} onPress={onToggle}>
+    <Ionicons name={value ? 'checkbox' : 'square-outline'} size={20} color={value ? '#30d158' : '#8e8e93'} />
+    <Text style={styles.checkText}>{label}</Text>
   </TouchableOpacity>
 );
 
-export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell, onChangeElement }, ref) => {
-  const [activeTab, setActiveTab] = useState('rowcol');
+const SectionTitle = ({ children }) => <Text style={styles.sectionTitle}>{children}</Text>;
+
+// Mini 4x3 preview of a gallery style with the table's current style options
+const StyleCard = ({ style, options, active, onPress }) => {
+  const preview = useMemo(() => {
+    const fake = { rows: 4, cols: 3, cells: [], style, ...options };
+    return Array.from({ length: 4 }, (_, r) =>
+      Array.from({ length: 3 }, (_, c) => T.getCellStyle(fake, r, c))
+    );
+  }, [style, options]);
+  const lineColor = style.borderMode === 'none' ? 'transparent' : style.borderColor;
+  return (
+    <TouchableOpacity style={[styles.styleCard, active && styles.styleCardActive]} onPress={onPress}>
+      <View style={[styles.stylePreview, { borderColor: lineColor, borderRadius: style.cornerRadius ? 5 : 1 }]}>
+        {preview.map((row, r) => (
+          <View key={`pr_${r}`} style={styles.stylePreviewRow}>
+            {row.map((cs, c) => (
+              <View
+                key={`pc_${c}`}
+                style={[
+                  styles.stylePreviewCell,
+                  {
+                    backgroundColor: cs.fill || '#ffffff',
+                    borderColor: style.borderMode === 'all' ? lineColor : 'transparent',
+                    borderBottomColor: style.borderMode === 'none' ? 'transparent' : lineColor,
+                  },
+                ]}
+              >
+                <View style={[styles.stylePreviewBar, { backgroundColor: cs.color, opacity: cs.isHeader ? 1 : 0.45 }]} />
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+      <Text style={[styles.styleCardText, active && styles.chipTextActive]} numberOfLines={1}>{style.label}</Text>
+    </TouchableOpacity>
+  );
+};
+
+export const PptTableToolbar = forwardRef(({
+  element,
+  selectedCell,
+  onSelectCell,
+  onChangeElement,
+  theme = null,
+  slideHeightPt = 405,
+}, ref) => {
+  const [activeTab, setActiveTab] = useState('design');
   const [scope, setScope] = useState('cell');
   const [editor, setEditor] = useState(null); // { r, c, text } while the cell sheet is open
+  const [pen, setPen] = useState({ color: '#000000', width: 1, dash: 'solid' });
   const insets = useEditorInsets();
   const { height: windowH } = useWindowDimensions();
 
+  const accents = useMemo(() => T.getThemeAccents(theme), [theme]);
+  const gallery = useMemo(() => T.buildTableStyles(accents), [accents]);
+  const options = useMemo(() => {
+    const o = {};
+    OPTIONS.forEach(({ key }) => { o[key] = !!element[key]; });
+    return o;
+  }, [element.headerRow, element.totalRow, element.firstCol, element.lastCol, element.bandRows, element.bandCols]);
+
   const sel = selectedCell && selectedCell.r < element.rows && selectedCell.c < element.cols ? selectedCell : null;
+  const isRange = !!sel && sel.r2 !== undefined && (sel.r2 !== sel.r || sel.c2 !== sel.c);
+  const rect = T.getTargetRect(element, sel, sel ? scope : 'table');
+  const selStyle = sel ? T.getCellStyle(element, T.getAnchorOf(element, sel.r, sel.c).r, T.getAnchorOf(element, sel.r, sel.c).c) : null;
+  const merged = !!sel && T.isMergedAt(element, sel.r, sel.c);
+
+  const update = (next) => {
+    if (next && next !== element) onChangeElement(next);
+  };
 
   const openCellEditor = (r, c) => {
     if (r === undefined || c === undefined) return;
-    setEditor({ r, c, text: getCell(element, r, c).text || '' });
+    const a = T.getAnchorOf(element, r, c);
+    setEditor({ r: a.r, c: a.c, text: T.getCell(element, a.r, a.c).text || '' });
   };
 
-  // Back order: cell sheet -> tab panel / cell selection -> (editor deselects the table)
+  // Back order: cell sheet -> tab / cell selection -> (editor deselects the table)
   useImperativeHandle(ref, () => ({
     openCellEditor,
     closeSubModal: () => {
@@ -139,8 +230,12 @@ export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell
       return null;
     },
     closeTabPanel: () => {
-      if (activeTab !== 'rowcol') {
-        setActiveTab('rowcol');
+      if (sel && sel.rangeMode && onSelectCell) {
+        onSelectCell({ r: sel.r, c: sel.c });
+        return 'table range mode';
+      }
+      if (activeTab !== 'design') {
+        setActiveTab('design');
         return 'table toolbar tab';
       }
       if (sel && onSelectCell) {
@@ -151,66 +246,75 @@ export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell
     },
   }), [editor, activeTab, sel, element]);
 
-  const update = (next) => {
-    if (next !== element) onChangeElement(next);
+  const setCells = (patch) => update(T.setCellsProps(element, rect, patch));
+  const resetCells = (keys) => {
+    const patch = {};
+    keys.forEach((k) => { patch[k] = undefined; });
+    update(T.setCellsProps(element, rect, patch));
   };
 
-  // Row / column actions work on the selected cell, or on the last row / column
+  // ---- rows / columns (on the selected cell, or the last row / column)
   const r0 = sel ? sel.r : element.rows - 1;
   const c0 = sel ? sel.c : element.cols - 1;
-  const canAddRow = element.rows < TABLE_LIMITS.maxRows;
-  const canAddCol = element.cols < TABLE_LIMITS.maxCols;
-
   const addRow = (below) => {
     const at = below ? r0 + 1 : r0;
-    update(insertRow(element, at));
+    update(T.insertRow(element, at));
     if (sel && onSelectCell) onSelectCell({ r: at, c: c0 });
   };
   // Column 0 is on the right: "right of" = same index, "left of" = index + 1
   const addCol = (toLeft) => {
     const at = toLeft ? c0 + 1 : c0;
-    update(insertCol(element, at));
+    update(T.insertCol(element, at));
     if (sel && onSelectCell) onSelectCell({ r: r0, c: at });
   };
   const removeRow = () => {
-    update(deleteRow(element, r0));
-    if (sel && onSelectCell) onSelectCell({ r: Math.min(r0, element.rows - 2), c: c0 });
+    update(T.deleteRow(element, r0));
+    if (sel && onSelectCell) onSelectCell({ r: Math.max(0, Math.min(r0, element.rows - 2)), c: c0 });
   };
   const removeCol = () => {
-    update(deleteCol(element, c0));
-    if (sel && onSelectCell) onSelectCell({ r: r0, c: Math.min(c0, element.cols - 2) });
+    update(T.deleteCol(element, c0));
+    if (sel && onSelectCell) onSelectCell({ r: r0, c: Math.max(0, Math.min(c0, element.cols - 2)) });
   };
 
-  const targets = getTargetCells(element, sel, scope);
-  const selStyle = sel ? getCellStyle(element, sel.r, sel.c) : null;
-  const setCells = (patch) => {
-    if (targets.length > 0) update(setCellProps(element, targets, patch));
-  };
-  const resetCells = (keys) => {
-    if (targets.length === 0) return;
-    const patch = {};
-    keys.forEach((k) => { patch[k] = undefined; });
-    update(setCellProps(element, targets, patch));
-  };
-
-  const border = getTableBorder(element);
+  const rowPt = sel ? Math.round(T.getRowHeightPt(element, sel.r, slideHeightPt)) : 0;
+  const colPt = sel ? Math.round(T.getColWidthPt(element, sel.c)) : 0;
 
   const saveCellText = () => {
-    if (editor) update(setCellText(element, editor.r, editor.c, editor.text));
+    if (editor) update(T.setCellText(element, editor.r, editor.c, editor.text));
     setEditor(null);
   };
 
-  const noCellHint = !sel && (
+  const confirmClear = () => {
+    Alert.alert('پاککردنەوەی شێواز', 'هەموو ڕەنگ و هێڵ و شێوازی خشتەکە لادەبرێت (دەق دەمێنێتەوە).', [
+      { text: 'نەخێر', style: 'cancel' },
+      { text: 'بەڵێ', style: 'destructive', onPress: () => update(T.clearTableFormatting(element)) },
+    ]);
+  };
+
+  const needCell = !sel && (
     <Text style={styles.hint}>سەرەتا کرتە لەسەر خانەیەکی خشتەکە بکە.</Text>
   );
+  const scopeRow = (
+    <View>
+      <SectionTitle>جێبەجێکردن لەسەر:</SectionTitle>
+      <ChipRow items={SCOPES} value={sel ? scope : 'table'} onPick={setScope} />
+    </View>
+  );
+
+  const shadow = element.shadow;
+  const setShadow = (patch) => update({ ...element, shadow: { offset: 3, blur: 6, opacity: 0.35, color: '#000000', ...(shadow || {}), ...patch } });
 
   return (
     <View style={styles.toolbarContainer}>
       {/* Selected cell status + edit text */}
       <View style={styles.statusRow}>
-        <Text style={styles.statusText}>
-          {sel
-            ? `خانەی هەڵبژێردراو: ڕیزی ${kd(sel.r + 1)}، ستوونی ${kd(sel.c + 1)}`
+        <Text style={styles.statusText} numberOfLines={1}>
+          {sel && sel.rangeMode
+            ? 'کرتە لەسەر خانەی کۆتایی ناوچەکە بکە'
+            : isRange
+            ? `ناوچە: ${kd(Math.abs(sel.r2 - sel.r) + 1)} ڕیز × ${kd(Math.abs(sel.c2 - sel.c) + 1)} ستوون`
+            : sel
+            ? `ڕیزی ${kd(sel.r + 1)}، ستوونی ${kd(sel.c + 1)}`
             : `خشتە: ${kd(element.rows)} ڕیز × ${kd(element.cols)} ستوون`}
         </Text>
         <TouchableOpacity
@@ -219,7 +323,7 @@ export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell
           onPress={() => sel && openCellEditor(sel.r, sel.c)}
         >
           <Ionicons name="create-outline" size={15} color="#ffffff" />
-          <Text style={styles.editTextBtnText}>دەستکاریکردنی دەق</Text>
+          <Text style={styles.editTextBtnText}>دەق</Text>
         </TouchableOpacity>
       </View>
 
@@ -237,25 +341,253 @@ export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell
       </ScrollView>
 
       <ScrollView
-        style={{ maxHeight: Math.round(windowH * 0.34) }}
+        style={{ maxHeight: Math.round(windowH * 0.36) }}
         contentContainerStyle={styles.tabContentBox}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
       >
+        {/* ---------------- دیزاین ---------------- */}
+        {activeTab === 'design' && (
+          <View>
+            <SectionTitle>هەڵبژاردنەکانی ستایل:</SectionTitle>
+            <View style={styles.checkGrid}>
+              {OPTIONS.map((o) => (
+                <CheckBox
+                  key={o.key}
+                  label={o.label}
+                  value={!!element[o.key]}
+                  onToggle={() => update(T.setTableOption(element, o.key, !element[o.key]))}
+                />
+              ))}
+            </View>
+            {T.TABLE_STYLE_GROUPS.map((g) => (
+              <View key={g.key}>
+                <SectionTitle>{g.label}</SectionTitle>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
+                  {gallery.filter((s) => s.group === g.key).map((s) => (
+                    <StyleCard
+                      key={s.key}
+                      style={s}
+                      options={options}
+                      active={element.styleKey === s.key}
+                      onPress={() => update(T.applyTableStyle(element, s))}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ---------------- خانە ---------------- */}
+        {activeTab === 'cell' && (
+          <View>
+            {needCell}
+            <View style={styles.actionGrid}>
+              <ActionBtn
+                icon="scan-outline"
+                label={sel && sel.rangeMode ? 'هەڵوەشاندنەوەی ناوچە' : 'هەڵبژاردنی ناوچە'}
+                onPress={() => sel && onSelectCell(sel.rangeMode ? { r: sel.r, c: sel.c } : { r: sel.r, c: sel.c, rangeMode: true })}
+                disabled={!sel}
+                active={!!sel && !!sel.rangeMode}
+              />
+              <ActionBtn
+                icon="contract-outline"
+                label="تێکەڵکردنی خانەکان"
+                onPress={() => {
+                  const r = T.getTargetRect(element, sel, 'cell');
+                  update(T.mergeCells(element, r));
+                  onSelectCell({ r: r.r1, c: r.c1 });
+                }}
+                disabled={!isRange}
+              />
+              <ActionBtn
+                icon="expand-outline"
+                label="جیاکردنەوەی خانە"
+                onPress={() => update(T.splitCell(element, sel.r, sel.c))}
+                disabled={!merged}
+              />
+            </View>
+
+            <View style={[!sel && styles.disabled]} pointerEvents={sel ? 'auto' : 'none'}>
+              {scopeRow}
+
+              <SectionTitle>ڕەنگی خانە:</SectionTitle>
+              <ColorRow
+                value={selStyle?.fill}
+                onPick={(hex) => setCells({ fill: hex, fill2: selStyle?.fill2 ? selStyle.fill2 : undefined })}
+                extra={
+                  <>
+                    <SmallChip label="ستایل" onPress={() => resetCells(['fill', 'fill2', 'fillAlpha'])} />
+                    <SmallChip label="بێ ڕەنگ" onPress={() => setCells({ fill: 'none', fill2: undefined })} />
+                  </>
+                }
+              />
+              <View style={styles.toggleRow}>
+                <ActionBtn
+                  icon={selStyle?.fill2 ? 'checkbox-outline' : 'square-outline'}
+                  label="پلەبەندی (دوو ڕەنگ)"
+                  active={!!selStyle?.fill2}
+                  onPress={() =>
+                    setCells(selStyle?.fill2
+                      ? { fill: selStyle.fill, fill2: undefined } // also turns off a style's gradient header
+                      : { fill: selStyle?.fill || '#4472c4', fill2: '#ffffff' })
+                  }
+                />
+              </View>
+              {!!selStyle?.fill2 && (
+                <View>
+                  <SectionTitle>ڕەنگی دووەمی پلەبەندی:</SectionTitle>
+                  <ColorRow value={selStyle.fill2} onPick={(hex) => setCells({ fill: selStyle.fill, fill2: hex })} />
+                </View>
+              )}
+              <PptValueCard
+                title="ڕوونی ڕەنگ"
+                valueText={`${selStyle ? selStyle.fillAlpha : 100}%`}
+                min={0}
+                max={100}
+                step={5}
+                stepAmount={10}
+                value={selStyle ? selStyle.fillAlpha : 100}
+                onChange={(v) => setCells({ fillAlpha: v })}
+                chips={chips([25, 50, 75, 100], '%')}
+                style={{ marginTop: 8 }}
+              />
+
+              <SectionTitle>ڕەنگی دەق:</SectionTitle>
+              <ColorRow
+                value={selStyle?.color}
+                onPick={(hex) => setCells({ color: hex })}
+                extra={<SmallChip label="ستایل" onPress={() => resetCells(['color'])} />}
+              />
+
+              <PptValueCard
+                title="قەبارەی فۆنت"
+                valueText={`${selStyle ? selStyle.fontSize : element.fontSize || 14}`}
+                min={8}
+                max={40}
+                value={selStyle ? selStyle.fontSize : element.fontSize || 14}
+                onChange={(v) => setCells({ fontSize: v })}
+                chips={chips([10, 12, 14, 18, 24])}
+                style={{ marginTop: 8 }}
+              />
+              <View style={styles.toggleRow}>
+                <ActionBtn icon="text" label="ئەستوور" active={!!selStyle?.bold} onPress={() => setCells({ bold: !selStyle?.bold })} />
+                <ActionBtn icon="text-outline" label="لار" active={!!selStyle?.italic} onPress={() => setCells({ italic: !selStyle?.italic })} />
+              </View>
+
+              <SectionTitle>ڕیزکردنی ئاسۆیی:</SectionTitle>
+              <ChipRow items={ALIGNS} value={selStyle?.align} onPick={(v) => setCells({ align: v })} />
+              <SectionTitle>ڕیزکردنی ستوونی:</SectionTitle>
+              <ChipRow items={VALIGNS} value={selStyle?.valign} onPick={(v) => setCells({ valign: v })} />
+              <SectionTitle>ئاراستەی دەق:</SectionTitle>
+              <ChipRow items={DIRS} value={selStyle?.dir} onPick={(v) => setCells({ dir: v })} />
+
+              <PptValueCard
+                title="بۆشایی ناو خانە"
+                valueText={`${selStyle ? selStyle.pad : T.TABLE_CELL_PAD_PT}`}
+                min={0}
+                max={20}
+                value={selStyle ? selStyle.pad : T.TABLE_CELL_PAD_PT}
+                onChange={(v) => setCells({ pad: v })}
+                chips={chips([0, 2, 4, 8, 12])}
+                style={{ marginTop: 8 }}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* ---------------- هێڵ ---------------- */}
+        {activeTab === 'border' && (
+          <View>
+            {sel ? scopeRow : <Text style={styles.hint}>بێ هەڵبژاردنی خانە، لەسەر هەموو خشتە جێبەجێ دەکرێت.</Text>}
+            <SectionTitle>ڕەنگی هێڵ:</SectionTitle>
+            <ColorRow value={pen.color} onPick={(hex) => setPen((p) => ({ ...p, color: hex }))} />
+            <PptValueCard
+              title="ئەستووری هێڵ"
+              valueText={`${pen.width}`}
+              min={0.5}
+              max={6}
+              step={0.5}
+              stepAmount={0.5}
+              value={pen.width}
+              onChange={(v) => setPen((p) => ({ ...p, width: v }))}
+              chips={chips([0.5, 1, 2, 3, 4])}
+              style={{ marginTop: 8 }}
+            />
+            <SectionTitle>شێوەی هێڵ:</SectionTitle>
+            <ChipRow items={DASHES} value={pen.dash} onPick={(v) => setPen((p) => ({ ...p, dash: v }))} />
+            <SectionTitle>دانانی هێڵ:</SectionTitle>
+            <View style={styles.actionGrid}>
+              {BORDER_PRESETS.map((b) => (
+                <ActionBtn
+                  key={b.key}
+                  icon={b.icon}
+                  label={b.label}
+                  danger={b.key === 'none'}
+                  onPress={() => update(T.applyBorderPreset(element, rect, b.key, pen))}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ---------------- قەبارە ---------------- */}
+        {activeTab === 'size' && (
+          <View>
+            {needCell}
+            {sel && (
+              <View>
+                <PptValueCard
+                  title={`بەرزی ڕیزی ${kd(sel.r + 1)} (پۆینت)`}
+                  valueText={`${rowPt}`}
+                  min={10}
+                  max={200}
+                  value={rowPt}
+                  onChange={(v) => update(T.setRowHeightPt(element, sel.r, v, slideHeightPt))}
+                  chips={chips([20, 30, 40, 60, 80])}
+                />
+                <PptValueCard
+                  title={`پانی ستوونی ${kd(sel.c + 1)} (پۆینت)`}
+                  valueText={`${colPt}`}
+                  min={20}
+                  max={600}
+                  step={5}
+                  stepAmount={5}
+                  value={colPt}
+                  onChange={(v) => update(T.setColWidthPt(element, sel.c, v))}
+                  chips={chips([60, 100, 150, 200, 300])}
+                />
+              </View>
+            )}
+            <View style={styles.actionGrid}>
+              <ActionBtn icon="reorder-four-outline" label="یەکسانکردنی ڕیزەکان" onPress={() => update(T.distributeRows(element))} />
+              <ActionBtn icon="swap-horizontal-outline" label="یەکسانکردنی ستوونەکان" onPress={() => update(T.equalizeColumns(element))} />
+              <ActionBtn icon="resize-outline" label="گونجاندن لەگەڵ دەق" onPress={() => update(T.autoFitRows(element, slideHeightPt))} />
+              <ActionBtn
+                icon={element.lockAspect ? 'lock-closed' : 'lock-open-outline'}
+                label="قفڵی ڕێژەی قەبارە"
+                active={!!element.lockAspect}
+                onPress={() => update({ ...element, lockAspect: !element.lockAspect })}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* ---------------- ڕیز و ستوون ---------------- */}
         {activeTab === 'rowcol' && (
           <View>
-            <Text style={styles.sectionTitle}>زیادکردن:</Text>
+            <SectionTitle>زیادکردن:</SectionTitle>
             <View style={styles.actionGrid}>
-              <ActionBtn icon="arrow-up-outline" label="ڕیز لە سەرەوە" onPress={() => addRow(false)} disabled={!canAddRow} />
-              <ActionBtn icon="arrow-down-outline" label="ڕیز لە خوارەوە" onPress={() => addRow(true)} disabled={!canAddRow} />
-              <ActionBtn icon="arrow-forward-outline" label="ستوون لە ڕاست" onPress={() => addCol(false)} disabled={!canAddCol} />
-              <ActionBtn icon="arrow-back-outline" label="ستوون لە چەپ" onPress={() => addCol(true)} disabled={!canAddCol} />
+              <ActionBtn icon="arrow-up-outline" label="ڕیز لە سەرەوە" onPress={() => addRow(false)} disabled={element.rows >= T.TABLE_LIMITS.maxRows} />
+              <ActionBtn icon="arrow-down-outline" label="ڕیز لە خوارەوە" onPress={() => addRow(true)} disabled={element.rows >= T.TABLE_LIMITS.maxRows} />
+              <ActionBtn icon="arrow-forward-outline" label="ستوون لە ڕاست" onPress={() => addCol(false)} disabled={element.cols >= T.TABLE_LIMITS.maxCols} />
+              <ActionBtn icon="arrow-back-outline" label="ستوون لە چەپ" onPress={() => addCol(true)} disabled={element.cols >= T.TABLE_LIMITS.maxCols} />
             </View>
-            <Text style={styles.sectionTitle}>سڕینەوە و ڕێکخستن:</Text>
+            <SectionTitle>سڕینەوە:</SectionTitle>
             <View style={styles.actionGrid}>
               <ActionBtn icon="trash-outline" label="سڕینەوەی ڕیز" onPress={removeRow} disabled={element.rows <= 1} danger />
               <ActionBtn icon="trash-outline" label="سڕینەوەی ستوون" onPress={removeCol} disabled={element.cols <= 1} danger />
-              <ActionBtn icon="swap-horizontal-outline" label="یەکسانکردنی پانی" onPress={() => update(equalizeColumns(element))} />
               <ActionBtn
                 icon={element.locked ? 'lock-closed' : 'lock-open-outline'}
                 label={element.locked ? 'کردنەوەی قفڵ' : 'قفڵکردن'}
@@ -267,116 +599,62 @@ export const PptTableToolbar = forwardRef(({ element, selectedCell, onSelectCell
           </View>
         )}
 
-        {activeTab === 'style' && (
+        {/* ---------------- کاریگەری ---------------- */}
+        {activeTab === 'effects' && (
           <View>
-            <Text style={styles.sectionTitle}>ستایلە ئامادەکان:</Text>
-            <View style={styles.styleGrid}>
-              {TABLE_STYLES.map((st) => (
-                <StyleCard
-                  key={st.key}
-                  style={st}
-                  active={element.styleKey === st.key}
-                  onPress={() => update(applyTableStyle(element, st.key))}
-                />
-              ))}
-            </View>
             <View style={styles.toggleRow}>
               <ActionBtn
-                icon={element.headerRow ? 'checkbox-outline' : 'square-outline'}
-                label="ڕیزی سەردێڕ"
-                onPress={() => update({ ...element, headerRow: !element.headerRow })}
-                active={!!element.headerRow}
-              />
-              <ActionBtn
-                icon={element.bandRows ? 'checkbox-outline' : 'square-outline'}
-                label="ڕیزی ڕەنگاوڕەنگ"
-                onPress={() => update({ ...element, bandRows: !element.bandRows })}
-                active={!!element.bandRows}
+                icon={shadow ? 'checkbox-outline' : 'square-outline'}
+                label="سێبەری خشتە"
+                active={!!shadow}
+                onPress={() => update({ ...element, shadow: shadow ? null : { offset: 3, blur: 6, opacity: 0.35, color: '#000000' } })}
               />
             </View>
-          </View>
-        )}
-
-        {activeTab === 'cell' && (
-          <View>
-            {noCellHint}
-            <View style={styles.scopeRow}>
-              {SCOPES.map((s) => (
-                <TouchableOpacity
-                  key={s.key}
-                  style={[styles.scopeChip, scope === s.key && styles.scopeChipActive]}
-                  onPress={() => setScope(s.key)}
-                >
-                  <Text style={[styles.scopeChipText, scope === s.key && styles.scopeChipTextActive]}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={[!sel && styles.disabled]} pointerEvents={sel ? 'auto' : 'none'}>
-              <Text style={styles.sectionTitle}>ڕەنگی خانە:</Text>
-              <ColorRow value={selStyle?.fill} onPick={(hex) => setCells({ fill: hex })} onReset={() => resetCells(['fill'])} />
-
-              <Text style={styles.sectionTitle}>ڕەنگی دەق:</Text>
-              <ColorRow value={selStyle?.color} onPick={(hex) => setCells({ color: hex })} onReset={() => resetCells(['color'])} />
-
-              <PptValueCard
-                title="قەبارەی فۆنت"
-                valueText={`${selStyle ? selStyle.fontSize : element.fontSize || 14}`}
-                min={8}
-                max={40}
-                step={1}
-                value={selStyle ? selStyle.fontSize : element.fontSize || 14}
-                onChange={(v) => setCells({ fontSize: v })}
-                chips={FONT_CHIPS}
-                style={{ marginTop: 8 }}
-              />
-
-              <View style={styles.toggleRow}>
-                <ActionBtn
-                  icon="text"
-                  label="ئەستوور"
-                  onPress={() => setCells({ bold: !(selStyle && selStyle.bold) })}
-                  active={!!selStyle?.bold}
+            {!!shadow && (
+              <View>
+                <PptValueCard
+                  title="دووری"
+                  valueText={`${shadow.offset}`}
+                  min={0}
+                  max={10}
+                  value={shadow.offset}
+                  onChange={(v) => setShadow({ offset: v })}
+                  chips={chips([0, 2, 4, 6, 10])}
+                  style={{ marginTop: 8 }}
                 />
-                <ActionBtn
-                  icon="text-outline"
-                  label="لار"
-                  onPress={() => setCells({ italic: !(selStyle && selStyle.italic) })}
-                  active={!!selStyle?.italic}
+                <PptValueCard
+                  title="نەرمی"
+                  valueText={`${shadow.blur}`}
+                  min={0}
+                  max={15}
+                  value={shadow.blur}
+                  onChange={(v) => setShadow({ blur: v })}
+                  chips={chips([0, 3, 6, 10, 15])}
                 />
+                <PptValueCard
+                  title="تۆخی"
+                  valueText={`${Math.round(shadow.opacity * 100)}%`}
+                  min={10}
+                  max={100}
+                  step={10}
+                  stepAmount={10}
+                  value={Math.round(shadow.opacity * 100)}
+                  onChange={(v) => setShadow({ opacity: v / 100 })}
+                  chips={chips([20, 40, 60, 80, 100], '%')}
+                />
+                <SectionTitle>ڕەنگی سێبەر:</SectionTitle>
+                <ColorRow value={shadow.color} onPick={(hex) => setShadow({ color: hex })} />
               </View>
-
-              <Text style={styles.sectionTitle}>ڕیزکردنی دەق:</Text>
-              <View style={styles.scopeRow}>
-                {ALIGNS.map((a) => (
-                  <TouchableOpacity
-                    key={a.key}
-                    style={[styles.scopeChip, selStyle?.align === a.key && styles.scopeChipActive]}
-                    onPress={() => setCells({ align: a.key })}
-                  >
-                    <Text style={[styles.scopeChipText, selStyle?.align === a.key && styles.scopeChipTextActive]}>{a.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {activeTab === 'border' && (
-          <View>
-            <Text style={styles.sectionTitle}>ڕەنگی هێڵ:</Text>
-            <ColorRow value={border.color} onPick={(hex) => update(setTableBorder(element, { borderColor: hex }))} />
-            <PptValueCard
-              title="ئەستووری هێڵ"
-              valueText={`${border.width}`}
-              min={0}
-              max={6}
-              step={1}
-              value={border.width}
-              onChange={(v) => update(setTableBorder(element, { borderWidth: v }))}
-              chips={BORDER_CHIPS}
-              style={{ marginTop: 8 }}
+            )}
+            <SectionTitle>ڕەنگی پشتەوەی خشتە:</SectionTitle>
+            <ColorRow
+              value={element.bgFill}
+              onPick={(hex) => update({ ...element, bgFill: hex })}
+              extra={<SmallChip label="بێ ڕەنگ" onPress={() => update({ ...element, bgFill: null })} />}
             />
+            <View style={[styles.actionGrid, { marginTop: 12 }]}>
+              <ActionBtn icon="refresh-outline" label="پاککردنەوەی شێوازی خشتە" onPress={confirmClear} danger />
+            </View>
           </View>
         )}
       </ScrollView>
@@ -448,7 +726,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: '#8B3A2B',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     minHeight: 36,
     borderRadius: 8,
   },
@@ -488,14 +766,14 @@ const styles = StyleSheet.create({
   },
   tabContentBox: {
     padding: 10,
-    paddingBottom: 16,
+    paddingBottom: 18,
   },
   sectionTitle: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'right',
-    marginTop: 6,
+    marginTop: 8,
     marginBottom: 6,
   },
   hint: {
@@ -504,10 +782,71 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginVertical: 6,
   },
+  checkGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+  },
+  checkRow: {
+    width: '50%',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+  },
+  checkText: {
+    color: '#ffffff',
+    fontSize: 12,
+  },
+  galleryRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    paddingBottom: 2,
+  },
+  styleCard: {
+    width: 84,
+    backgroundColor: '#2c2c2e',
+    borderRadius: 10,
+    padding: 5,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#3a3a3c',
+  },
+  styleCardActive: {
+    borderColor: '#30d158',
+  },
+  stylePreview: {
+    width: '100%',
+    borderWidth: 1,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+  },
+  stylePreviewRow: {
+    flexDirection: 'row-reverse',
+  },
+  stylePreviewCell: {
+    flex: 1,
+    height: 11,
+    borderWidth: 0.5,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingHorizontal: 2,
+  },
+  stylePreviewBar: {
+    width: '70%',
+    height: 2.5,
+    borderRadius: 1,
+  },
+  styleCardText: {
+    color: '#aaaaaa',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
   actionGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 6,
+    marginTop: 4,
   },
   actionBtn: {
     flexDirection: 'row-reverse',
@@ -535,61 +874,17 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.35,
   },
-  styleGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  styleCard: {
-    width: 96,
-    backgroundColor: '#2c2c2e',
-    borderRadius: 10,
-    padding: 6,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#3a3a3c',
-  },
-  styleCardActive: {
-    borderColor: '#30d158',
-  },
-  stylePreview: {
-    width: '100%',
-    borderWidth: 1,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  stylePreviewRow: {
-    height: 12,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: 4,
-  },
-  stylePreviewBar: {
-    width: '55%',
-    height: 3,
-    borderRadius: 1.5,
-  },
-  styleCardText: {
-    color: '#aaaaaa',
-    fontSize: 11,
-    fontWeight: 'bold',
-    marginTop: 5,
-  },
-  styleCardTextActive: {
-    color: '#ffffff',
-  },
   toggleRow: {
     flexDirection: 'row-reverse',
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
-  scopeRow: {
+  chipRow: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 4,
   },
-  scopeChip: {
+  chip: {
     backgroundColor: '#2c2c2e',
     paddingHorizontal: 12,
     minHeight: 36,
@@ -598,16 +893,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#3a3a3c',
   },
-  scopeChipActive: {
+  chipActive: {
     backgroundColor: '#8B3A2B',
     borderColor: '#8B3A2B',
   },
-  scopeChipText: {
+  chipText: {
     color: '#aaaaaa',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  scopeChipTextActive: {
+  chipTextActive: {
     color: '#ffffff',
   },
   swatchRow: {
@@ -626,14 +921,14 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#30d158',
   },
-  resetChip: {
+  smallChip: {
     height: 28,
     paddingHorizontal: 8,
     borderRadius: 6,
     backgroundColor: '#3a3a3c',
     justifyContent: 'center',
   },
-  resetChipText: {
+  smallChipText: {
     color: '#ffffff',
     fontSize: 10,
     fontWeight: 'bold',
