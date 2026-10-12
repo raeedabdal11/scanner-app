@@ -28,6 +28,9 @@ import { PptTextToolbar } from './PptTextToolbar';
 import { PptImageToolbar } from './PptImageToolbar';
 import { PptShapeToolbar } from './PptShapeToolbar';
 import { PptTableToolbar } from './PptTableToolbar';
+import { PptSmartArtToolbar } from './PptSmartArtToolbar';
+import { PptSmartArtPicker } from './PptSmartArtPicker';
+import { createSmartArtElement, smartArtToShapes, getThemeAccents as getSmartArtAccents } from './smartart/engine';
 import { createTableElement, getThemeAccents } from './tableModel';
 import { makeId, ensureUniqueIds } from './makeId';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
@@ -334,6 +337,9 @@ export const PptEditorModal = ({
   const imageToolbarRef = useRef(null);
   const shapeToolbarRef = useRef(null);
   const tableToolbarRef = useRef(null);
+  const smartArtToolbarRef = useRef(null);
+  // SmartArt picker: { visible, mode: 'insert' | 'change' }
+  const [smartArtPicker, setSmartArtPicker] = useState({ visible: false, mode: 'insert' });
   // Selected table cell { elemId, r, c } (drawn on the canvas, edited by PptTableToolbar)
   const [selectedTableCell, setSelectedTableCell] = useState(null);
 
@@ -520,6 +526,8 @@ export const PptEditorModal = ({
     imageToolbarRef,
     shapeToolbarRef,
     tableToolbarRef,
+    smartArtToolbarRef,
+    smartArtPicker,
     inputRef,
   };
 
@@ -545,6 +553,8 @@ export const PptEditorModal = ({
       imageToolbarRef,
       shapeToolbarRef,
     tableToolbarRef,
+      smartArtToolbarRef,
+      smartArtPicker,
       inputRef,
     } = backStateRef.current;
 
@@ -562,6 +572,11 @@ export const PptEditorModal = ({
     if (previewVisible) {
       setPreviewVisible(false);
       console.log('[Back] handled: sub-modal / sheet (previewModal)');
+      return true;
+    }
+    if (smartArtPicker && smartArtPicker.visible) {
+      setSmartArtPicker((p) => ({ ...p, visible: false }));
+      console.log('[Back] handled: sub-modal / sheet (smartArtPicker)');
       return true;
     }
     if (shapePickerVisible) {
@@ -592,6 +607,11 @@ export const PptEditorModal = ({
     const shapeSubModal = shapeToolbarRef.current?.closeSubModal?.();
     if (shapeSubModal) {
       console.log('[Back] handled: sub-modal / picker (' + shapeSubModal + ')');
+      return true;
+    }
+    const smartArtSubModal = smartArtToolbarRef.current?.closeSubModal?.();
+    if (smartArtSubModal) {
+      console.log('[Back] handled: sub-modal / picker (' + smartArtSubModal + ')');
       return true;
     }
     const tableSubModal = tableToolbarRef.current?.closeSubModal?.();
@@ -627,6 +647,11 @@ export const PptEditorModal = ({
       const shapeTab = shapeToolbarRef.current?.closeTabPanel?.();
       if (shapeTab) {
         console.log('[Back] handled: toolbar tab/panel (' + shapeTab + ')');
+        return true;
+      }
+      const smartArtTab = smartArtToolbarRef.current?.closeTabPanel?.();
+      if (smartArtTab) {
+        console.log('[Back] handled: toolbar tab/panel (' + smartArtTab + ')');
         return true;
       }
       const tableTab = tableToolbarRef.current?.closeTabPanel?.();
@@ -1126,6 +1151,47 @@ export const PptEditorModal = ({
     if (again) {
       setTimeout(() => tableToolbarRef.current?.openCellEditor?.(r, c), 0);
     }
+  };
+
+  // SmartArt ("نەخشەی زانیاری"): insert a new one, or change the selected one's layout (items kept)
+  const handlePickSmartArtLayout = (layoutId) => {
+    const mode = smartArtPicker.mode;
+    setSmartArtPicker((p) => ({ ...p, visible: false }));
+    if (mode === 'change' && selectedElement && selectedElement.type === 'smartart') {
+      handleUpdateElement(selectedPageId, { ...selectedElement, layoutId });
+      return;
+    }
+    const targetPageId = resolveTargetPageId();
+    if (!targetPageId) {
+      Alert.alert('ئاگاداری', 'سەرەتا پەڕەیەکی نوێ زیاد بکە.');
+      return;
+    }
+    const targetPage = presentation.slides.find((s) => s.id === targetPageId);
+    const smartArt = createSmartArtElement({
+      layoutId,
+      zIndex: ((targetPage?.elements || []).length || 0) + 1,
+      accents: getSmartArtAccents(targetPage?.themeKey ? getThemeByKey(targetPage.themeKey) : null),
+    });
+    const newSlides = presentation.slides.map((s) =>
+      s.id === targetPageId ? { ...s, elements: [...(s.elements || []), smartArt] } : s
+    );
+    pushState({ ...presentation, slides: newSlides }, targetPageId);
+    setSelectedPageId(targetPageId);
+    setSelectedElementId(smartArt.id);
+    setEditingElementId(null);
+  };
+
+  // "گۆڕین بۆ شێوە": the SmartArt becomes independent ordinary shapes (one undo step)
+  const handleConvertSmartArt = (pageId, elem) => {
+    const shapes = smartArtToShapes(elem, presentation.aspectRatio === '4:3' ? 540 : 405);
+    const newSlides = presentation.slides.map((s) => {
+      if (s.id !== pageId) return s;
+      const others = (s.elements || []).filter((e) => e.id !== elem.id);
+      return { ...s, elements: [...others, ...shapes] };
+    });
+    pushState({ ...presentation, slides: newSlides }, pageId);
+    setSelectedElementId(null);
+    setEditingElementId(null);
   };
 
   // Add Shape to Slide
@@ -1971,6 +2037,17 @@ export const PptEditorModal = ({
                     setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                     onRequestClose={() => handleBack(false)}
                   />
+                ) : selectedElement && selectedElement.type === 'smartart' ? (
+                  <PptSmartArtToolbar
+                    ref={smartArtToolbarRef}
+                    element={selectedElement}
+                    onChangeElement={(updated) => handleUpdateElement(selectedPageId, updated)}
+                    theme={selectedPage?.themeKey ? getThemeByKey(selectedPage.themeKey) : null}
+                    onOpenLayoutPicker={() => setSmartArtPicker({ visible: true, mode: 'change' })}
+                    onDuplicate={() => handleDuplicateElement(selectedPageId, selectedElement.id)}
+                    onDelete={() => handleDeleteElement(selectedPageId, selectedElement.id)}
+                    onConvertToShapes={() => handleConvertSmartArt(selectedPageId, selectedElement)}
+                  />
                 ) : selectedElement && selectedElement.type === 'table' ? (
                   <PptTableToolbar
                     ref={tableToolbarRef}
@@ -2005,6 +2082,7 @@ export const PptEditorModal = ({
                     selectedElement={selectedElement && selectedElement.type === 'image' ? selectedElement : null}
                     onAddText={() => handleAddText()}
                     onAddTable={handleAddTable}
+                    onOpenSmartArt={() => setSmartArtPicker({ visible: true, mode: 'insert' })}
                     onPickGallery={handlePickGalleryImages}
                     onPickCamera={handlePickCameraImage}
                     onAddShape={handleAddShape}
@@ -2036,6 +2114,15 @@ export const PptEditorModal = ({
           )}
 
           {/* Sub Modals */}
+          <PptSmartArtPicker
+            visible={smartArtPicker.visible}
+            mode={smartArtPicker.mode}
+            currentLayoutId={smartArtPicker.mode === 'change' && selectedElement?.type === 'smartart' ? selectedElement.layoutId : undefined}
+            items={smartArtPicker.mode === 'change' && selectedElement?.type === 'smartart' ? selectedElement.items : undefined}
+            accents={selectedElement?.type === 'smartart' ? selectedElement.accents : undefined}
+            onClose={() => setSmartArtPicker((p) => ({ ...p, visible: false }))}
+            onPick={handlePickSmartArtLayout}
+          />
           <PptShapePickerModal
             visible={shapePickerVisible}
             onClose={() => setShapePickerVisible(false)}

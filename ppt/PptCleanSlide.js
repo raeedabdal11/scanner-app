@@ -9,6 +9,7 @@ import { getSlideBackground, getBackgroundCss } from './slideBackground';
 import { getDisplayFontFamily, getCssFontStack } from './fonts';
 import { CUSTOM_KURDISH_FONTS } from './customFonts';
 import { PptTableView } from './PptTableView';
+import { PptSmartArtView, smartArtToHtml } from './PptSmartArtView';
 import { layoutTable, getCell, getCellStyle, getCellBorders, resolveTableStyle } from './tableModel';
 
 export const PptCleanSlide = React.forwardRef(({
@@ -177,6 +178,13 @@ export const PptCleanSlide = React.forwardRef(({
                   })}
                 </Text>
               </View>
+            ) : elem.type === 'smartart' ? (
+              <PptSmartArtView
+                elem={elem}
+                W={(elem.width / 100) * SLIDE.widthPt}
+                H={(effectiveHeight / 100) * (canvasHeight / (canvasWidth / SLIDE.widthPt))}
+                scale={canvasWidth / SLIDE.widthPt}
+              />
             ) : elem.type === 'table' ? (
               <PptTableView
                 elem={elem}
@@ -214,7 +222,7 @@ export const PptCleanSlide = React.forwardRef(({
 
                   return (
                     <React.Fragment>
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity, transform: elem.flipH ? [{ scaleX: -1 }] : undefined }}>
                         {renderSvgShape({
                           shapeType: shapeType,
                           fill: fill,
@@ -491,7 +499,7 @@ export async function getPdfFontFaceCss(slides = []) {
   const used = new Set(['Vazirmatn']);
   for (const slide of slides) {
     for (const elem of slide?.elements || []) {
-      if (elem.type === 'table') {
+      if (elem.type === 'table' || elem.type === 'smartart') {
         const display = getDisplayFontFamily(elem.kurdishFont || 'Tahoma');
         if (PDF_EMBED_FONTS[display]) used.add(display);
         continue;
@@ -615,6 +623,19 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
           </div>
         </div>
       `);
+    } else if (elem.type === 'smartart') {
+      const saScale = canvasWidth / SLIDE.widthPt;
+      elementHtmls.push(`
+        <div style="
+          position: absolute;
+          left: ${uncroppedLeft.toFixed(2)}pt;
+          top: ${uncroppedTop.toFixed(2)}pt;
+          width: ${uncroppedWidth.toFixed(2)}pt;
+          height: ${uncroppedHeight.toFixed(2)}pt;
+          z-index: ${zIndex};
+          opacity: ${opacity};
+        ">${smartArtToHtml(elem, uncroppedWidth / saScale, uncroppedHeight / saScale, saScale)}</div>
+      `);
     } else if (elem.type === 'table') {
       elementHtmls.push(`
         <div style="
@@ -662,7 +683,7 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
 
       shapeContentHtml = `
         <div style="width: 100%; height: 100%; position: relative;">
-          ${svgInner}
+          <div style="position: absolute; top:0; left:0; width:100%; height:100%; transform: ${elem.flipH ? 'scaleX(-1)' : 'none'};">${svgInner}</div>
           <div style="position: absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center;" dir="rtl">${shapeTextHtml}</div>
         </div>
       `;

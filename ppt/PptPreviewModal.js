@@ -14,6 +14,7 @@ import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
 import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
 import { PptTableView } from './PptTableView';
+import { PptSmartArtView } from './PptSmartArtView';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -134,6 +135,13 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
                       })}
                     </Text>
                   </View>
+                ) : elem.type === 'smartart' ? (
+                  <PptSmartArtView
+                    elem={elem}
+                    W={(elem.width / 100) * 720}
+                    H={(elem.height / 100) * (canvasHeight / (canvasWidth / 720))}
+                    scale={canvasWidth / 720}
+                  />
                 ) : elem.type === 'table' ? (
                   <PptTableView
                     elem={elem}
@@ -172,7 +180,7 @@ export const PptPreviewModal = ({ visible, presentation, onClose, fontFamily, on
 
                       return (
                         <React.Fragment>
-                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity, transform: elem.flipH ? [{ scaleX: -1 }] : undefined }}>
                             {renderSvgShape({
                               shapeType: shapeType,
                               fill: fill,

@@ -29,7 +29,8 @@ export async function load(url, context, next) {
   if (url.startsWith('stub:')) {
     return { format: 'module', source: STUBS[url.slice(5)], shortCircuit: true };
   }
-  if (url.startsWith('file:') && /\/ppt\/[^/]+\.js$/.test(url)) {
+  // ppt/*.js and ppt/<folder>/*.js (e.g. ppt/smartart): ES modules
+  if (url.startsWith('file:') && /\/ppt\/(?:[^/]+\/)?[^/]+\.js$/.test(url) && !/\/ppt\/scripts\//.test(url)) {
     const path = fileURLToPath(url);
     let src = readFileSync(path, 'utf8');
     if (path.endsWith('shapeCatalog.js')) {

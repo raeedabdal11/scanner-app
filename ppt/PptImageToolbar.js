@@ -25,6 +25,7 @@ export const PptImageToolbar = forwardRef(({
   selectedElement,
   onAddText,
   onAddTable,
+  onOpenSmartArt,
   onPickGallery,
   onPickCamera,
   onAddShape,
@@ -424,6 +425,18 @@ export const PptImageToolbar = forwardRef(({
               <Ionicons name="grid-outline" size={18} color="#ffffff" />
               <Text style={styles.insertActionBtnText}>خشتە</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.insertActionBtn, { backgroundColor: '#5b3a8b' }]}
+              onPress={() => {
+                setShowShapesPanel(false);
+                setShowTablePanel(false);
+                if (onOpenSmartArt) onOpenSmartArt();
+              }}
+            >
+              <Ionicons name="git-network-outline" size={18} color="#ffffff" />
+              <Text style={styles.insertActionBtnText}>نەخشەی زانیاری</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Table picker: rows x columns, then insert */}
@@ -448,7 +461,7 @@ export const PptImageToolbar = forwardRef(({
                 chips={[2, 3, 4, 5, 6].map((v) => ({ value: v, label: `${v}` }))}
               />
               <TouchableOpacity
-                style={[styles.insertActionBtn, { backgroundColor: '#2e7d32', flex: 0 }]}
+                style={[styles.insertActionBtn, { backgroundColor: '#2e7d32', flexGrow: 0, flexBasis: 'auto' }]}
                 onPress={() => {
                   setShowTablePanel(false);
                   if (onAddTable) onAddTable(tableRows, tableCols);
@@ -1199,12 +1212,14 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   insertButtonsRow: {
-    // RTL: the first button ("نووسین") sits on the right
+    // RTL: the first button ("نووسین") sits on the right; 3 buttons per row on a phone
     flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
     gap: 8,
   },
   insertActionBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
     // Icon above the label so four buttons fit on a ~360dp phone
     flexDirection: 'column',
     alignItems: 'center',

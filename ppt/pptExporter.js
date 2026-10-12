@@ -7,6 +7,7 @@ import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 import { getSlideBackground } from './slideBackground';
 import { layoutTable, getCell, getCellStyle, getCellBorders } from './tableModel';
+import { buildSmartArtNodes } from './smartart/engine';
 
 // Shapes drawn as open outlines on screen (shapeCatalog `open`, plus the two connectors):
 // exported with <a:noFill/> so PowerPoint matches the editor
@@ -261,6 +262,93 @@ function injectTableFrames(xml, specs) {
     if (start < 0 || endTag < 0) return;
     const frame = buildTableFrameXml(spec.elem, spec.xIn, spec.yIn, spec.slideHeightPt, 9000 + i);
     out = out.slice(0, start) + frame + out.slice(endTag + '</p:sp>'.length);
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// SmartArt ("نەخشەی زانیاری"): exported as a <p:grpSp> of ordinary shapes with text, built from
+// the same layout-engine nodes as the canvas / PDF. A placeholder (APP_SMARTART_n) keeps the
+// z-order and is replaced after the slide XML is final, like tables. Child coordinates are
+// absolute slide EMUs (chOff = off, chExt = ext), all integers.
+// ---------------------------------------------------------------------------------------------
+const saFillXml = (nd) => {
+  if (!nd.fill) return '<a:noFill/>';
+  if (nd.fill2) {
+    // Subtle / glossy styles: lighter at the top
+    return '<a:gradFill rotWithShape="1"><a:gsLst>' +
+      `<a:gs pos="0"><a:srgbClr val="${normalizeHex(nd.fill2, 'FFFFFF')}"/></a:gs>` +
+      `<a:gs pos="100000"><a:srgbClr val="${normalizeHex(nd.fill, '4472C4')}"/></a:gs>` +
+      '</a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>';
+  }
+  return `<a:solidFill><a:srgbClr val="${normalizeHex(nd.fill, '4472C4')}"/></a:solidFill>`;
+};
+
+const saLineXml = (nd) =>
+  nd.line && nd.line.width > 0
+    ? `<a:ln w="${Math.max(1, Math.round(nd.line.width * PT_EMU))}"><a:solidFill><a:srgbClr val="${normalizeHex(nd.line.color, 'FFFFFF')}"/></a:solidFill></a:ln>`
+    : '<a:ln><a:noFill/></a:ln>';
+
+const saShadowXml = (nd) =>
+  nd.shadow
+    ? '<a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000" algn="tl" rotWithShape="0">' +
+      '<a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr></a:outerShdw></a:effectLst>'
+    : '';
+
+export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId) {
+  const W = ((elem.width || 50) / 100) * 720;
+  const H = ((elem.height || 40) / 100) * slideHeightPt;
+  const nodes = buildSmartArtNodes(elem, W, H);
+  const font = xmlEscape(getExportFontFamily(elem.kurdishFont || 'Tahoma', true));
+  const ox = Math.round(xIn * 914400);
+  const oy = Math.round(yIn * 914400);
+  const emu = (pt) => Math.round(pt * PT_EMU);
+  const gcx = Math.max(1, emu(W));
+  const gcy = Math.max(1, emu(H));
+
+  const children = nodes.map((nd, k) => {
+    const id = baseId + 1 + k;
+    const prst = OPENXML_SHAPE_PRST_MAP[nd.shape] || nd.shape || 'rect';
+    const rot = nd.rotation ? ` rot="${Math.round((((nd.rotation % 360) + 360) % 360) * 60000)}"` : '';
+    const flip = nd.flipH ? ' flipH="1"' : '';
+    const inset = Math.max(0, emu(nd.inset || 0));
+    const sz = Math.max(100, Math.round((nd.fontSize || 12) * 100));
+    const algn = { right: 'r', center: 'ctr', left: 'l' }[nd.align] || 'ctr';
+    const anchor = { top: 't', middle: 'ctr', bottom: 'b' }[nd.valign] || 'ctr';
+    const lines = String(nd.text || '').split('\n');
+    const paras = lines.map((line) => {
+      const lang = TABLE_ARABIC_RE.test(line || nd.text || '') || !line ? 'ar-IQ' : 'en-US';
+      const pPr = `<a:pPr algn="${algn}" rtl="1"/>`;
+      if (!line) return `<a:p>${pPr}<a:endParaRPr lang="${lang}" sz="${sz}" dirty="0"/></a:p>`;
+      return `<a:p>${pPr}<a:r><a:rPr lang="${lang}" sz="${sz}" b="${nd.bold ? 1 : 0}" dirty="0">` +
+        `<a:solidFill><a:srgbClr val="${normalizeHex(nd.textColor, '1C1C1E')}"/></a:solidFill>` +
+        `<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>` +
+        `</a:rPr><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`;
+    }).join('');
+    // Text of a rotated shape would rotate too: such shapes never carry text in the layouts
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="SmartArt ${baseId} - ${k + 1}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+      `<p:spPr><a:xfrm${rot}${flip}><a:off x="${ox + emu(nd.x)}" y="${oy + emu(nd.y)}"/><a:ext cx="${Math.max(1, emu(nd.w))}" cy="${Math.max(1, emu(nd.h))}"/></a:xfrm>` +
+      `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${saFillXml(nd)}${saLineXml(nd)}${saShadowXml(nd)}</p:spPr>` +
+      `<p:txBody><a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr>` +
+      `<a:lstStyle/>${paras}</p:txBody></p:sp>`;
+  }).join('');
+
+  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${baseId}" name="SmartArt ${baseId}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+    `<p:grpSpPr><a:xfrm><a:off x="${ox}" y="${oy}"/><a:ext cx="${gcx}" cy="${gcy}"/>` +
+    `<a:chOff x="${ox}" y="${oy}"/><a:chExt cx="${gcx}" cy="${gcy}"/></a:xfrm></p:grpSpPr>` +
+    `${children}</p:grpSp>`;
+}
+
+function injectSmartArtGroups(xml, specs) {
+  let out = xml;
+  (specs || []).forEach((spec, i) => {
+    const nameIdx = out.indexOf(`name="APP_SMARTART_${i}"`);
+    if (nameIdx < 0) return;
+    const start = out.lastIndexOf('<p:sp>', nameIdx);
+    const endTag = out.indexOf('</p:sp>', nameIdx);
+    if (start < 0 || endTag < 0) return;
+    const group = buildSmartArtGroupXml(spec.elem, spec.xIn, spec.yIn, spec.slideHeightPt, 20000 + i * 500);
+    out = out.slice(0, start) + group + out.slice(endTag + '</p:sp>'.length);
   });
   return out;
 }
@@ -851,6 +939,8 @@ export const exportPresentationToPptx = async (
     const slideShapeElemSpecs = {};
     // Table elements per slide (placeholder APP_TABLE_n -> <a:tbl> frame)
     const slideTableSpecs = {};
+    // SmartArt elements per slide (placeholder APP_SMARTART_n -> <p:grpSp>)
+    const slideSmartArtSpecs = {};
     // Stores the background (solid / gradient / image + overlay) per generated slide
     const slideBgSpecs = {};
 
@@ -867,6 +957,7 @@ export const exportPresentationToPptx = async (
         slideImageElemSpecs[slideCount] = [];
         slideShapeElemSpecs[slideCount] = [];
         slideTableSpecs[slideCount] = [];
+        slideSmartArtSpecs[slideCount] = [];
 
         // Slide background: written as <p:bg> during JSZip post-processing (every slide carries
         // its exact app color so PowerPoint matches the editor, even the default white).
@@ -1078,6 +1169,20 @@ export const exportPresentationToPptx = async (
             } catch (imgErr) {
               console.log('[PPT Exporter] Failed to add image:', imgErr);
             }
+          } else if (elem.type === 'smartart') {
+            const saIdx = slideSmartArtSpecs[slideCount].length;
+            slideSmartArtSpecs[slideCount].push({ elem, xIn, yIn, slideHeightPt: slideH * 72 });
+            try {
+              slide.addShape(pptx.shapes ? pptx.shapes.RECTANGLE : 'rect', {
+                objectName: `APP_SMARTART_${saIdx}`,
+                x: xIn,
+                y: yIn,
+                w: wIn,
+                h: hIn,
+              });
+            } catch (saErr) {
+              console.log('[PPT Exporter] Failed to add SmartArt placeholder:', saErr);
+            }
           } else if (elem.type === 'table') {
             // Placeholder keeps the z-order; replaced by a real <a:tbl> during post-processing
             const tableIdx = slideTableSpecs[slideCount].length;
@@ -1119,6 +1224,7 @@ export const exportPresentationToPptx = async (
               outlineWidth: outlineWidth,
               opacity: elem.opacity !== undefined ? elem.opacity : 1.0,
               rotation: elem.rotation || 0,
+              flipH: !!elem.flipH,
               cornerRadius: elem.cornerRadius !== undefined ? elem.cornerRadius : 20,
               text: elem.text || '',
               textColor: elem.textColor || '#000000',
@@ -1673,6 +1779,11 @@ export const exportPresentationToPptx = async (
             } else {
               xfrm.removeAttribute('rot');
             }
+            if (spec.flipH) {
+              xfrm.setAttribute('flipH', '1');
+            } else {
+              xfrm.removeAttribute('flipH');
+            }
             if (xfrmNodes.length === 0) {
               spPr.insertBefore(xfrm, spPr.firstChild);
             }
@@ -2130,6 +2241,7 @@ export const exportPresentationToPptx = async (
 
         // Real tables replace their placeholders (after sanitizing: the frame XML uses integer EMUs only)
         sanitizedXml = injectTableFrames(sanitizedXml, slideTableSpecs[slideNum]);
+        sanitizedXml = injectSmartArtGroups(sanitizedXml, slideSmartArtSpecs[slideNum]);
 
         // Slide background (<p:bg> before <p:spTree>, image media + rel, overlay <p:sp> first in spTree)
         sanitizedXml = await applySlideBackgroundXml(

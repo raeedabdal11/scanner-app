@@ -15,6 +15,7 @@ import { renderSvgShape } from './shapeCatalog';
 import { PptSlideBackground, getSlideBaseColor } from './PptSlideBackground';
 import { getDisplayFontFamily } from './fonts';
 import { PptTableView } from './PptTableView';
+import { PptSmartArtView } from './PptSmartArtView';
 import { layoutTable } from './tableModel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -823,6 +824,13 @@ export const PptCanvas = ({
                     </Text>
                   )}
                 </View>
+              ) : elem.type === 'smartart' ? (
+                <PptSmartArtView
+                  elem={elem}
+                  W={(boxW / 100) * SLIDE.widthPt}
+                  H={(boxH / 100) * (canvasHeight / (canvasWidth / SLIDE.widthPt))}
+                  scale={canvasWidth / SLIDE.widthPt}
+                />
               ) : elem.type === 'table' ? (
                 <PptTableView
                   elem={elem}
@@ -866,7 +874,7 @@ export const PptCanvas = ({
 
                     return (
                       <React.Fragment>
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity }}>
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity, transform: elem.flipH ? [{ scaleX: -1 }] : undefined }}>
                           {renderSvgShape({
                             shapeType: shapeType,
                             fill: fill,
