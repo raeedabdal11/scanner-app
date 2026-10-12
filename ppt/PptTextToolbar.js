@@ -488,31 +488,22 @@ export const PptTextToolbar = forwardRef(({
   const currentStyle = getSelectionStyle(element, currentSel);
   const effectiveWordSize = Math.round(baseSize * (currentStyle.sizeScale ?? 1));
 
-  const setAlignRight = () => {
+  // Alignment is stored per text box (textAlign) and is PHYSICAL on every target:
+  // RN Android Text/TextInput gravity, CSS text-align in the PDF, and <a:pPr algn> in the PPTX.
+  // The reading direction follows the script (Kurdish = rtl) and is never flipped by "چەپ",
+  // otherwise PDF/iOS would reorder punctuation in Kurdish sentences.
+  const setAlign = (textAlign) => {
     const { color: _c, ...elemWithoutColor } = element;
+    const isRtlScript = /[؀-ۿݐ-ݿ]/.test(element.text || '');
     onChangeElement({
       ...elemWithoutColor,
-      textAlign: 'right',
-      writingDirection: 'rtl',
+      textAlign,
+      writingDirection: isRtlScript ? 'rtl' : (element.writingDirection || 'ltr'),
     });
   };
-
-  const setAlignCenter = () => {
-    const { color: _c, ...elemWithoutColor } = element;
-    onChangeElement({
-      ...elemWithoutColor,
-      textAlign: 'center',
-    });
-  };
-
-  const setAlignLeft = () => {
-    const { color: _c, ...elemWithoutColor } = element;
-    onChangeElement({
-      ...elemWithoutColor,
-      textAlign: 'left',
-      writingDirection: 'ltr',
-    });
-  };
+  const setAlignRight = () => setAlign('right');
+  const setAlignCenter = () => setAlign('center');
+  const setAlignLeft = () => setAlign('left');
 
   const isAutoMode = !element.fontMode || element.fontMode === 'auto';
 
@@ -818,6 +809,7 @@ export const PptTextToolbar = forwardRef(({
             <View style={styles.alignGroup}>
               <TouchableOpacity
                 style={[styles.alignBtn, align === 'right' && styles.alignBtnActive]}
+                onPressIn={handlePressIn}
                 onPress={setAlignRight}
               >
                 <Text style={[styles.alignBtnText, align === 'right' && styles.alignBtnTextActive]}>
@@ -827,6 +819,7 @@ export const PptTextToolbar = forwardRef(({
 
               <TouchableOpacity
                 style={[styles.alignBtn, align === 'center' && styles.alignBtnActive]}
+                onPressIn={handlePressIn}
                 onPress={setAlignCenter}
               >
                 <Text style={[styles.alignBtnText, align === 'center' && styles.alignBtnTextActive]}>
@@ -836,6 +829,7 @@ export const PptTextToolbar = forwardRef(({
 
               <TouchableOpacity
                 style={[styles.alignBtn, align === 'left' && styles.alignBtnActive]}
+                onPressIn={handlePressIn}
                 onPress={setAlignLeft}
               >
                 <Text style={[styles.alignBtnText, align === 'left' && styles.alignBtnTextActive]}>

@@ -345,6 +345,9 @@ const InlineTextInput = React.memo(({
 }, (prevProps, nextProps) => {
   if (prevProps.elem?.id !== nextProps.elem?.id) return false;
   if (prevProps.elem?.text !== nextProps.elem?.text) return false;
+  // Paragraph alignment changes the input's style: re-render (same key, no remount, focus kept)
+  if (prevProps.elem?.textAlign !== nextProps.elem?.textAlign) return false;
+  if (prevProps.elem?.writingDirection !== nextProps.elem?.writingDirection) return false;
   if (prevProps.scaledBaseSize !== nextProps.scaledBaseSize) return false;
   if (prevProps.fontFamily !== nextProps.fontFamily) return false;
   if (prevProps.controlledSelection !== nextProps.controlledSelection) return false;
