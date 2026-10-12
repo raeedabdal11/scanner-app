@@ -1,7 +1,7 @@
 // Toolbar for a selected SmartArt ("نەخشەی زانیاری"). Tabs: دەق (text pane), شێوە (layout),
 // ڕەنگ (color schemes), ستایل (SmartArt styles), فۆنت, ڕێک (arrange / convert to shapes).
 // Item text is edited in a sheet with ONE TextInput at a time (nothing on the canvas is an input).
-import React, { useState, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useMemo, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -12,9 +12,12 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  Image,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ExpoImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { PptValueCard } from './PptValueCard';
 import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
 import { PptSmartArtView } from './PptSmartArtView';
@@ -29,6 +32,7 @@ import {
   getSmartArtLayout,
   getThemeAccents,
   toGroups,
+  CROP_POSITIONS,
 } from './smartart/engine';
 
 const TABS = [
@@ -99,7 +103,26 @@ export const PptSmartArtToolbar = forwardRef(({
   const mainCount = toGroups(items).length;
   const accentsNow = useMemo(() => getThemeAccents(theme), [theme]);
 
+  const sheetInputRef = useRef(null);
+
+  // Open the one-item sheet: the item is already empty (placeholder) or keeps the user's text
+  const openItemEditor = (index) => {
+    const it = (element.items || [])[index];
+    if (!it) return;
+    setActiveTab('text');
+    setSelIdx(index);
+    setEditor({ index, text: it.text || '' });
+  };
+  // Existing text: cursor at the end once the input has focus
+  const placeCursorAtEnd = () => {
+    const len = editor && editor.text ? editor.text.length : 0;
+    if (len && sheetInputRef.current && typeof sheetInputRef.current.setSelection === 'function') {
+      sheetInputRef.current.setSelection(len, len);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
+    openItemEditor,
     // Back order: item sheet -> tab -> (editor deselects the SmartArt)
     closeSubModal: () => {
       if (editor) {
@@ -115,7 +138,7 @@ export const PptSmartArtToolbar = forwardRef(({
       }
       return null;
     },
-  }), [editor, activeTab]);
+  }), [editor, activeTab, element]);
 
   const update = (patch) => onChangeElement({ ...element, ...patch });
   const setItems = (next) => update({ items: next });
@@ -157,12 +180,51 @@ export const PptSmartArtToolbar = forwardRef(({
     setSelIdx(at);
     setEditor({ index: at, text: '' });
   };
+  // Picture layouts: one image per main item (gallery -> JPEG, long side max 1600, like image elements)
+  const pickItemImage = async (index) => {
+    try {
+      const res = await ExpoImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: false,
+        quality: 1.0,
+      });
+      if (res.canceled || !res.assets || res.assets.length === 0) return;
+      const a = res.assets[0];
+      const w = a.width || 0;
+      const h = a.height || 0;
+      const actions = Math.max(w, h) > 1600 ? [w >= h ? { resize: { width: 1600 } } : { resize: { height: 1600 } }] : [];
+      const out = await manipulateAsync(a.uri, actions, { compress: 0.85, format: SaveFormat.JPEG });
+      setItems(items.map((it, i) => (i === index
+        ? { ...it, image: { uri: out.uri, w: out.width || w, h: out.height || h, crop: (it.image && it.image.crop) || 'center' } }
+        : it)));
+    } catch (err) {
+      console.log('[SmartArt] image pick error:', err);
+      Alert.alert('هەڵە', 'کێشەیەک ڕوویدا لە هەڵبژاردنی وێنە.');
+    }
+  };
+  const removeItemImage = (index) => {
+    setItems(items.map((it, i) => {
+      if (i !== index) return it;
+      const { image: _img, ...rest } = it;
+      return rest;
+    }));
+  };
+  const setItemCrop = (index, crop) => {
+    setItems(items.map((it, i) => (i === index && it.image ? { ...it, image: { ...it.image, crop } } : it)));
+  };
+
   const saveItemText = () => {
-    if (editor) setItems(items.map((it, i) => (i === editor.index ? { ...it, text: editor.text } : it)));
+    if (editor) {
+      const text = editor.text;
+      const empty = !text.trim();
+      // edited: the user's own text (never treated as an old sample when loading)
+      setItems(items.map((it, i) => (i === editor.index ? { ...it, text, isPlaceholder: empty, edited: !empty } : it)));
+    }
     setEditor(null);
   };
 
   const layout = getSmartArtLayout(element.layoutId);
+  const isPictureLayout = layout.category === 'picture';
   const sameCategory = SMARTART_LAYOUTS.filter((l) => l.category === layout.category);
 
   const confirmConvert = () => {
@@ -201,13 +263,32 @@ export const PptSmartArtToolbar = forwardRef(({
                 <TouchableOpacity
                   key={it.id || `item_${i}`}
                   style={[styles.itemRow, i === sel && styles.itemRowActive, { marginRight: Math.min(4, it.level || 0) * 18 }]}
-                  onPress={() => setSelIdx(i)}
-                  onLongPress={() => setEditor({ index: i, text: it.text || '' })}
+                  onPress={() => openItemEditor(i)}
+                  onLongPress={() => setSelIdx(i)}
                 >
                   <Text style={styles.itemBullet}>{(it.level || 0) > 0 ? '◦' : '●'}</Text>
                   <Text style={[styles.itemText, !it.text && styles.itemEmpty]} numberOfLines={1}>
                     {it.text || 'دەق بنووسە...'}
                   </Text>
+                  {isPictureLayout && !(it.level > 0) && (
+                    <View style={styles.imageBtns}>
+                      <TouchableOpacity style={styles.imageBtn} onPress={() => pickItemImage(i)}>
+                        {it.image && it.image.uri ? (
+                          <Image source={{ uri: it.image.uri }} style={styles.imageThumb} />
+                        ) : (
+                          <>
+                            <Ionicons name="image-outline" size={14} color="#ffffff" />
+                            <Text style={styles.imageBtnText}>وێنە</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      {!!(it.image && it.image.uri) && (
+                        <TouchableOpacity style={styles.imageRemove} onPress={() => removeItemImage(i)}>
+                          <Ionicons name="close" size={14} color="#ff453a" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -220,7 +301,26 @@ export const PptSmartArtToolbar = forwardRef(({
               <ActionBtn icon="return-up-forward-outline" label="پلە بەرزکردنەوە" onPress={() => setLevel(curLevel - 1)} disabled={!canPromote} />
               <ActionBtn icon="trash-outline" label="سڕینەوە" onPress={deleteItem} disabled={items.length <= 1} danger />
             </View>
-            <Text style={styles.hint}>کرتە بۆ هەڵبژاردن، کرتەی درێژ بۆ دەستکاریکردنی دەق.</Text>
+            {isPictureLayout && items[sel] && items[sel].image && items[sel].image.uri && (
+              <View>
+                <SectionTitle>بڕینی وێنە (کام بەشی وێنەکە دەمێنێتەوە):</SectionTitle>
+                <View style={styles.chipRow}>
+                  {CROP_POSITIONS.map((c) => {
+                    const active = (items[sel].image.crop || 'center') === c.key;
+                    return (
+                      <TouchableOpacity key={c.key} style={[styles.chip, active && styles.chipActive]} onPress={() => setItemCrop(sel, c.key)}>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{c.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+            <Text style={styles.hint}>
+              {isPictureLayout
+                ? 'کرتە بۆ نووسین، کرتەی درێژ بۆ هەڵبژاردن (جووڵاندن / سڕینەوە)، «وێنە» بۆ دانانی وێنە.'
+                : 'کرتە بۆ نووسین (یان کرتە لەسەر شێوەکەی سەر سلاید)، کرتەی درێژ بۆ هەڵبژاردن (جووڵاندن / سڕینەوە).'}
+            </Text>
           </View>
         )}
 
@@ -363,6 +463,8 @@ export const PptSmartArtToolbar = forwardRef(({
           <View style={[styles.sheetBox, { marginTop: insets.top + 24 }]}>
             <Text style={styles.sheetTitle}>دەقی خاڵ</Text>
             <TextInput
+              ref={sheetInputRef}
+              onFocus={placeCursorAtEnd}
               style={styles.sheetInput}
               value={editor ? editor.text : ''}
               onChangeText={(t) => setEditor((e) => (e ? { ...e, text: t } : e))}
@@ -370,7 +472,7 @@ export const PptSmartArtToolbar = forwardRef(({
               autoFocus
               textAlign="right"
               textAlignVertical="top"
-              placeholder="دەقەکە بنووسە..."
+              placeholder="دەق بنووسە..."
               placeholderTextColor="#777777"
             />
             <View style={styles.sheetBtnRow}>
@@ -470,6 +572,40 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     textAlign: 'right',
+  },
+  imageBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  imageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 32,
+    minWidth: 44,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    backgroundColor: '#3a3a3c',
+    justifyContent: 'center',
+  },
+  imageBtnText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  imageThumb: {
+    width: 30,
+    height: 30,
+    borderRadius: 4,
+  },
+  imageRemove: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#ff453a22',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   itemEmpty: {
     color: '#777777',

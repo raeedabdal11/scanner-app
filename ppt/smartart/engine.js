@@ -18,6 +18,9 @@ import { PROCESS_LAYOUTS } from './processLayouts';
 import { CYCLE_LAYOUTS } from './cycleLayouts';
 import { HIERARCHY_LAYOUTS } from './hierarchyLayouts';
 import { RELATIONSHIP_LAYOUTS } from './relationshipLayouts';
+import { MATRIX_LAYOUTS } from './matrixLayouts';
+import { PYRAMID_LAYOUTS } from './pyramidLayouts';
+import { PICTURE_LAYOUTS } from './pictureLayouts';
 
 // ---------------------------------------------------------------- catalog
 
@@ -28,19 +31,28 @@ export const SMARTART_CATEGORIES = [
   { key: 'cycle', label: 'خولگە', ready: true },
   { key: 'hierarchy', label: 'پلەبەندی', ready: true },
   { key: 'relationship', label: 'پەیوەندی', ready: true },
-  { key: 'matrix', label: 'ماتریکس', ready: false },
-  { key: 'pyramid', label: 'هەرەم', ready: false },
-  { key: 'picture', label: 'وێنە', ready: false },
+  { key: 'matrix', label: 'ماتریکس', ready: true },
+  { key: 'pyramid', label: 'هەرەم', ready: true },
+  { key: 'picture', label: 'وێنە', ready: true },
 ];
 
-export const SMARTART_LAYOUTS = [...LIST_LAYOUTS, ...PROCESS_LAYOUTS, ...CYCLE_LAYOUTS, ...HIERARCHY_LAYOUTS, ...RELATIONSHIP_LAYOUTS];
+export const SMARTART_LAYOUTS = [
+  ...LIST_LAYOUTS,
+  ...PROCESS_LAYOUTS,
+  ...CYCLE_LAYOUTS,
+  ...HIERARCHY_LAYOUTS,
+  ...RELATIONSHIP_LAYOUTS,
+  ...MATRIX_LAYOUTS,
+  ...PYRAMID_LAYOUTS,
+  ...PICTURE_LAYOUTS,
+];
 const LAYOUT_MAP = SMARTART_LAYOUTS.reduce((m, l) => { m[l.id] = l; return m; }, {});
 export const getSmartArtLayout = (id) => LAYOUT_MAP[id] || SMARTART_LAYOUTS[0];
 
 export const SMARTART_MIN_ITEMS = 1;
 export const SMARTART_MAX_ITEMS = 10;
 
-// Sample data for thumbnails / new graphics
+// Sample data for the PICKER THUMBNAILS ONLY (never copied into a real element)
 export const SAMPLE_ITEMS = [
   { text: 'یەکەم', level: 0 },
   { text: 'خاڵێک', level: 1 },
@@ -49,6 +61,79 @@ export const SAMPLE_ITEMS = [
   { text: 'سێیەم', level: 0 },
   { text: 'خاڵێک', level: 1 },
 ];
+
+// Every text the engine ever used as sample content (old saved SmartArt is cleaned on load)
+export const SMARTART_SAMPLE_TEXTS = new Set([
+  'یەکەم', 'خاڵێک', 'دووەم', 'سێیەم', 'ڕاید',
+  'بەڕێوەبەر', 'بەشی یەک', 'ستاف', 'بەشی دوو', 'بەشی سێ',
+]);
+
+// Faint guide text for empty items (editing canvas only; never exported)
+export const SMARTART_HINT = 'دەق بنووسە';
+const HINT_MARK = '\u2063'; // invisible separator: "<mark><itemIndex><mark><hint>"
+
+// Natural number of top-level items for a new graphic (default 3)
+const DEFAULT_ITEM_COUNTS = {
+  basicMatrix: 4, gridMatrix: 4, matrixCycle: 4, titledMatrix: 5, cycleMatrix: 5,
+  balance: 2, counterbalanceArrows: 2, opposingArrows: 2, divergingArrows: 2, convergingArrows: 2,
+};
+export const defaultItemCount = (layoutId) => DEFAULT_ITEM_COUNTS[layoutId] || 3;
+
+const emptyItem = () => ({ id: makeId('item'), text: '', level: 0, isPlaceholder: true });
+
+/**
+ * Old saved SmartArt: sample texts the user never edited become empty placeholders, and sample
+ * sub-items (level >= 1) are removed. Items with the user's own text are untouched.
+ * Returns the SAME array when nothing changes.
+ */
+export const migrateSmartArtItems = (items) => {
+  if (!Array.isArray(items)) return [emptyItem(), emptyItem(), emptyItem()];
+  let changed = false;
+  const out = [];
+  items.forEach((it) => {
+    if (!it) { changed = true; return; }
+    const sample = !it.edited && SMARTART_SAMPLE_TEXTS.has(String(it.text || '').trim());
+    if (sample && (it.level || 0) > 0) { changed = true; return; }
+    if (sample) {
+      changed = true;
+      out.push({ ...it, text: '', isPlaceholder: true });
+      return;
+    }
+    const empty = !String(it.text || '').trim();
+    if (empty && !it.isPlaceholder) {
+      changed = true;
+      out.push({ ...it, isPlaceholder: true });
+      return;
+    }
+    out.push(it);
+  });
+  if (out.length === 0) {
+    changed = true;
+    out.push(emptyItem());
+  }
+  return changed ? out : items;
+};
+
+/** Applies migrateSmartArtItems to every SmartArt in a presentation (same object if unchanged). */
+export const migratePresentationSmartArt = (presentation) => {
+  if (!presentation || !Array.isArray(presentation.slides)) return presentation;
+  let changed = false;
+  const slides = presentation.slides.map((slide) => {
+    if (!slide || !Array.isArray(slide.elements)) return slide;
+    let slideChanged = false;
+    const elements = slide.elements.map((el) => {
+      if (!el || el.type !== 'smartart') return el;
+      const items = migrateSmartArtItems(el.items);
+      if (items === el.items) return el;
+      slideChanged = true;
+      return { ...el, items };
+    });
+    if (!slideChanged) return slide;
+    changed = true;
+    return { ...slide, elements };
+  });
+  return changed ? { ...presentation, slides } : presentation;
+};
 
 // ---------------------------------------------------------------- colors
 
@@ -138,7 +223,7 @@ export const toGroups = (items) => {
   (items || []).forEach((it) => {
     const text = (it && it.text) || '';
     if ((it.level || 0) > 0 && groups.length > 0) groups[groups.length - 1].children.push(text);
-    else groups.push({ text, children: [] });
+    else groups.push({ text, children: [], image: (it && it.image && it.image.uri) ? it.image : null });
   });
   if (groups.length === 0) groups.push({ text: '', children: [] });
   return groups.slice(0, SMARTART_MAX_ITEMS);
@@ -148,7 +233,9 @@ export const createSmartArtElement = ({ layoutId, items, x, y, width = 80, heigh
   id: makeId('smartart'),
   type: 'smartart',
   layoutId: getSmartArtLayout(layoutId).id,
-  items: (items || getSmartArtLayout(layoutId).sample || SAMPLE_ITEMS).map((it) => ({ id: makeId('item'), text: it.text, level: it.level || 0 })),
+  items: items
+    ? items.map((it) => ({ id: makeId('item'), text: it.text || '', level: it.level || 0, ...(it.text ? {} : { isPlaceholder: true }), ...(it.image ? { image: it.image } : {}) }))
+    : Array.from({ length: defaultItemCount(layoutId) }, emptyItem),
   colorScheme: 'colorful1',
   style: 'simple',
   accents: (accents || DEFAULT_ACCENTS).slice(0, 6),
@@ -196,11 +283,16 @@ export const fitFontSize = (text, w, h, maxPt, inset) => {
  * { shape, x, y, w, h, rotation, flipH, fill, fill2, gloss, line: { color, width } | null, shadow,
  *   text, textColor, fontSize, bold, align, valign, inset, cornerRadius }
  */
-export const buildSmartArtNodes = (elem, W, H) => {
+export const buildSmartArtNodes = (elem, W, H, opts = {}) => {
   const layout = getSmartArtLayout(elem.layoutId);
-  const groups = toGroups(elem.items);
-  const tree = toTree(elem.items);
-  const raw = layout.build(groups, W, H, { items: elem.items || [], tree }) || [];
+  // opts.hints (editing canvas only): empty items get a faint "دەق بنووسە" guide; everywhere else
+  // (preview, slideshow, PDF, PPTX) an empty item simply has no text, its shape stays.
+  const srcItems = (elem.items || []).map((it, i) =>
+    opts.hints && it && !String(it.text || '').trim() ? { ...it, text: `${HINT_MARK}${i}${HINT_MARK}${SMARTART_HINT}` } : it
+  );
+  const groups = toGroups(srcItems);
+  const tree = toTree(srcItems);
+  const raw = layout.build(groups, W, H, { items: srcItems, tree }) || [];
   const A = (elem.accents && elem.accents.length >= 6 ? elem.accents : DEFAULT_ACCENTS);
   const scheme = SCHEME_MAP[elem.colorScheme] || SCHEME_MAP.colorful1;
   const st = STYLE_MAP[elem.style] || STYLE_MAP.simple;
@@ -246,6 +338,9 @@ export const buildSmartArtNodes = (elem, W, H) => {
         fill = null;
         textColor = readableText(main);
         break;
+      case 'picture': // image slot: the image (cover-cropped) or a light placeholder
+        fill = nd.image ? null : tint(main, 0.72);
+        break;
       case 'venn': // semi-transparent circle (Venn): overlaps mix
         fill = main;
         alpha = nd.alpha !== undefined ? nd.alpha : 55;
@@ -257,7 +352,7 @@ export const buildSmartArtNodes = (elem, W, H) => {
     let line = null;
     if (nd.role === 'ring') line = { color: main, width: nd.lineWidth || 2.5 };
     if (nd.role === 'line') line = { color: nd.lineColor || shade(fillOf(0, n), 0.15), width: nd.lineWidth || 1.5 };
-    if (fill && nd.role !== 'connector' && nd.role !== 'bg' && nd.role !== 'venn') {
+    if ((fill || nd.role === 'picture') && nd.role !== 'connector' && nd.role !== 'bg' && nd.role !== 'venn') {
       if (st.line === 'light') line = { color: '#ffffff', width: 1 };
       if (st.line === 'accent') line = { color: main, width: 2 };
       if (st.line === 'dark') line = { color: shade(main, 0.45), width: st.lineWidth || 3 };
@@ -294,10 +389,38 @@ export const buildSmartArtNodes = (elem, W, H) => {
       valign: nd.valign || 'middle',
       inset: nd.inset !== undefined ? nd.inset : Math.min(6, Math.max(2, Math.min(nd.w, nd.h) * 0.06)),
       cornerRadius: nd.cornerRadius !== undefined ? nd.cornerRadius : 12,
+      image: nd.role === 'picture' ? nd.image || null : null,
+      isPicture: nd.role === 'picture',
       textGroup: nd.textGroup || nd.role,
       maxPt: nd.role === 'main' || nd.role === 'accent' ? maxPt : maxPt * 0.8,
     };
   });
+
+  if (opts.hints) {
+    // Turn hint marks into faint guide text and remember which item each text shape edits
+    const itemTexts = (elem.items || []).map((it) => String((it && it.text) || '').trim());
+    nodes.forEach((nd) => {
+      if (!nd.text) return;
+      const lines = nd.text.split('\n');
+      const hintIdx = [];
+      const real = [];
+      lines.forEach((ln) => {
+        const bare = ln.replace(/^• /, '');
+        if (bare.startsWith(HINT_MARK)) hintIdx.push(Number(bare.slice(1, bare.indexOf(HINT_MARK, 1))));
+        else real.push(ln);
+      });
+      if (real.length === 0) {
+        nd.text = SMARTART_HINT;
+        nd.isHint = true;
+        nd.itemIndex = hintIdx[0];
+      } else {
+        nd.text = real.join('\n');
+        const first = real[0].replace(/^• /, '').trim();
+        const found = itemTexts.indexOf(first);
+        nd.itemIndex = found >= 0 ? found : hintIdx[0];
+      }
+    });
+  }
 
   // Auto-fit, then one size per text group so same-level shapes match (like PowerPoint)
   const groupSize = {};
@@ -311,6 +434,38 @@ export const buildSmartArtNodes = (elem, W, H) => {
   });
   return nodes;
 };
+
+/**
+ * Cover-crop an image (imgW x imgH) into a box (boxW x boxH), keeping the chosen side / center.
+ * Returns the hidden fractions of the SOURCE image (left / right / top / bottom: PPTX srcRect and
+ * the image element's crop) and the drawn size + offset inside the box (canvas / PDF).
+ */
+export const coverCrop = (boxW, boxH, imgW, imgH, pos = 'center') => {
+  const iw = imgW > 0 ? imgW : boxW;
+  const ih = imgH > 0 ? imgH : boxH;
+  const s = Math.max(boxW / iw, boxH / ih);
+  const drawW = iw * s;
+  const drawH = ih * s;
+  const hx = Math.max(0, 1 - boxW / drawW);
+  const hy = Math.max(0, 1 - boxH / drawH);
+  let left = hx / 2;
+  let right = hx / 2;
+  let top = hy / 2;
+  let bottom = hy / 2;
+  if (pos === 'left') { left = 0; right = hx; }
+  if (pos === 'right') { left = hx; right = 0; }
+  if (pos === 'top') { top = 0; bottom = hy; }
+  if (pos === 'bottom') { top = hy; bottom = 0; }
+  return { left, right, top, bottom, drawW, drawH, offX: -left * drawW, offY: -top * drawH };
+};
+
+export const CROP_POSITIONS = [
+  { key: 'center', label: 'ناوەڕاست' },
+  { key: 'top', label: 'سەرەوە' },
+  { key: 'bottom', label: 'خوارەوە' },
+  { key: 'right', label: 'ڕاست' },
+  { key: 'left', label: 'چەپ' },
+];
 
 export const getSmartArtBox = (elem, slideHeightPt = 405) => ({
   W: ((elem.width || 50) / 100) * 720,
@@ -342,7 +497,32 @@ export const smartArtToShapes = (elem, slideHeightPt = 405) => {
       line: null,
     };
   });
-  return nodes.map((nd, k) => ({
+  const toPct = (pt, axis) => (axis === 'x' ? (pt / 720) * 100 : (pt / slideHeightPt) * 100);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return nodes.map((nd, k) => (nd.isPicture && nd.image ? (() => {
+    // An image element's box is the UNCROPPED image; the crop fractions leave exactly the slot visible
+    const c = coverCrop(nd.w, nd.h, nd.image.w, nd.image.h, nd.image.crop);
+    const fullW = nd.w / Math.max(0.05, 1 - c.left - c.right);
+    const fullH = nd.h / Math.max(0.05, 1 - c.top - c.bottom);
+    return {
+      id: makeId('img'),
+      type: 'image',
+      uri: nd.image.uri,
+      x: r2((elem.x || 0) + toPct(nd.x - c.left * fullW, 'x')),
+      y: r2((elem.y || 0) + toPct(nd.y - c.top * fullH, 'y')),
+      width: r2(toPct(fullW, 'x')),
+      height: r2(toPct(fullH, 'y')),
+      aspectRatio: fullW / Math.max(1, fullH),
+      rotation: 0,
+      fit: 'fill',
+      crop: { top: c.top, bottom: c.bottom, left: c.left, right: c.right },
+      borderRadius: nd.shape === 'ellipse' ? 100 : nd.shape === 'roundRect' ? 15 : 0,
+      border: nd.line ? { color: nd.line.color, width: nd.line.width } : { color: 'transparent', width: 0 },
+      opacity: 1,
+      locked: false,
+      zIndex: (elem.zIndex || 1) + k * 0.001,
+    };
+  })() : {
     id: makeId('shape'),
     type: 'shape',
     shapeType: nd.shape,

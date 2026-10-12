@@ -30,7 +30,13 @@ import { PptShapeToolbar } from './PptShapeToolbar';
 import { PptTableToolbar } from './PptTableToolbar';
 import { PptSmartArtToolbar } from './PptSmartArtToolbar';
 import { PptSmartArtPicker } from './PptSmartArtPicker';
-import { createSmartArtElement, smartArtToShapes, getThemeAccents as getSmartArtAccents } from './smartart/engine';
+import {
+  createSmartArtElement,
+  smartArtToShapes,
+  getThemeAccents as getSmartArtAccents,
+  buildSmartArtNodes,
+  migratePresentationSmartArt,
+} from './smartart/engine';
 import { createTableElement, getThemeAccents } from './tableModel';
 import { makeId, ensureUniqueIds } from './makeId';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
@@ -134,6 +140,7 @@ const PageCard = React.memo(({
   onShapeDoubleTap,
   selectedTableCell,
   onTableCellTap,
+  onSmartArtTap,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -281,6 +288,7 @@ const PageCard = React.memo(({
         onShapeDoubleTap={onShapeDoubleTap}
         selectedTableCell={selectedTableCell}
         onTableCellTap={onTableCellTap}
+        onSmartArtTap={onSmartArtTap}
       />
     </View>
   );
@@ -396,7 +404,7 @@ export const PptEditorModal = ({
   const loadInitialDraft = async () => {
     try {
       // Saved drafts may hold duplicate ids (old Date.now() ids): repair before rendering
-      const draft = ensureUniqueIds(await loadPptDraft());
+      const draft = migratePresentationSmartArt(ensureUniqueIds(await loadPptDraft()));
       if (draft && draft.slides && draft.slides.length > 0) {
         setPresentation(draft);
         setHistory([draft]);
@@ -1179,6 +1187,32 @@ export const PptEditorModal = ({
     setSelectedPageId(targetPageId);
     setSelectedElementId(smartArt.id);
     setEditingElementId(null);
+  };
+
+  // Tap on a SmartArt shape (no drag): select it and open the text editor of the item that shape
+  // shows, keyboard ready. A tap on an empty area of the graphic only selects it.
+  const handleSmartArtTap = (pageId, elemId, xPt, yPt) => {
+    const page = presentation.slides.find((s) => s.id === pageId);
+    const elem = (page?.elements || []).find((e) => e.id === elemId);
+    if (!elem) return;
+    setSelectedPageId(pageId);
+    setSelectedElementId(elemId);
+    setEditingElementId(null);
+    const slideH = presentation.aspectRatio === '4:3' ? 540 : 405;
+    const W = ((elem.width || 50) / 100) * 720;
+    const H = ((elem.height || 40) / 100) * slideH;
+    const nodes = buildSmartArtNodes(elem, W, H, { hints: true });
+    let hit = null;
+    nodes.forEach((nd) => {
+      if (nd.itemIndex === undefined || nd.isLine) return;
+      if (xPt >= nd.x && xPt <= nd.x + nd.w && yPt >= nd.y && yPt <= nd.y + nd.h) hit = nd; // last = topmost
+    });
+    if (!hit) return;
+    const open = (tries) => {
+      if (smartArtToolbarRef.current?.openItemEditor) smartArtToolbarRef.current.openItemEditor(hit.itemIndex);
+      else if (tries > 0) setTimeout(() => open(tries - 1), 80);
+    };
+    setTimeout(() => open(5), 0);
   };
 
   // "گۆڕین بۆ شێوە": the SmartArt becomes independent ordinary shapes (one undo step)
@@ -1982,6 +2016,7 @@ export const PptEditorModal = ({
                             onShapeDoubleTap={(elem) => handleShapeDoubleTap(slide.id, elem)}
                             selectedTableCell={selectedPageId === slide.id ? selectedTableCell : null}
                             onTableCellTap={(elemId, r, c) => handleTableCellTap(slide.id, elemId, r, c)}
+                            onSmartArtTap={(elemId, xPt, yPt) => handleSmartArtTap(slide.id, elemId, xPt, yPt)}
                           />
 
                           {/* Page Divider between pages */}

@@ -415,6 +415,7 @@ export const PptCanvas = ({
   onShapeDoubleTap,
   selectedTableCell,
   onTableCellTap,
+  onSmartArtTap,
 }) => {
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
@@ -434,13 +435,17 @@ export const PptCanvas = ({
     let initialX = element.x;
     let initialY = element.y;
     let isDragging = false;
+    let grantLoc = null; // finger position inside the element (SmartArt: which shape was tapped)
 
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
       },
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (evt) => {
+        grantLoc = evt && evt.nativeEvent
+          ? { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY }
+          : null;
         onSelectElement(element.id);
         initialX = element.x;
         initialY = element.y;
@@ -482,6 +487,11 @@ export const PptCanvas = ({
             onStartInlineEditing(element.id);
           } else if (element.type === 'image' && !element.uri) {
             onChangeImageElement(element);
+          } else if (element.type === 'smartart') {
+            if (onSmartArtTap && grantLoc) {
+              const ptPerPx = SLIDE.widthPt / canvasWidth;
+              onSmartArtTap(element.id, grantLoc.x * ptPerPx, grantLoc.y * ptPerPx);
+            }
           } else if (element.type === 'table') {
             const t = lastTableCellTouchRef.current;
             if (t && t.elemId === element.id && onTableCellTap) onTableCellTap(element.id, t.r, t.c);
@@ -830,6 +840,7 @@ export const PptCanvas = ({
                   W={(boxW / 100) * SLIDE.widthPt}
                   H={(boxH / 100) * (canvasHeight / (canvasWidth / SLIDE.widthPt))}
                   scale={canvasWidth / SLIDE.widthPt}
+                  showHints
                 />
               ) : elem.type === 'table' ? (
                 <PptTableView

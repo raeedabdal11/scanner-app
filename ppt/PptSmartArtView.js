@@ -2,10 +2,11 @@
 // (renderSvgShape) + plain Text. Used by the canvas, thumbnails, the preview and the picker.
 // smartArtToHtml() is the same drawing for the PDF.
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Line } from 'react-native-svg';
 import { renderSvgShape, getShapeSvgHtml } from './shapeCatalog';
-import { buildSmartArtNodes } from './smartart/engine';
+import { buildSmartArtNodes, coverCrop } from './smartart/engine';
 import { getDisplayFontFamily, getCssFontStack } from './fonts';
 
 const VALIGN = { top: 'flex-start', middle: 'center', bottom: 'flex-end' };
@@ -29,6 +30,10 @@ const lineEnds = (nd) => ({
   y2: nd.y + nd.h,
 });
 
+// Corner radius that clips a picture slot to its shape (ellipse slots are square in the layouts)
+const pictureRadius = (nd, w, h) =>
+  nd.shape === 'ellipse' ? Math.min(w, h) / 2 : nd.shape === 'roundRect' ? Math.min(w, h) * 0.12 : 0;
+
 const shapeTransform = (nd) => {
   const t = [];
   if (nd.rotation) t.push({ rotate: `${nd.rotation}deg` });
@@ -48,8 +53,8 @@ const ShapeSvg = ({ nd, fill, lineWidth, lineColor }) =>
   });
 
 /** elem + its box in points (W x H) and the on-screen scale (px per point) */
-export const PptSmartArtView = ({ elem, W, H, scale }) => {
-  const nodes = buildSmartArtNodes(elem, W, H);
+export const PptSmartArtView = ({ elem, W, H, scale, showHints = false }) => {
+  const nodes = buildSmartArtNodes(elem, W, H, { hints: showHints });
   const fontFamily = getDisplayFontFamily(elem.kurdishFont || 'Tahoma');
   return (
     <View style={{ width: W * scale, height: H * scale }} pointerEvents="none">
@@ -73,6 +78,42 @@ export const PptSmartArtView = ({ elem, W, H, scale }) => {
       </Svg>
       {nodes.map((nd, k) => {
         if (nd.isLine) return null;
+        if (nd.isPicture) {
+          const w = nd.w * scale;
+          const h = nd.h * scale;
+          const c = nd.image ? coverCrop(nd.w, nd.h, nd.image.w, nd.image.h, nd.image.crop) : null;
+          return (
+            <View
+              key={`n_${k}`}
+              style={[
+                styles.abs,
+                {
+                  left: nd.x * scale,
+                  top: nd.y * scale,
+                  width: w,
+                  height: h,
+                  borderRadius: pictureRadius(nd, w, h),
+                  overflow: 'hidden',
+                  backgroundColor: nd.fill || 'transparent',
+                  borderWidth: nd.line ? Math.max(0.5, nd.line.width * scale) : 0,
+                  borderColor: nd.line ? nd.line.color : 'transparent',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
+              ]}
+            >
+              {nd.image && c ? (
+                <Image
+                  source={{ uri: nd.image.uri }}
+                  style={{ position: 'absolute', left: c.offX * scale, top: c.offY * scale, width: c.drawW * scale, height: c.drawH * scale }}
+                  resizeMode="stretch"
+                />
+              ) : (
+                <Ionicons name="image-outline" size={Math.max(8, Math.min(w, h) * 0.38)} color="rgba(255,255,255,0.9)" />
+              )}
+            </View>
+          );
+        }
         const box = { left: nd.x * scale, top: nd.y * scale, width: nd.w * scale, height: nd.h * scale };
         const hasShape = !!nd.fill || !!nd.line;
         const lineWidth = nd.line ? Math.max(0.5, nd.line.width * scale) : 0;
@@ -101,6 +142,8 @@ export const PptSmartArtView = ({ elem, W, H, scale }) => {
                 <Text
                   style={{
                     color: nd.textColor,
+                    opacity: nd.isHint ? 0.4 : 1,
+                    fontStyle: nd.isHint ? 'italic' : 'normal',
                     fontSize: nd.fontSize * scale,
                     lineHeight: nd.fontSize * scale * 1.2,
                     fontWeight: nd.bold ? 'bold' : 'normal',
@@ -128,7 +171,7 @@ const escapeHtml = (str) =>
     .replace(/"/g, '&quot;');
 
 /** Same drawing as HTML for the PDF renderer. scale = HTML points per slide point. */
-export const smartArtToHtml = (elem, W, H, scale) => {
+export const smartArtToHtml = (elem, W, H, scale, images = {}) => {
   const nodes = buildSmartArtNodes(elem, W, H);
   const fontStack = getCssFontStack(elem.kurdishFont || 'Tahoma');
   const pt = (v) => `${(v * scale).toFixed(2)}pt`;
@@ -142,6 +185,19 @@ export const smartArtToHtml = (elem, W, H, scale) => {
     })
     .join('')}</svg>`;
   const parts = nodes.filter((nd) => !nd.isLine).map((nd) => {
+    if (nd.isPicture) {
+      const radius = nd.shape === 'ellipse' ? '50%' : nd.shape === 'roundRect' ? pt(Math.min(nd.w, nd.h) * 0.12) : '0';
+      const border = nd.line ? `${pt(nd.line.width)} solid ${nd.line.color}` : 'none';
+      const data = nd.image ? images[nd.image.uri] : null;
+      let inner = '';
+      if (data) {
+        const c = coverCrop(nd.w, nd.h, nd.image.w, nd.image.h, nd.image.crop);
+        inner = `<img src="${data}" style="position:absolute;left:${pt(c.offX)};top:${pt(c.offY)};width:${pt(c.drawW)};height:${pt(c.drawH)};" />`;
+      }
+      const bg = data ? 'transparent' : nd.fill || '#e5e5ea';
+      return `<div style="position:absolute;left:${pt(nd.x)};top:${pt(nd.y)};width:${pt(nd.w)};height:${pt(nd.h)};overflow:hidden;
+        border-radius:${radius};border:${border};box-sizing:border-box;background:${bg};">${inner}</div>`;
+    }
     const tf = `${nd.rotation ? `rotate(${nd.rotation}deg)` : ''} ${nd.flipH ? 'scaleX(-1)' : ''}`.trim() || 'none';
     const lineW = nd.line ? Math.max(0.5, nd.line.width * scale) : 0;
     const hasShape = !!nd.fill || !!nd.line;

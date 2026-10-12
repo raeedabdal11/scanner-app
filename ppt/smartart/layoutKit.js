@@ -29,8 +29,8 @@ export const gridDims = (n, W, H) => {
 
 export const N = (shape, x, y, w, h, role, idx, extra = {}) => ({ shape, x, y, w, h, role, idx, ...extra });
 
-export const bullets = (g) => g.children.map((c) => `• ${c}`).join('\n');
-export const fullText = (g) => (g.children.length ? `${g.text}\n${bullets(g)}` : g.text);
+export const bullets = (g) => g.children.filter((c) => c).map((c) => `• ${c}`).join('\n');
+export const fullText = (g) => [g.text, bullets(g)].filter((t) => t).join('\n');
 
 /** Box + arrow sizes for a row of n boxes with n-1 arrows between them */
 export const boxArrowRow = (n, W, gap, arrowRatio = 0.32) => {

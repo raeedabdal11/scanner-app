@@ -625,6 +625,23 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
       `);
     } else if (elem.type === 'smartart') {
       const saScale = canvasWidth / SLIDE.widthPt;
+      // Picture slots: embed each image as base64 (like the image element)
+      const saImages = {};
+      for (const it of elem.items || []) {
+        const uri = it && it.image && it.image.uri;
+        if (!uri || saImages[uri]) continue;
+        if (uri.startsWith('data:')) {
+          saImages[uri] = uri;
+          continue;
+        }
+        try {
+          const raw = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          const mime = /\.png($|\?)/i.test(uri) ? 'image/png' : 'image/jpeg';
+          saImages[uri] = `data:${mime};base64,${raw}`;
+        } catch (err) {
+          console.log('[PDF Export] SmartArt image read failed:', uri, err?.message || err);
+        }
+      }
       elementHtmls.push(`
         <div style="
           position: absolute;
@@ -634,7 +651,7 @@ export async function renderSlideToHtml(slide, width = 960, height = 540, fontFa
           height: ${uncroppedHeight.toFixed(2)}pt;
           z-index: ${zIndex};
           opacity: ${opacity};
-        ">${smartArtToHtml(elem, uncroppedWidth / saScale, uncroppedHeight / saScale, saScale)}</div>
+        ">${smartArtToHtml(elem, uncroppedWidth / saScale, uncroppedHeight / saScale, saScale, saImages)}</div>
       `);
     } else if (elem.type === 'table') {
       elementHtmls.push(`

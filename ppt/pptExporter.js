@@ -7,7 +7,7 @@ import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 import { getSlideBackground } from './slideBackground';
 import { layoutTable, getCell, getCellStyle, getCellBorders } from './tableModel';
-import { buildSmartArtNodes } from './smartart/engine';
+import { buildSmartArtNodes, coverCrop } from './smartart/engine';
 
 // Shapes drawn as open outlines on screen (shapeCatalog `open`, plus the two connectors):
 // exported with <a:noFill/> so PowerPoint matches the editor
@@ -300,7 +300,7 @@ const saShadowXml = (nd) =>
       '<a:srgbClr val="000000"><a:alpha val="35000"/></a:srgbClr></a:outerShdw></a:effectLst>'
     : '';
 
-export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId) {
+export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId, relIds = {}) {
   const W = ((elem.width || 50) / 100) * 720;
   const H = ((elem.height || 40) / 100) * slideHeightPt;
   const nodes = buildSmartArtNodes(elem, W, H);
@@ -316,6 +316,18 @@ export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId) {
     const prst = OPENXML_SHAPE_PRST_MAP[nd.shape] || nd.shape || 'rect';
     const rot = nd.rotation ? ` rot="${Math.round((((nd.rotation % 360) + 360) % 360) * 60000)}"` : '';
     const flip = nd.flipH ? ' flipH="1"' : '';
+    // Picture slot with an image: a real <p:pic> cover-cropped (srcRect) to the slot shape
+    const picRel = nd.isPicture && nd.image ? relIds[nd.image.uri] : null;
+    if (picRel) {
+      const c = coverCrop(nd.w, nd.h, nd.image.w, nd.image.h, nd.image.crop);
+      const sr = (v) => Math.max(0, Math.min(99999, Math.round(v * 100000)));
+      return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="SmartArt ${baseId} - ${k + 1}"/>` +
+        '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>' +
+        `<p:blipFill><a:blip r:embed="${picRel}"/><a:srcRect l="${sr(c.left)}" t="${sr(c.top)}" r="${sr(c.right)}" b="${sr(c.bottom)}"/>` +
+        '<a:stretch><a:fillRect/></a:stretch></p:blipFill>' +
+        `<p:spPr><a:xfrm><a:off x="${ox + emu(nd.x)}" y="${oy + emu(nd.y)}"/><a:ext cx="${Math.max(1, emu(nd.w))}" cy="${Math.max(1, emu(nd.h))}"/></a:xfrm>` +
+        `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${saLineXml(nd)}</p:spPr></p:pic>`;
+    }
     const inset = Math.max(0, emu(nd.inset || 0));
     const sz = Math.max(100, Math.round((nd.fontSize || 12) * 100));
     const algn = { right: 'r', center: 'ctr', left: 'l' }[nd.align] || 'ctr';
@@ -344,6 +356,41 @@ export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId) {
     `${children}</p:grpSp>`;
 }
 
+/**
+ * SmartArt pictures: each prepared image becomes ppt/media/... plus an image relationship of the
+ * slide (like the slide background image). Sets spec.relIds = { uri: rId }.
+ */
+async function registerSmartArtMedia(zip, slideNum, specs) {
+  const withImages = (specs || []).filter((sp) => sp.images && Object.keys(sp.images).length);
+  if (!withImages.length) return;
+  const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+  const relsFile = zip.file(relsPath);
+  if (!relsFile) return;
+  let relsXml = await relsFile.async('text');
+  let n = 0;
+  withImages.forEach((spec, si) => {
+    spec.relIds = {};
+    Object.entries(spec.images).forEach(([uri, dataUri], k) => {
+      const m = /^data:image\/(png|jpe?g|gif);base64,(.*)$/i.exec(dataUri || '');
+      if (!m) return;
+      const ext = m[1].toLowerCase() === 'jpg' ? 'jpeg' : m[1].toLowerCase();
+      let relId;
+      do {
+        n++;
+        relId = `rIdSa${n}`;
+      } while (relsXml.includes(`Id="${relId}"`));
+      const mediaName = `smartart_s${slideNum}_${si}_${k}.${ext}`;
+      zip.file(`ppt/media/${mediaName}`, m[2], { base64: true, createFolders: false });
+      relsXml = relsXml.replace(
+        '</Relationships>',
+        `<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`
+      );
+      spec.relIds[uri] = relId;
+    });
+  });
+  zip.file(relsPath, relsXml);
+}
+
 function injectSmartArtGroups(xml, specs) {
   let out = xml;
   (specs || []).forEach((spec, i) => {
@@ -352,7 +399,7 @@ function injectSmartArtGroups(xml, specs) {
     const start = out.lastIndexOf('<p:sp>', nameIdx);
     const endTag = out.indexOf('</p:sp>', nameIdx);
     if (start < 0 || endTag < 0) return;
-    const group = buildSmartArtGroupXml(spec.elem, spec.xIn, spec.yIn, spec.slideHeightPt, 20000 + i * 500);
+    const group = buildSmartArtGroupXml(spec.elem, spec.xIn, spec.yIn, spec.slideHeightPt, 20000 + i * 500, spec.relIds || {});
     out = out.slice(0, start) + group + out.slice(endTag + '</p:sp>'.length);
   });
   return out;
@@ -1176,7 +1223,15 @@ export const exportPresentationToPptx = async (
             }
           } else if (elem.type === 'smartart') {
             const saIdx = slideSmartArtSpecs[slideCount].length;
-            slideSmartArtSpecs[slideCount].push({ elem, xIn, yIn, slideHeightPt: slideH * 72 });
+            const saSpec = { elem, xIn, yIn, slideHeightPt: slideH * 72, images: {} };
+            slideSmartArtSpecs[slideCount].push(saSpec);
+            // Picture slots: prepare every image now (JPEG data URI), embedded during post-processing
+            for (const it of elem.items || []) {
+              const uri = it && it.image && it.image.uri;
+              if (!uri || saSpec.images[uri] || debugOptions.noImages) continue;
+              const dataUri = await prepareImageForPptx(uri);
+              if (dataUri) saSpec.images[uri] = dataUri;
+            }
             try {
               slide.addShape(pptx.shapes ? pptx.shapes.RECTANGLE : 'rect', {
                 objectName: `APP_SMARTART_${saIdx}`,
@@ -2246,6 +2301,7 @@ export const exportPresentationToPptx = async (
 
         // Real tables replace their placeholders (after sanitizing: the frame XML uses integer EMUs only)
         sanitizedXml = injectTableFrames(sanitizedXml, slideTableSpecs[slideNum]);
+        await registerSmartArtMedia(zip, slideNum, slideSmartArtSpecs[slideNum]);
         sanitizedXml = injectSmartArtGroups(sanitizedXml, slideSmartArtSpecs[slideNum]);
 
         // Slide background (<p:bg> before <p:spTree>, image media + rel, overlay <p:sp> first in spTree)
