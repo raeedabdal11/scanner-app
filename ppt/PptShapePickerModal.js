@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   Modal,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   TextInput,
   StyleSheet,
   Dimensions,
@@ -15,7 +16,28 @@ import { SHAPE_CATEGORIES, ALL_SHAPES, renderSvgShape } from './shapeCatalog';
 import { useKeyboard, useKeyboardOverlap } from './useEditorInsets';
 
 const { width } = Dimensions.get('window');
-const GRID_ITEM_WIDTH = (width - 48) / 3;
+const GRID_COLUMNS = 3;
+const GRID_ITEM_WIDTH = (width - 48) / GRID_COLUMNS;
+
+// One grid tile; memoized so typing in the search box does not redraw every SVG preview
+const ShapeTile = React.memo(({ shape, onPick }) => (
+  <TouchableOpacity style={styles.shapeTile} onPress={() => onPick(shape.id)}>
+    <View style={styles.svgPreviewContainer}>
+      {renderSvgShape({
+        shapeType: shape.id,
+        fill: '#1f497d',
+        outlineColor: '#ffffff',
+        outlineWidth: 1.5,
+        cornerRadius: 15,
+        svgWidth: '100%',
+        svgHeight: '100%',
+      })}
+    </View>
+    <Text style={styles.shapeTileName} numberOfLines={2}>
+      {shape.name}
+    </Text>
+  </TouchableOpacity>
+));
 
 export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "شێوەکانی پاورپۆینت" }) {
   const [selectedCategory, setSelectedCategory] = useState('lines_arrows');
@@ -25,14 +47,21 @@ export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "
   const keyboard = useKeyboard();
   const { overlap, remeasure } = useKeyboardOverlap(contentRef, keyboard);
 
-  const filteredShapes = ALL_SHAPES.filter((shape) => {
-    const matchesCategory = searchQuery ? true : shape.category === selectedCategory;
-    const matchesSearch = searchQuery
-      ? shape.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        shape.id.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
-    return matchesCategory && matchesSearch;
-  });
+  const filteredShapes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return ALL_SHAPES.filter((shape) =>
+      q
+        ? shape.name.toLowerCase().includes(q) || shape.id.toLowerCase().includes(q)
+        : shape.category === selectedCategory
+    );
+  }, [searchQuery, selectedCategory]);
+
+  const handlePick = useCallback((shapeId) => {
+    onSelectShape(shapeId);
+    onClose();
+  }, [onSelectShape, onClose]);
+
+  const renderTile = useCallback(({ item }) => <ShapeTile shape={item} onPick={handlePick} />, [handlePick]);
 
   return (
     <Modal
@@ -100,41 +129,25 @@ export function PptShapePickerModal({ visible, onClose, onSelectShape, title = "
           )}
 
           {/* Shape Grid */}
-          <ScrollView contentContainerStyle={styles.gridContainer} keyboardShouldPersistTaps="handled">
-            {filteredShapes.length === 0 ? (
+          {/* Lazy grid: only the visible rows are drawn (≈160 SVG previews in search mode) */}
+          <FlatList
+            key={searchQuery ? 'search' : selectedCategory}
+            data={filteredShapes}
+            keyExtractor={(item) => item.id}
+            renderItem={renderTile}
+            numColumns={GRID_COLUMNS}
+            contentContainerStyle={styles.gridContainer}
+            keyboardShouldPersistTaps="handled"
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={5}
+            removeClippedSubviews
+            ListEmptyComponent={
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyText}>هیچ شێوەیەک نەدۆزرایەوە</Text>
               </View>
-            ) : (
-              <View style={styles.gridRow}>
-                {filteredShapes.map((shape) => (
-                  <TouchableOpacity
-                    key={shape.id}
-                    style={styles.shapeTile}
-                    onPress={() => {
-                      onSelectShape(shape.id);
-                      onClose();
-                    }}
-                  >
-                    <View style={styles.svgPreviewContainer}>
-                      {renderSvgShape({
-                        shapeType: shape.id,
-                        fill: '#1f497d',
-                        outlineColor: '#ffffff',
-                        outlineWidth: 1.5,
-                        cornerRadius: 15,
-                        svgWidth: '100%',
-                        svgHeight: '100%',
-                      })}
-                    </View>
-                    <Text style={styles.shapeTileName} numberOfLines={2}>
-                      {shape.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </ScrollView>
+            }
+          />
         </View>
       </SafeAreaView>
     </Modal>

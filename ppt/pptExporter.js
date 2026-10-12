@@ -7,6 +7,13 @@ import { getElementRuns } from './formattedText';
 import { OPENXML_SHAPE_PRST_MAP } from './shapeCatalog';
 import { getSlideBackground } from './slideBackground';
 
+// Shapes drawn as open outlines on screen (shapeCatalog `open`, plus the two connectors):
+// exported with <a:noFill/> so PowerPoint matches the editor
+const OPEN_OUTLINE_SHAPES = new Set([
+  'elbowConnector', 'curvedConnector',
+  'leftBracket', 'rightBracket', 'leftBrace', 'rightBrace', 'bracketPair', 'bracePair',
+]);
+
 if (typeof window === 'undefined') {
   global.window = global;
 }
@@ -1461,8 +1468,8 @@ export const exportPresentationToPptx = async (
           shapeExportCount++;
           const shapeType = spec.shapeType || 'rect';
           const isLineOrArrow = shapeType === 'line' || shapeType === 'arrow' || shapeType === 'doubleArrow';
-          // Connectors (bentConnector3 / curvedConnector3) are open paths: outline only, never a fill
-          const isConnector = shapeType === 'elbowConnector' || shapeType === 'curvedConnector';
+          // Open outlines (connectors, brackets, braces): outline only, never a fill — same as on screen
+          const isConnector = OPEN_OUTLINE_SHAPES.has(shapeType);
 
           let spPrNodes = shapeNode.getElementsByTagName('p:spPr');
           if (spPrNodes.length === 0) {

@@ -51,6 +51,11 @@ if (!allShapesBlock) {
   process.exit(2);
 }
 const shapeIds = [...allShapesBlock[1].matchAll(/\{\s*id:\s*'([^']+)'/g)].map((m) => m[1]);
+const duplicateIds = shapeIds.filter((id, i) => shapeIds.indexOf(id) !== i);
+if (duplicateIds.length > 0) {
+  console.log(`FAIL: duplicate shape ids in ALL_SHAPES: ${duplicateIds.join(', ')}`);
+  process.exit(1);
+}
 
 // One slide, every shape in a 10-column grid (zIndex keeps the catalog order)
 const cols = 10;
