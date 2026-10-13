@@ -23,6 +23,7 @@ import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
 import { PptSmartArtView } from './PptSmartArtView';
 import { KURDISH_FONTS } from './fonts';
 import { makeId } from './makeId';
+import { PptArrangePanel } from './PptArrangePanel';
 import {
   SMARTART_LAYOUTS,
   SMARTART_CATEGORIES,
@@ -41,7 +42,7 @@ const TABS = [
   { key: 'color', label: 'ڕەنگ', icon: 'color-palette-outline' },
   { key: 'style', label: 'ستایل', icon: 'sparkles-outline' },
   { key: 'font', label: 'فۆنت', icon: 'text-outline' },
-  { key: 'arrange', label: 'ڕێک', icon: 'options-outline' },
+  { key: 'arrange', label: 'ڕێکخستن', icon: 'options-outline' },
 ];
 
 const TEXT_COLORS = ['#ffffff', '#1c1c1e', '#404040', '#1f497d', '#c00000', '#2e7d32', '#7030a0', '#ffc000'];
@@ -91,6 +92,7 @@ export const PptSmartArtToolbar = forwardRef(({
   onDuplicate,
   onDelete,
   onConvertToShapes,
+  slideHeightPt = 405,
 }, ref) => {
   const [activeTab, setActiveTab] = useState('text');
   const [selIdx, setSelIdx] = useState(0);
@@ -439,17 +441,12 @@ export const PptSmartArtToolbar = forwardRef(({
         {/* ---------------- ڕێک ---------------- */}
         {activeTab === 'arrange' && (
           <View>
+            <PptArrangePanel element={element} onChangeElement={onChangeElement} slideHeightPt={slideHeightPt} />
             <Text style={styles.hint}>بۆ جووڵاندن ڕایبکێشە، و بۆ گۆڕینی قەبارە دەسکەکانی دەوروبەری بەکاربهێنە.</Text>
             <View style={styles.actionGrid}>
               <ActionBtn icon="copy-outline" label="کۆپی" onPress={onDuplicate} />
               <ActionBtn icon="arrow-up-circle-outline" label="هێنانە پێشەوە" onPress={() => update({ zIndex: (element.zIndex || 1) + 1 })} />
               <ActionBtn icon="arrow-down-circle-outline" label="بردنە دواوە" onPress={() => update({ zIndex: Math.max(0, (element.zIndex || 1) - 1) })} />
-              <ActionBtn
-                icon={element.locked ? 'lock-closed' : 'lock-open-outline'}
-                label={element.locked ? 'کردنەوەی قفڵ' : 'قفڵکردن'}
-                active={!!element.locked}
-                onPress={() => update({ locked: !element.locked })}
-              />
               <ActionBtn icon="shapes-outline" label="گۆڕین بۆ شێوە" onPress={confirmConvert} />
               <ActionBtn icon="trash-outline" label="سڕینەوە" onPress={onDelete} danger />
             </View>

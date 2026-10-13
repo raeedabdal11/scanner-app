@@ -39,6 +39,8 @@ import {
 } from './smartart/engine';
 import { createTableElement, getThemeAccents } from './tableModel';
 import { makeId, ensureUniqueIds } from './makeId';
+import { LOCKED_MESSAGE, isElementLocked, lockBlocksUpdate, withoutLock } from './elementLock';
+import { getSnapEnabled, setSnapEnabled as storeSnapEnabled } from './snapGeometry';
 import { PptLayoutPickerModal } from './PptLayoutPickerModal';
 import { PptPreviewModal } from './PptPreviewModal';
 import { PptShapePickerModal } from './PptShapePickerModal';
@@ -141,6 +143,8 @@ const PageCard = React.memo(({
   selectedTableCell,
   onTableCellTap,
   onSmartArtTap,
+  snapEnabled,
+  onToggleSnap,
 }) => {
   const planned = planPage(slide);
   const isFull = planned.isFull;
@@ -217,6 +221,17 @@ const PageCard = React.memo(({
           >
             <Ionicons name="trash-outline" size={15} color="#ff453a" />
           </TouchableOpacity>
+
+          {/* Snap ("چەسپاندن") ON / OFF: smart guides while moving / resizing */}
+          <TouchableOpacity
+            style={[styles.snapToggleBtn, snapEnabled && styles.snapToggleBtnOn]}
+            onPress={onToggleSnap}
+          >
+            <Text style={[styles.snapToggleLabel, snapEnabled && styles.snapToggleTextOn]}>چەسپاندن</Text>
+            <Text style={[styles.snapToggleText, snapEnabled && styles.snapToggleTextOn]}>
+              {snapEnabled ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Save Page Button */}
@@ -289,6 +304,7 @@ const PageCard = React.memo(({
         selectedTableCell={selectedTableCell}
         onTableCellTap={onTableCellTap}
         onSmartArtTap={onSmartArtTap}
+        snapEnabled={snapEnabled}
       />
     </View>
   );
@@ -350,6 +366,20 @@ export const PptEditorModal = ({
   const [smartArtPicker, setSmartArtPicker] = useState({ visible: false, mode: 'insert' });
   // Selected table cell { elemId, r, c } (drawn on the canvas, edited by PptTableToolbar)
   const [selectedTableCell, setSelectedTableCell] = useState(null);
+  // Snap / smart guides: ON by default, remembered for the session
+  const [snapEnabled, setSnapEnabledState] = useState(getSnapEnabled);
+  // Rotation snapping (toolbars) reads the module flag: always in step with this state
+  useEffect(() => {
+    storeSnapEnabled(snapEnabled);
+  }, [snapEnabled]);
+  const handleToggleSnap = () => {
+    const next = !snapEnabled;
+    storeSnapEnabled(next);
+    setSnapEnabledState(next);
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(next ? 'چەسپاندن کارا کرا' : 'چەسپاندن ناکارا کرا', ToastAndroid.SHORT);
+    }
+  };
 
   const scrollViewRef = useRef(null);
   const scrollYRef = useRef(0);
@@ -906,8 +936,27 @@ export const PptEditorModal = ({
     setEditingElementId(null);
   };
 
+  // Short Kurdish notice when an action is refused because the element is locked
+  const showLockedMessage = () => {
+    if (Platform.OS === 'android') ToastAndroid.show(LOCKED_MESSAGE, ToastAndroid.SHORT);
+    else Alert.alert('', LOCKED_MESSAGE);
+  };
+
   // Update Element in specific page
   const handleUpdateElement = (pageId, updatedElem) => {
+    const page = presentation.slides.find((s) => s.id === pageId);
+    const prevElem = (page?.elements || []).find((e) => e.id === updatedElem.id);
+    // A locked element is never moved, resized, rotated or edited (lock toggle / style / layer only)
+    if (lockBlocksUpdate(prevElem, updatedElem)) {
+      showLockedMessage();
+      return;
+    }
+    // Locking the text box being typed in ends the typing (its text is frozen now)
+    if (updatedElem.locked && editingElementId === updatedElem.id) {
+      if (inputRef.current?.blur) inputRef.current.blur();
+      Keyboard.dismiss();
+      setEditingElementId(null);
+    }
     let elemToSave = updatedElem;
     if (elemToSave.type === 'text' && elemToSave.color) {
       const { color: _c, ...rest } = elemToSave;
@@ -932,8 +981,9 @@ export const PptEditorModal = ({
       const target = (s.elements || []).find((e) => e.id === elemId);
       if (!target) return s;
 
+      // The copy is always unlocked
       const cloned = {
-        ...target,
+        ...withoutLock(target),
         id: makeId('elem'),
         x: Math.min(80, target.x + 4),
         y: Math.min(80, target.y + 4),
@@ -950,6 +1000,11 @@ export const PptEditorModal = ({
 
   // Delete Element
   const handleDeleteElement = (pageId, elemId) => {
+    const page = presentation.slides.find((s) => s.id === pageId);
+    if (isElementLocked((page?.elements || []).find((e) => e.id === elemId))) {
+      showLockedMessage();
+      return;
+    }
     const newSlides = presentation.slides.map((s) => {
       if (s.id !== pageId) return s;
       const newElements = (s.elements || []).filter((e) => e.id !== elemId);
@@ -1156,7 +1211,11 @@ export const PptEditorModal = ({
     setSelectedElementId(elemId);
     setEditingElementId(null);
     setSelectedTableCell({ elemId, r, c });
-    if (again) {
+    const tablePage = presentation.slides.find((s) => s.id === pageId);
+    const tableElem = (tablePage?.elements || []).find((e) => e.id === elemId);
+    if (again && isElementLocked(tableElem)) {
+      showLockedMessage();
+    } else if (again) {
       setTimeout(() => tableToolbarRef.current?.openCellEditor?.(r, c), 0);
     }
   };
@@ -1208,6 +1267,11 @@ export const PptEditorModal = ({
       if (xPt >= nd.x && xPt <= nd.x + nd.w && yPt >= nd.y && yPt <= nd.y + nd.h) hit = nd; // last = topmost
     });
     if (!hit) return;
+    // Locked: the items cannot be edited, so the editor does not open
+    if (isElementLocked(elem)) {
+      showLockedMessage();
+      return;
+    }
     const open = (tries) => {
       if (smartArtToolbarRef.current?.openItemEditor) smartArtToolbarRef.current.openItemEditor(hit.itemIndex);
       else if (tries > 0) setTimeout(() => open(tries - 1), 80);
@@ -1217,7 +1281,9 @@ export const PptEditorModal = ({
 
   // "گۆڕین بۆ شێوە": the SmartArt becomes independent ordinary shapes (one undo step)
   const handleConvertSmartArt = (pageId, elem) => {
-    const shapes = smartArtToShapes(elem, presentation.aspectRatio === '4:3' ? 540 : 405);
+    // A locked SmartArt gives locked shapes (the lock survives the conversion)
+    const shapes = smartArtToShapes(elem, presentation.aspectRatio === '4:3' ? 540 : 405)
+      .map((sh) => ({ ...sh, locked: !!elem.locked }));
     const newSlides = presentation.slides.map((s) => {
       if (s.id !== pageId) return s;
       const others = (s.elements || []).filter((e) => e.id !== elem.id);
@@ -2017,6 +2083,8 @@ export const PptEditorModal = ({
                             selectedTableCell={selectedPageId === slide.id ? selectedTableCell : null}
                             onTableCellTap={(elemId, r, c) => handleTableCellTap(slide.id, elemId, r, c)}
                             onSmartArtTap={(elemId, xPt, yPt) => handleSmartArtTap(slide.id, elemId, xPt, yPt)}
+                            snapEnabled={snapEnabled}
+                            onToggleSnap={handleToggleSnap}
                           />
 
                           {/* Page Divider between pages */}
@@ -2071,6 +2139,7 @@ export const PptEditorModal = ({
                     setControlledSelection={setControlledSelection}
                     setShowSoftInputOnFocus={setShowSoftInputOnFocus}
                     onRequestClose={() => handleBack(false)}
+                    slideHeightPt={presentation.aspectRatio === '4:3' ? 540 : 405}
                   />
                 ) : selectedElement && selectedElement.type === 'smartart' ? (
                   <PptSmartArtToolbar
@@ -2082,6 +2151,7 @@ export const PptEditorModal = ({
                     onDuplicate={() => handleDuplicateElement(selectedPageId, selectedElement.id)}
                     onDelete={() => handleDeleteElement(selectedPageId, selectedElement.id)}
                     onConvertToShapes={() => handleConvertSmartArt(selectedPageId, selectedElement)}
+                    slideHeightPt={presentation.aspectRatio === '4:3' ? 540 : 405}
                   />
                 ) : selectedElement && selectedElement.type === 'table' ? (
                   <PptTableToolbar
@@ -2110,6 +2180,7 @@ export const PptEditorModal = ({
                       setEditingElementId(null);
                     }}
                     onRequestClose={() => handleBack(false)}
+                    slideHeightPt={presentation.aspectRatio === '4:3' ? 540 : 405}
                   />
                 ) : (
                   <PptImageToolbar
@@ -2130,6 +2201,7 @@ export const PptEditorModal = ({
                       setEditingElementId(null);
                     }}
                     onRequestClose={() => handleBack(false)}
+                    slideHeightPt={presentation.aspectRatio === '4:3' ? 540 : 405}
                     designProps={designTargetSlide ? {
                       targetSlide: designTargetSlide,
                       targetIndex: designTargetIndex,
@@ -2709,6 +2781,34 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#2c2c2e',
+  },
+  snapToggleBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 28,
+    paddingHorizontal: 5,
+    borderRadius: 8,
+    backgroundColor: '#2c2c2e',
+    borderWidth: 1,
+    borderColor: '#3a3a3c',
+  },
+  snapToggleBtnOn: {
+    backgroundColor: '#ff2d9533',
+    borderColor: '#ff2d95',
+  },
+  snapToggleLabel: {
+    color: '#8e8e93',
+    fontSize: 8,
+    lineHeight: 11,
+  },
+  snapToggleText: {
+    color: '#8e8e93',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: 'bold',
+  },
+  snapToggleTextOn: {
+    color: '#ffffff',
   },
   pageHeaderToolbar: {
     flexDirection: 'row',

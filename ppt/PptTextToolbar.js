@@ -33,6 +33,7 @@ import {
 import { applyStyle, wordRangeAt } from './richText';
 import PptSlider from './PptSlider';
 import { PptValueCard } from './PptValueCard';
+import { PptArrangePanel } from './PptArrangePanel';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -224,6 +225,7 @@ export const PptTextToolbar = forwardRef(({
   setControlledSelection: externalSetControlledSelection,
   setShowSoftInputOnFocus,
   onRequestClose,
+  slideHeightPt,
 }, ref) => {
   const safeInsets = useSafeAreaInsets();
   // While the keyboard is open the tab body shrinks to a short scrollable strip,
@@ -233,7 +235,7 @@ export const PptTextToolbar = forwardRef(({
   const compactBodyH = Math.round(
     Math.min(150, Math.max(84, (windowH - keyboard.height) * 0.22))
   );
-  const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color'
+  const [activeTab, setActiveTab] = useState('text'); // 'text' | 'font' | 'color' | 'arrange'
   const [colorTarget, setColorTarget] = useState('text'); // 'text' | 'shadow' | 'highlight'
   const [editTextModal, setEditTextModal] = useState(false);
   const [tempText, setTempText] = useState(element?.text || '');
@@ -705,6 +707,16 @@ export const PptTextToolbar = forwardRef(({
             ڕەنگ 🎨
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabHeaderBtn, activeTab === 'arrange' && styles.tabHeaderBtnActive]}
+          onPressIn={handlePressIn}
+          onPress={() => setActiveTab('arrange')}
+        >
+          <Text style={[styles.tabHeaderBtnText, activeTab === 'arrange' && styles.tabHeaderBtnTextActive]}>
+            ڕێکخستن
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tab body: full height normally, compact + scrollable above the keyboard.
@@ -716,6 +728,13 @@ export const PptTextToolbar = forwardRef(({
         keyboardShouldPersistTaps="always"
         nestedScrollEnabled
       >
+      {/* "ڕێکخستن": lock + align to slide (shared panel). Touches keep the sticky selection. */}
+      {activeTab === 'arrange' && (
+        <View onTouchStart={handlePressIn}>
+          <PptArrangePanel element={element} onChangeElement={onChangeElement} slideHeightPt={slideHeightPt} />
+        </View>
+      )}
+
       {/* TAB 1: "نووسین" */}
       {activeTab === 'text' && (
         <View style={styles.tabContentBox}>

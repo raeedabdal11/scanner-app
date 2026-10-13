@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   PanResponder,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
+  AppState,
 } from 'react-native';
 import { planPage, splitRuns, SLIDE, measureElementLayout } from './pptFit';
 import { getElementRuns, updateTextWithRuns, getDisplayRunsWithSelection } from './formattedText';
@@ -17,8 +18,19 @@ import { getDisplayFontFamily } from './fonts';
 import { PptTableView } from './PptTableView';
 import { PptSmartArtView } from './PptSmartArtView';
 import { layoutTable } from './tableModel';
+import {
+  rotatedBoundsPx,
+  buildSnapLines,
+  computeResizeGeometry,
+  snapResizeGeometry,
+  computeSnappedMove,
+  snapEngageKeys,
+} from './snapGeometry';
+import { snapTick } from './snapHaptics';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Kept for existing imports: the resize math now lives in snapGeometry.js
+export { computeResizeGeometry };
+
 // Double tap on an empty slide area (ms, px)
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_SLOP = 30;
@@ -36,116 +48,7 @@ const RESIZE_HANDLES = [
   { key: 'br', sx: 1, sy: 1, fx: 1, fy: 1 },
 ];
 const HANDLE_TOUCH_SIZE = 44;
-const MIN_ELEM_PERCENT = 5;
-
-/**
- * Shared resize math for every element type (text, image, shape).
- * g: gesture snapshot { handle, elem, geom: {x,y,w,h} in %, rotation, minY, fontPt, cw, ch }
- * (dx, dy): finger movement in screen px. Works in the element's own (rotated) axes and keeps the
- * opposite side / corner fixed on screen. Returns { x, y, width, height, keepAspect } in %.
- */
-export function computeResizeGeometry(g, dx, dy) {
-  const { handle, elem, geom, cw, ch } = g;
-  const { sx, sy } = handle;
-  const W0 = (geom.w / 100) * cw;
-  const H0 = (geom.h / 100) * ch;
-  const cx0 = (geom.x / 100) * cw + W0 / 2;
-  const cy0 = (geom.y / 100) * ch + H0 / 2;
-  const th = ((g.rotation || 0) * Math.PI) / 180;
-  const cos = Math.cos(th);
-  const sin = Math.sin(th);
-
-  // Finger movement in the element's local axes
-  const lx = dx * cos + dy * sin;
-  const ly = -dx * sin + dy * cos;
-
-  const isCorner = sx !== 0 && sy !== 0;
-  const keepAspect =
-    (elem.type === 'image' && (isCorner || !!(elem.lockAspect ?? elem.keepAspect))) ||
-    (elem.type === 'table' && !!elem.lockAspect);
-  const minW = (MIN_ELEM_PERCENT / 100) * cw;
-  const minH = (MIN_ELEM_PERCENT / 100) * ch;
-  const hasText = elem.type === 'text' && elem.text && elem.text.trim();
-
-  const textMinHeightPx = (wPx) => {
-    if (!hasText) return 0;
-    const meas = measureElementLayout({ ...elem, width: (wPx / cw) * 100 }, g.fontPt);
-    const neededPercent = Math.ceil((meas.totalHeightPt / SLIDE.heightPt) * 100) + 2;
-    return (neededPercent / 100) * ch;
-  };
-
-  const sizeFor = (tx, ty) => {
-    const mx = lx * tx;
-    const my = ly * ty;
-    let w = W0;
-    let h = H0;
-    if (keepAspect) {
-      let s;
-      if (isCorner) {
-        // Project the drag onto the box diagonal
-        s = 1 + (sx * mx * W0 + sy * my * H0) / (W0 * W0 + H0 * H0);
-      } else if (sx !== 0) {
-        s = (W0 + sx * mx) / W0;
-      } else {
-        s = (H0 + sy * my) / H0;
-      }
-      s = Math.max(s, minW / W0, minH / H0);
-      w = W0 * s;
-      h = H0 * s;
-    } else {
-      if (sx !== 0) w = Math.max(minW, W0 + sx * mx);
-      if (sy !== 0) h = Math.max(minH, H0 + sy * my);
-    }
-    // Text: width re-wraps, font size stays; height never smaller than the text needs
-    if (hasText) h = Math.max(h, textMinHeightPx(w));
-
-    // Opposite side/corner stays fixed on screen (local anchor rotated into screen space).
-    // A text box that auto-grows from a left/right handle keeps its top edge fixed.
-    const vy = sy !== 0 ? sy : (hasText && h !== H0 ? 1 : 0);
-    const ax = (-sx * W0) / 2;
-    const ay = (-vy * H0) / 2;
-    const anchorX = cx0 + ax * cos - ay * sin;
-    const anchorY = cy0 + ax * sin + ay * cos;
-    const bx = (-sx * w) / 2;
-    const by = (-vy * h) / 2;
-    const ncx = anchorX - (bx * cos - by * sin);
-    const ncy = anchorY - (bx * sin + by * cos);
-
-    return {
-      x: ((ncx - w / 2) / cw) * 100,
-      y: ((ncy - h / 2) / ch) * 100,
-      width: (w / cw) * 100,
-      height: (h / ch) * 100,
-      keepAspect,
-    };
-  };
-
-  const EPS = 0.05;
-  const inside = (r) =>
-    r.x >= -EPS &&
-    r.y >= (g.minY || 0) - EPS &&
-    r.x + r.width <= 100 + EPS &&
-    r.y + r.height <= 100 + EPS;
-
-  const full = sizeFor(1, 1);
-  if (inside(full) || !inside(sizeFor(0, 0))) return full;
-
-  // Keep the element inside the slide: shrink the drag per local axis as little as needed
-  const maxT = (fn) => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 14; i++) {
-      const mid = (lo + hi) / 2;
-      if (inside(fn(mid))) lo = mid;
-      else hi = mid;
-    }
-    return lo;
-  };
-  const tx = inside(sizeFor(1, 0)) ? 1 : maxT((t) => sizeFor(t, 0));
-  const ty = inside(sizeFor(tx, 1)) ? 1 : maxT((t) => sizeFor(tx, t));
-  return sizeFor(tx, ty);
-}
-
+const HANDLE_MARGIN = HANDLE_TOUCH_SIZE / 2;
 function useRenderWhy(name, props) {
   const prevRef = useRef(null);
   useEffect(() => {
@@ -416,6 +319,7 @@ export const PptCanvas = ({
   selectedTableCell,
   onTableCellTap,
   onSmartArtTap,
+  snapEnabled = true,
 }) => {
   const localUserTouchRef = React.useRef(false);
   const userTouchRef = externalUserTouchRef || localUserTouchRef;
@@ -425,92 +329,176 @@ export const PptCanvas = ({
   const lastEmptyTapRef = React.useRef({ time: 0, x: 0, y: 0 });
   // Cell under the finger (set by the cell's onTouchStart, read when the table tap is released)
   const lastTableCellTouchRef = React.useRef(null);
+  // Snap ON/OFF, read by the (stable) move / resize responders at gesture time
+  const snapEnabledRef = React.useRef(snapEnabled);
+  snapEnabledRef.current = snapEnabled;
 
   const is43 = aspectRatio === '4:3';
-  const canvasWidth = SCREEN_WIDTH - 24;
+  const { width: windowWidth } = useWindowDimensions();
+  const canvasWidth = windowWidth - 24;
   const canvasHeight = is43 ? (canvasWidth * 3) / 4 : (canvasWidth * 9) / 16;
 
-  // Move Element Drag & Tap Handler
-  const createMovePanResponder = (element) => {
-    let initialX = element.x;
-    let initialY = element.y;
-    let isDragging = false;
-    let grantLoc = null; // finger position inside the element (SmartArt: which shape was tapped)
+  // Text boxes stay below a title above them (same rule as the rendered position)
+  const titleMinY = (elem, y, list) => {
+    if (elem.type !== 'text') return 0;
+    const titleElem = (list || []).find(
+      (e) => e.id !== elem.id && e.type === 'text' && e.y < y && (e.fontSize >= 20 || e.fontWeight === 'bold')
+    );
+    return titleElem ? Math.min(90, titleElem.y + titleElem.height + 2) : 0;
+  };
 
-    return PanResponder.create({
+  // ---- Move (drag) + tap, with silent snapping ----
+  // One responder per element, created once (stable across renders) so a drag never loses its
+  // gesture state. While dragging only a local draft position changes (the editor is not
+  // re-rendered and no undo step is pushed); the element is committed once on release.
+  const [moveDraft, setMoveDraft] = useState(null); // { id, x, y }
+  const moveRespondersRef = useRef({});
+  const moveGestureRef = useRef(null);
+  const moveEnvRef = useRef({});
+
+  // Ends a dragged move: commit the last position once (one undo step), drop the draft
+  const endDrag = (g) => {
+    setMoveDraft(null);
+    const last = g && g.last;
+    const element = g && g.element;
+    const env = moveEnvRef.current;
+    if (g && g.isDragging && last && (last.x !== element.x || last.y !== element.y) && env.onChangeElement) {
+      env.onChangeElement({ ...element, x: last.x, y: last.y });
+    }
+  };
+
+  const finishMove = (id, gestureState, terminated) => {
+    const g = moveGestureRef.current;
+    if (!g || g.id !== id) {
+      // Not the active gesture any more: never leave its draft behind
+      setMoveDraft((d) => (d && d.id === id ? null : d));
+      return;
+    }
+    moveGestureRef.current = null;
+    const env = moveEnvRef.current;
+    const element = g.element;
+    if (g.isDragging) {
+      endDrag(g);
+      return;
+    }
+    if (terminated) return;
+    const dist = Math.hypot(gestureState.dx, gestureState.dy);
+    if (dist > 8) return;
+    env.onSelectElement(element.id);
+    if (element.type === 'text') {
+      // A locked text box is only selected (its text cannot be edited)
+      if (!element.locked) env.onStartInlineEditing(element.id);
+    } else if (element.type === 'image' && !element.uri) {
+      env.onChangeImageElement(element);
+    } else if (element.type === 'smartart') {
+      if (env.onSmartArtTap && g.grantLoc) {
+        const ptPerPx = SLIDE.widthPt / env.canvasWidth;
+        env.onSmartArtTap(element.id, g.grantLoc.x * ptPerPx, g.grantLoc.y * ptPerPx);
+      }
+    } else if (element.type === 'table') {
+      const t = lastTableCellTouchRef.current;
+      if (t && t.elemId === element.id && env.onTableCellTap) env.onTableCellTap(element.id, t.r, t.c);
+    } else if (element.type === 'shape') {
+      const shapeType = element.shapeType || 'rect';
+      if (shapeType !== 'line' && shapeType !== 'arrow') {
+        const now = Date.now();
+        const lastTap = lastShapeTapRef.current;
+        if (lastTap.id === element.id && (now - lastTap.time) < 300) {
+          if (env.onShapeDoubleTap) env.onShapeDoubleTap(element);
+        }
+        lastShapeTapRef.current = { id: element.id, time: now };
+      }
+    }
+  };
+
+  const getMoveResponder = (id) => {
+    if (moveRespondersRef.current[id]) return moveRespondersRef.current[id];
+    const responder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // While another element is dragged / resized, the finger passing over this element must
+        // not take the gesture over (the first element would be left half moved)
+        const active = moveGestureRef.current;
+        if ((active && active.id !== id) || resizeGestureRef.current) return false;
         return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
       },
+      // Once the element really moves, keep the gesture until the finger lifts. Before that a
+      // scroll may still take it (tap-vs-scroll unchanged).
+      onPanResponderTerminationRequest: () => {
+        const g = moveGestureRef.current;
+        return !(g && g.id === id && g.isDragging);
+      },
       onPanResponderGrant: (evt) => {
-        grantLoc = evt && evt.nativeEvent
-          ? { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY }
-          : null;
-        onSelectElement(element.id);
-        initialX = element.x;
-        initialY = element.y;
-        isDragging = false;
+        const env = moveEnvRef.current;
+        const prevGesture = moveGestureRef.current;
+        if (prevGesture && prevGesture.id !== id) {
+          // Should not happen any more (a drag cannot be taken over), but never leave it half done
+          moveGestureRef.current = null;
+          endDrag(prevGesture);
+        }
+        const element = env.byId && env.byId[id];
+        if (!element) {
+          moveGestureRef.current = null;
+          return;
+        }
+        moveGestureRef.current = {
+          id,
+          element,
+          // finger position inside the element (SmartArt: which shape was tapped)
+          grantLoc: evt && evt.nativeEvent ? { x: evt.nativeEvent.locationX, y: evt.nativeEvent.locationY } : null,
+          isDragging: false,
+          last: null,
+        };
+        env.onSelectElement(id);
       },
       onPanResponderMove: (evt, gestureState) => {
-        if (element.locked) return;
-        const dist = Math.hypot(gestureState.dx, gestureState.dy);
-        if (dist > 8) {
-          isDragging = true;
-          const deltaXPercent = (gestureState.dx / canvasWidth) * 100;
-          const deltaYPercent = (gestureState.dy / canvasHeight) * 100;
-
-          let minY = 0;
-          if (element.type === 'text') {
-            const titleElem = (slide.elements || []).find(
-              (e) => e.id !== element.id && e.type === 'text' && e.y < element.y && e.fontSize >= 20
-            );
-            if (titleElem) {
-              minY = Math.min(90, titleElem.y + titleElem.height + 2);
-            }
-          }
-
-          const newX = Math.max(0, Math.min(100 - element.width, initialX + deltaXPercent));
-          const newY = Math.max(minY, Math.min(100 - element.height, initialY + deltaYPercent));
-
-          onChangeElement({
-            ...element,
-            x: Math.round(newX * 10) / 10,
-            y: Math.round(newY * 10) / 10,
-          });
+        const g = moveGestureRef.current;
+        if (!g || g.id !== id || g.element.locked) return;
+        if (!g.isDragging && Math.hypot(gestureState.dx, gestureState.dy) <= 8) return;
+        const env = moveEnvRef.current;
+        const cw = env.canvasWidth;
+        const ch = env.canvasHeight;
+        const element = g.element;
+        if (!g.isDragging) {
+          // Drag starts: everything the snapping needs is computed once here
+          g.isDragging = true;
+          const box = (env.boxes || []).find((b) => b.id === id);
+          g.hPx = box ? box.hPx : (element.height / 100) * ch;
+          g.minY = titleMinY(element, element.y, env.elements);
+          g.lines = snapEnabledRef.current ? buildSnapLines(env.boxes || [], id, cw, ch) : null;
         }
+        // Turned OFF meanwhile: no snapping from now on
+        if (!snapEnabledRef.current) g.lines = null;
+        const { x, y, gx, gy } = computeSnappedMove(
+          {
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+            hPx: g.hPx,
+            rotation: element.rotation || 0,
+            minY: g.minY,
+            cw,
+            ch,
+            lines: g.lines,
+          },
+          gestureState.dx,
+          gestureState.dy
+        );
+        // Short haptic tick only when a NEW snap line engages (never while staying snapped)
+        const eng = snapEngageKeys(g.snapKeys, gx, gy);
+        g.snapKeys = eng.keys;
+        if (eng.engaged) snapTick();
+        const prev = g.last;
+        if (prev && prev.x === x && prev.y === y) return;
+        g.last = { x, y };
+        setMoveDraft({ id, x, y });
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        const dist = Math.hypot(gestureState.dx, gestureState.dy);
-        if (!isDragging && dist <= 8) {
-          onSelectElement(element.id);
-          if (element.type === 'text') {
-            onStartInlineEditing(element.id);
-          } else if (element.type === 'image' && !element.uri) {
-            onChangeImageElement(element);
-          } else if (element.type === 'smartart') {
-            if (onSmartArtTap && grantLoc) {
-              const ptPerPx = SLIDE.widthPt / canvasWidth;
-              onSmartArtTap(element.id, grantLoc.x * ptPerPx, grantLoc.y * ptPerPx);
-            }
-          } else if (element.type === 'table') {
-            const t = lastTableCellTouchRef.current;
-            if (t && t.elemId === element.id && onTableCellTap) onTableCellTap(element.id, t.r, t.c);
-          } else if (element.type === 'shape') {
-            const shapeType = element.shapeType || 'rect';
-            if (shapeType !== 'line' && shapeType !== 'arrow') {
-              const now = Date.now();
-              const lastTap = lastShapeTapRef.current;
-              if (lastTap.id === element.id && (now - lastTap.time) < 300) {
-                if (onShapeDoubleTap) {
-                  onShapeDoubleTap(element);
-                }
-              }
-              lastShapeTapRef.current = { id: element.id, time: now };
-            }
-          }
-        }
-      },
+      onPanResponderRelease: (evt, gestureState) => finishMove(id, gestureState, false),
+      onPanResponderTerminate: (evt, gestureState) => finishMove(id, gestureState, true),
     });
+    moveRespondersRef.current[id] = responder;
+    return responder;
   };
 
   // ---- Unified 8-handle resize (all element types) ----
@@ -523,35 +511,36 @@ export const PptCanvas = ({
   const resizeEnvRef = useRef({});
   resizeEnvRef.current = { onChangeElement, canvasWidth, canvasHeight };
 
+  // Ends a resize (release, terminate, or the safety net): draft dropped, element committed
+  const finishResize = () => {
+    const g = resizeGestureRef.current;
+    resizeGestureRef.current = null;
+    setResizeDraft(null);
+    if (!g || !g.last) return;
+    const r = g.last;
+    const elem = g.elem;
+    const updated = {
+      ...elem,
+      x: Math.round(r.x * 10) / 10,
+      y: Math.round(r.y * 10) / 10,
+      width: Math.round(r.width * 10) / 10,
+      height: elem.type === 'text' ? Math.ceil(r.height * 10) / 10 : Math.round(r.height * 10) / 10,
+    };
+    if (!r.keepAspect) {
+      updated.aspectRatio = updated.width / Math.max(0.1, updated.height);
+    }
+    if (elem.type === 'text') {
+      // Resizing a text box never changes its font size
+      updated.fontMode = 'manual';
+      updated.fontSize = Math.round(g.fontPt);
+    }
+    const env = resizeEnvRef.current;
+    if (env.onChangeElement) env.onChangeElement(updated);
+  };
+
   const resizeResponders = useMemo(() => {
     const map = {};
     RESIZE_HANDLES.forEach((handle) => {
-      const finish = () => {
-        const g = resizeGestureRef.current;
-        resizeGestureRef.current = null;
-        setResizeDraft(null);
-        if (!g || !g.last) return;
-        const r = g.last;
-        const elem = g.elem;
-        const updated = {
-          ...elem,
-          x: Math.round(r.x * 10) / 10,
-          y: Math.round(r.y * 10) / 10,
-          width: Math.round(r.width * 10) / 10,
-          height: elem.type === 'text' ? Math.ceil(r.height * 10) / 10 : Math.round(r.height * 10) / 10,
-        };
-        if (!r.keepAspect) {
-          updated.aspectRatio = updated.width / Math.max(0.1, updated.height);
-        }
-        if (elem.type === 'text') {
-          // Resizing a text box never changes its font size
-          updated.fontMode = 'manual';
-          updated.fontSize = Math.round(g.fontPt);
-        }
-        const env = resizeEnvRef.current;
-        if (env.onChangeElement) env.onChangeElement(updated);
-      };
-
       map[handle.key] = PanResponder.create({
         onStartShouldSetPanResponder: () => {
           const ctx = resizeCtxRef.current;
@@ -573,6 +562,10 @@ export const PptCanvas = ({
             cw: env.canvasWidth,
             ch: env.canvasHeight,
             last: null,
+            // Candidate snap lines, once per drag (unrotated elements only)
+            lines: snapEnabledRef.current && !ctx.rotation
+              ? buildSnapLines(moveEnvRef.current.boxes || [], ctx.elem.id, env.canvasWidth, env.canvasHeight)
+              : null,
           };
           setResizeDraft({
             id: ctx.elem.id,
@@ -585,16 +578,55 @@ export const PptCanvas = ({
         onPanResponderMove: (evt, gestureState) => {
           const g = resizeGestureRef.current;
           if (!g) return;
-          const r = computeResizeGeometry(g, gestureState.dx, gestureState.dy);
+          if (!snapEnabledRef.current) g.lines = null;
+          const { r, gx, gy } = snapResizeGeometry(g, gestureState.dx, gestureState.dy);
           g.last = r;
+          const eng = snapEngageKeys(g.snapKeys, gx, gy);
+          g.snapKeys = eng.keys;
+          if (eng.engaged) snapTick();
           setResizeDraft({ id: g.elem.id, x: r.x, y: r.y, width: r.width, height: r.height });
         },
-        onPanResponderRelease: finish,
-        onPanResponderTerminate: finish,
+        onPanResponderRelease: () => finishResize(),
+        onPanResponderTerminate: () => finishResize(),
       });
     });
     return map;
   }, []);
+
+  // Safety net: the last finger lifted (or the touch was cancelled) anywhere on this canvas.
+  // A gesture whose release never arrived is finished a moment later (draft dropped, committed).
+  const safetyTimerRef = useRef(null);
+  const finishAllGestures = () => {
+    const g = moveGestureRef.current;
+    if (g) {
+      moveGestureRef.current = null;
+      endDrag(g);
+    }
+    if (resizeGestureRef.current) finishResize();
+  };
+  const handleCanvasTouchEnd = (e) => {
+    const touches = e && e.nativeEvent && e.nativeEvent.touches;
+    if (touches && touches.length > 0) return; // another finger is still down
+    if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    safetyTimerRef.current = setTimeout(() => {
+      safetyTimerRef.current = null;
+      if (moveGestureRef.current || resizeGestureRef.current) finishAllGestures();
+    }, 120);
+  };
+
+  // App in the background: finish a running gesture; unmount: no timer left
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') finishAllGestures();
+    });
+    return () => {
+      sub.remove();
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+    };
+  }, []);
+
+  // Layout plan only changes with the slide (not while a drag draft moves)
+  const planned = useMemo(() => (slide ? planPage(slide) : null), [slide]);
 
   if (!slide) {
     return (
@@ -604,14 +636,35 @@ export const PptCanvas = ({
     );
   }
 
-  // Calculate layout plan using single source of truth
-  const planned = planPage(slide);
+  // Layout plan: single source of truth
   const elements = (planned.computedPage && planned.computedPage.elements) || slide.elements || [];
   const splitCount = planned.splitCount || 0;
   resizeCtxRef.current = null;
+  // Latest data for the stable move responders (+ every element's on-screen box for snapping)
+  const byId = {};
+  elements.forEach((e) => { byId[e.id] = e; });
+  const boxes = [];
+  let selectionBox = null; // on-screen box of the selected element (frame + handles layer)
+  moveEnvRef.current = {
+    byId,
+    elements,
+    boxes,
+    canvasWidth,
+    canvasHeight,
+    onSelectElement,
+    onStartInlineEditing,
+    onChangeElement,
+    onChangeImageElement,
+    onSmartArtTap,
+    onTableCellTap,
+    onShapeDoubleTap,
+  };
+  Object.keys(moveRespondersRef.current).forEach((id) => {
+    if (!byId[id]) delete moveRespondersRef.current[id];
+  });
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onTouchEnd={handleCanvasTouchEnd} onTouchCancel={handleCanvasTouchEnd}>
       <TouchableOpacity
         activeOpacity={1}
         style={[
@@ -658,19 +711,12 @@ export const PptCanvas = ({
         {elements.map((elem) => {
           const isSelected = selectedElementId === elem.id;
           const isEditing = editingElementId === elem.id;
+          // While this element is dragged it follows the local draft position
+          const mDraft = moveDraft && moveDraft.id === elem.id ? moveDraft : null;
+          const srcX = mDraft ? mDraft.x : elem.x;
+          const srcY = mDraft ? mDraft.y : elem.y;
 
-          let effectiveY = elem.y;
-          if (elem.type === 'text') {
-            const titleElem = elements.find(
-              (e) => e.id !== elem.id && e.type === 'text' && e.y < elem.y && (e.fontSize >= 20 || e.fontWeight === 'bold')
-            );
-            if (titleElem) {
-              const minTitleBottom = Math.min(90, titleElem.y + titleElem.height + 2);
-              if (effectiveY < minTitleBottom) {
-                effectiveY = minTitleBottom;
-              }
-            }
-          }
+          const effectiveY = Math.max(srcY, titleMinY(elem, srcY, elements));
 
           let effectiveHeight = elem.height;
           if (elem.type === 'table') {
@@ -689,7 +735,7 @@ export const PptCanvas = ({
 
           // While a resize handle is dragged, the box follows the live draft geometry
           const draft = resizeDraft && resizeDraft.id === elem.id ? resizeDraft : null;
-          const boxX = draft ? draft.x : elem.x;
+          const boxX = draft ? draft.x : srcX;
           const boxY = draft ? draft.y : effectiveY;
           const boxW = draft ? draft.width : elem.width;
           const boxH = draft ? draft.height : effectiveHeight;
@@ -699,7 +745,8 @@ export const PptCanvas = ({
           const elemWidth = (boxW / 100) * canvasWidth;
           const elemHeight = (boxH / 100) * canvasHeight;
 
-          const dragResponder = createMovePanResponder(elem);
+          const dragResponder = getMoveResponder(elem.id);
+          boxes.push({ id: elem.id, hPx: elemHeight, ...rotatedBoundsPx(left, top, elemWidth, elemHeight, elem.rotation || 0) });
 
           const computedPt = elem.computedFontSize || elem.fontSize || 18;
           const scaledBaseSize = computedPt * (canvasWidth / SLIDE.widthPt);
@@ -710,14 +757,11 @@ export const PptCanvas = ({
 
           const rotation = elem.rotation || 0;
           const showHandles = isSelected && !elem.locked;
+          if (isSelected) {
+            selectionBox = { left, top, w: elemWidth, h: elemHeight, rotation, showHandles };
+          }
           if (isSelected && !draft) {
-            let minY = 0;
-            if (elem.type === 'text') {
-              const titleAbove = elements.find(
-                (e) => e.id !== elem.id && e.type === 'text' && e.y < elem.y && (e.fontSize >= 20 || e.fontWeight === 'bold')
-              );
-              if (titleAbove) minY = Math.min(90, titleAbove.y + titleAbove.height + 2);
-            }
+            const minY = titleMinY(elem, elem.y, elements);
             resizeCtxRef.current = {
               elem,
               geom: { x: boxX, y: boxY, w: boxW, h: boxH },
@@ -956,9 +1000,6 @@ export const PptCanvas = ({
                 </View>
               )}
 
-              {/* Selection outline drawn exactly on the element box (no layout offset) */}
-              {isSelected && <View style={styles.selectionOutline} pointerEvents="none" />}
-
               {/* Lock badge if element is locked */}
               {elem.locked && (
                 <View style={styles.lockBadge}>
@@ -966,29 +1007,51 @@ export const PptCanvas = ({
                 </View>
               )}
 
-              {/* 8 resize handles, positioned exactly on the box (they rotate with the element) */}
-              {showHandles && (
-                <>
-                  {RESIZE_HANDLES.map((handle) => (
-                    <View
-                      key={handle.key}
-                      style={[
-                        styles.handleTouchTarget,
-                        {
-                          left: handle.fx * elemWidth - HANDLE_TOUCH_SIZE / 2,
-                          top: handle.fy * elemHeight - HANDLE_TOUCH_SIZE / 2,
-                        },
-                      ]}
-                      {...resizeResponders[handle.key].panHandlers}
-                    >
-                      <View style={styles.handleDot} />
-                    </View>
-                  ))}
-                </>
-              )}
             </View>
           );
         })}
+
+        {/* Selection frame + 8 resize handles in their own layer. The layer is the element box
+            grown by half a handle on every side, so the frame and the handles are drawn INSIDE
+            their own view (never outside a view's bounds: Android only repaints a view's own
+            rectangle, so anything drawn outside it could stay on screen as a trace). It rotates
+            with the element around the same center and only the handles take touches. */}
+        {selectionBox && (
+          <View
+            pointerEvents="box-none"
+            style={[
+              styles.selectionLayer,
+              {
+                left: selectionBox.left - HANDLE_MARGIN,
+                top: selectionBox.top - HANDLE_MARGIN,
+                width: selectionBox.w + HANDLE_MARGIN * 2,
+                height: selectionBox.h + HANDLE_MARGIN * 2,
+                transform: selectionBox.rotation ? [{ rotate: `${selectionBox.rotation}deg` }] : [],
+              },
+            ]}
+          >
+            <View
+              pointerEvents="none"
+              style={[styles.selectionOutline, { left: HANDLE_MARGIN, top: HANDLE_MARGIN, right: HANDLE_MARGIN, bottom: HANDLE_MARGIN }]}
+            />
+            {selectionBox.showHandles &&
+              RESIZE_HANDLES.map((handle) => (
+                <View
+                  key={handle.key}
+                  style={[
+                    styles.handleTouchTarget,
+                    {
+                      left: HANDLE_MARGIN + handle.fx * selectionBox.w - HANDLE_TOUCH_SIZE / 2,
+                      top: HANDLE_MARGIN + handle.fy * selectionBox.h - HANDLE_TOUCH_SIZE / 2,
+                    },
+                  ]}
+                  {...resizeResponders[handle.key].panHandlers}
+                >
+                  <View style={styles.handleDot} />
+                </View>
+              ))}
+          </View>
+        )}
 
         {/* Live size label while a resize handle is dragged */}
         {resizeDraft && (
@@ -998,6 +1061,7 @@ export const PptCanvas = ({
             </Text>
           </View>
         )}
+
 
         {/* Small badge showing extra slides when text splits */}
         {splitCount > 0 && (
@@ -1080,14 +1144,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+  // No elevation / shadow: on some Android GPUs an elevated view inside the scroll view was
+  // drawn over the toolbars above it (stray frames). A thin border keeps the slide edge visible.
   canvas: {
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#00000033',
+  },
+  selectionLayer: {
+    position: 'absolute',
+    zIndex: 5000,
   },
   elementWrapper: {
     position: 'absolute',

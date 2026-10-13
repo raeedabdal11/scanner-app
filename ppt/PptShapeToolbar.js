@@ -12,6 +12,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import PptSlider from './PptSlider';
 import { SHAPE_STYLE_ROWS } from './shapeCatalog';
+import { PptArrangePanel, PptLockButton } from './PptArrangePanel';
+import { snapRotationWithTick } from './snapHaptics';
 
 const normFill = (c) => {
   const v = (c || 'none').toLowerCase();
@@ -31,6 +33,7 @@ export const PptShapeToolbar = forwardRef(({
   onDeleteElement,
   onOpenShapePicker,
   onClose,
+  slideHeightPt,
 }, ref) => {
   const [activeSubTab, setActiveSubTab] = useState('style_presets'); // 'style_presets' | 'size' | 'fill' | 'text' | 'outline' | 'style' | 'tools'
   const [keepAspect, setKeepAspect] = useState(false);
@@ -207,19 +210,7 @@ export const PptShapeToolbar = forwardRef(({
   };
 
   const setRotation = (deg) => {
-    updateShape({ rotation: deg });
-  };
-
-  // Lock / Unlock
-  const toggleLock = () => {
-    const nextLock = !isLocked;
-    updateShape({ locked: nextLock });
-    if (Platform.OS === 'android') {
-      ToastAndroid.show(
-        nextLock ? 'شێوەکە قفڵکرا 🔒' : 'قفڵی شێوەکە کرایەوە 🔓',
-        ToastAndroid.SHORT
-      );
-    }
+    updateShape({ rotation: snapRotationWithTick(deg, currentRotation) });
   };
 
   // --- Apply Shape Style preset ---
@@ -312,6 +303,16 @@ export const PptShapeToolbar = forwardRef(({
           <Ionicons name="options-outline" size={15} color={activeSubTab === 'style' ? '#ffffff' : '#aaaaaa'} />
           <Text style={[styles.tabHeaderBtnText, activeSubTab === 'style' && styles.tabHeaderBtnTextActive]}>
             ڕوونی
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabHeaderBtn, activeSubTab === 'arrange' && styles.tabHeaderBtnActive]}
+          onPress={() => setActiveSubTab('arrange')}
+        >
+          <Ionicons name="grid-outline" size={15} color={activeSubTab === 'arrange' ? '#ffffff' : '#aaaaaa'} />
+          <Text style={[styles.tabHeaderBtnText, activeSubTab === 'arrange' && styles.tabHeaderBtnTextActive]}>
+            ڕێکخستن
           </Text>
         </TouchableOpacity>
 
@@ -711,6 +712,11 @@ export const PptShapeToolbar = forwardRef(({
         </View>
       )}
 
+      {/* "ڕێکخستن": lock + align to slide (shared panel) */}
+      {activeSubTab === 'arrange' && (
+        <PptArrangePanel element={selectedElement} onChangeElement={onChangeElement} slideHeightPt={slideHeightPt} />
+      )}
+
       {/* SUB-TAB 6: TOOLS ("ئامرازەکان") */}
       {activeSubTab === 'tools' && (
         <View style={styles.tabContentBox}>
@@ -720,10 +726,7 @@ export const PptShapeToolbar = forwardRef(({
               <Text style={styles.toolBtnText}>کۆپی</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.toolBtn, isLocked && styles.toolBtnLocked]} onPress={toggleLock}>
-              <Ionicons name={isLocked ? 'lock-closed' : 'lock-open-outline'} size={16} color={isLocked ? '#ffcc00' : '#ffffff'} />
-              <Text style={styles.toolBtnText}>{isLocked ? 'بکرێتەوە' : 'قفڵکردن'}</Text>
-            </TouchableOpacity>
+            <PptLockButton element={selectedElement} onChangeElement={onChangeElement} />
 
             <TouchableOpacity
               style={styles.toolBtn}

@@ -267,6 +267,71 @@ function injectTableFrames(xml, specs) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Locked elements ("قفڵکردن"): PowerPoint locks in the non-visual properties, schema order kept
+// (the lock element is the FIRST child of p:cNvSpPr / p:cNvPicPr / p:cNvGrpSpPr, before extLst):
+//   text box / shape -> <p:cNvSpPr><a:spLocks .../></p:cNvSpPr>
+//   picture          -> <p:cNvPicPr><a:picLocks .../></p:cNvPicPr> (existing noChangeAspect kept)
+//   SmartArt group   -> <p:cNvGrpSpPr><a:grpSpLocks .../></p:cNvGrpSpPr> (+ locks on every child)
+//   table            -> <a:graphicFrameLocks noGrp="1" noMove="1" noResize="1"/> (buildTableFrameXml)
+// pptxgenjs cannot write locks: locked text boxes / pictures get a marker name (APP_LOCK_n), and
+// after the slide XML is final the lock is inserted and the marker replaced by a readable name.
+// ---------------------------------------------------------------------------------------------
+const LOCK_ATTR_ORDER = ['noMove', 'noResize', 'noRot', 'noChangeAspect', 'noSelect'];
+
+const lockElementXml = (lockTag, existingAttrs = '') => {
+  const attrs = {};
+  existingAttrs.replace(/([A-Za-z:]+)="([^"]*)"/g, (m, k, v) => {
+    attrs[k] = v;
+    return m;
+  });
+  attrs.noMove = '1';
+  attrs.noResize = '1';
+  attrs.noRot = '1';
+  if (attrs.noChangeAspect === undefined) attrs.noChangeAspect = '0';
+  attrs.noSelect = '0';
+  const keys = [...LOCK_ATTR_ORDER, ...Object.keys(attrs).filter((k) => !LOCK_ATTR_ORDER.includes(k))];
+  return `<${lockTag} ${keys.map((k) => `${k}="${attrs[k]}"`).join(' ')}/>`;
+};
+
+// Inserts / merges the lock element into the first <prTag> after `fromIdx` (before `closeNv`)
+function insertLockXml(xml, fromIdx, prTag, lockTag, closeNv) {
+  const nvEnd = xml.indexOf(closeNv, fromIdx);
+  const start = xml.indexOf(`<${prTag}`, fromIdx);
+  if (start < 0 || nvEnd < 0 || start > nvEnd) return xml;
+  const openEnd = xml.indexOf('>', start);
+  const selfClosing = xml[openEnd - 1] === '/';
+  const openTag = selfClosing ? `${xml.slice(start, openEnd - 1).replace(/\s+$/, '')}>` : xml.slice(start, openEnd + 1);
+  let inner = '';
+  let blockEnd = openEnd + 1;
+  if (!selfClosing) {
+    const close = xml.indexOf(`</${prTag}>`, openEnd);
+    if (close < 0) return xml;
+    inner = xml.slice(openEnd + 1, close);
+    blockEnd = close + prTag.length + 3;
+  }
+  const lockRe = new RegExp(`<${lockTag}\\b([^>]*?)(?:\\/>|>\\s*<\\/${lockTag}>)`);
+  const m = inner.match(lockRe);
+  const lockXml = lockElementXml(lockTag, m ? m[1] : '');
+  if (m) inner = inner.replace(m[0], '');
+  return `${xml.slice(0, start)}${openTag}${lockXml}${inner}</${prTag}>${xml.slice(blockEnd)}`;
+}
+
+/** specs: [{ name, kind: 'sp' | 'pic', label? }] of the locked elements on one slide */
+export function applyElementLocksXml(xml, specs) {
+  let out = xml;
+  (specs || []).forEach((spec) => {
+    const marker = `name="${spec.name}"`;
+    const nameIdx = out.indexOf(marker);
+    if (nameIdx < 0) return;
+    out = spec.kind === 'pic'
+      ? insertLockXml(out, nameIdx, 'p:cNvPicPr', 'a:picLocks', '</p:nvPicPr>')
+      : insertLockXml(out, nameIdx, 'p:cNvSpPr', 'a:spLocks', '</p:nvSpPr>');
+    if (spec.label) out = out.replace(marker, `name="${xmlEscape(spec.label)}"`);
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
 // SmartArt ("نەخشەی زانیاری"): exported as a <p:grpSp> of ordinary shapes with text, built from
 // the same layout-engine nodes as the canvas / PDF. A placeholder (APP_SMARTART_n) keeps the
 // z-order and is replaced after the slide XML is final, like tables. Child coordinates are
@@ -311,6 +376,13 @@ export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId, rel
   const gcx = Math.max(1, emu(W));
   const gcy = Math.max(1, emu(H));
 
+  // Locked SmartArt: the group and each of its shapes cannot be moved / resized / rotated
+  const childSpPr = elem.locked ? `<p:cNvSpPr>${lockElementXml('a:spLocks')}</p:cNvSpPr>` : '<p:cNvSpPr/>';
+  const childPicPr = `<p:cNvPicPr>${elem.locked ? lockElementXml('a:picLocks', 'noChangeAspect="1"') : '<a:picLocks noChangeAspect="1"/>'}</p:cNvPicPr>`;
+  const groupPr = elem.locked
+    ? '<p:cNvGrpSpPr><a:grpSpLocks noUngrp="1" noMove="1" noResize="1" noRot="1" noChangeAspect="0" noSelect="0"/></p:cNvGrpSpPr>'
+    : '<p:cNvGrpSpPr/>';
+
   const children = nodes.map((nd, k) => {
     const id = baseId + 1 + k;
     const prst = OPENXML_SHAPE_PRST_MAP[nd.shape] || nd.shape || 'rect';
@@ -322,7 +394,7 @@ export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId, rel
       const c = coverCrop(nd.w, nd.h, nd.image.w, nd.image.h, nd.image.crop);
       const sr = (v) => Math.max(0, Math.min(99999, Math.round(v * 100000)));
       return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="SmartArt ${baseId} - ${k + 1}"/>` +
-        '<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>' +
+        `${childPicPr}<p:nvPr/></p:nvPicPr>` +
         `<p:blipFill><a:blip r:embed="${picRel}"/><a:srcRect l="${sr(c.left)}" t="${sr(c.top)}" r="${sr(c.right)}" b="${sr(c.bottom)}"/>` +
         '<a:stretch><a:fillRect/></a:stretch></p:blipFill>' +
         `<p:spPr><a:xfrm><a:off x="${ox + emu(nd.x)}" y="${oy + emu(nd.y)}"/><a:ext cx="${Math.max(1, emu(nd.w))}" cy="${Math.max(1, emu(nd.h))}"/></a:xfrm>` +
@@ -343,14 +415,14 @@ export function buildSmartArtGroupXml(elem, xIn, yIn, slideHeightPt, baseId, rel
         `</a:rPr><a:t>${xmlEscape(line)}</a:t></a:r></a:p>`;
     }).join('');
     // Text of a rotated shape would rotate too: such shapes never carry text in the layouts
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="SmartArt ${baseId} - ${k + 1}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="SmartArt ${baseId} - ${k + 1}"/>${childSpPr}<p:nvPr/></p:nvSpPr>` +
       `<p:spPr><a:xfrm${rot}${flip}><a:off x="${ox + emu(nd.x)}" y="${oy + emu(nd.y)}"/><a:ext cx="${Math.max(1, emu(nd.w))}" cy="${Math.max(1, emu(nd.h))}"/></a:xfrm>` +
       `<a:prstGeom prst="${prst}"><a:avLst/></a:prstGeom>${saFillXml(nd)}${saLineXml(nd)}${saShadowXml(nd)}</p:spPr>` +
       `<p:txBody><a:bodyPr wrap="square" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr>` +
       `<a:lstStyle/>${paras}</p:txBody></p:sp>`;
   }).join('');
 
-  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${baseId}" name="SmartArt ${baseId}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${baseId}" name="SmartArt ${baseId}"/>${groupPr}<p:nvPr/></p:nvGrpSpPr>` +
     `<p:grpSpPr><a:xfrm><a:off x="${ox}" y="${oy}"/><a:ext cx="${gcx}" cy="${gcy}"/>` +
     `<a:chOff x="${ox}" y="${oy}"/><a:chExt cx="${gcx}" cy="${gcy}"/></a:xfrm></p:grpSpPr>` +
     `${children}</p:grpSp>`;
@@ -995,6 +1067,8 @@ export const exportPresentationToPptx = async (
     const slideSmartArtSpecs = {};
     // Stores the background (solid / gradient / image + overlay) per generated slide
     const slideBgSpecs = {};
+    // Locked text boxes / shapes / pictures per slide ({ name, kind, label })
+    const slideLockSpecs = {};
 
     for (const pageData of targetPages) {
       // Use planPage to get computed font sizes & split slides if text overflows
@@ -1010,6 +1084,12 @@ export const exportPresentationToPptx = async (
         slideShapeElemSpecs[slideCount] = [];
         slideTableSpecs[slideCount] = [];
         slideSmartArtSpecs[slideCount] = [];
+        slideLockSpecs[slideCount] = [];
+        const lockMarker = (kind, label) => {
+          const name = `APP_LOCK_${slideLockSpecs[slideCount].length}`;
+          slideLockSpecs[slideCount].push({ name, kind, label: `${label} ${slideLockSpecs[slideCount].length + 1}` });
+          return name;
+        };
 
         // Slide background: written as <p:bg> during JSZip post-processing (every slide carries
         // its exact app color so PowerPoint matches the editor, even the default white).
@@ -1184,6 +1264,7 @@ export const exportPresentationToPptx = async (
               fontFace: primaryFont,
               valign: 'top',
             };
+            if (elem.locked) textOptions.objectName = lockMarker('sp', 'Locked Text');
 
             if (pptxRuns.length > 0) {
               slide.addText(pptxRuns, textOptions);
@@ -1208,6 +1289,7 @@ export const exportPresentationToPptx = async (
 
               slide.addImage({
                 data: base64Img,
+                ...(elem.locked ? { objectName: lockMarker('pic', 'Locked Picture') } : {}),
                 x: xIn,
                 y: yIn,
                 w: wIn,
@@ -1344,6 +1426,7 @@ export const exportPresentationToPptx = async (
                 }
               }
 
+              if (elem.locked) slideLockSpecs[slideCount].push({ name: shapeTagName, kind: 'sp' });
               const shapeOpts = {
                 objectName: shapeTagName, // pptxgenjs writes this as <p:cNvPr name>; "name" is ignored
                 x: xIn,
@@ -2298,6 +2381,9 @@ export const exportPresentationToPptx = async (
                 console.log(`[SHAPE-XML][Slide ${slideNum}] ${spXml.substring(i, i + 800)}`);
             }
         }
+
+        // Locks of text boxes / shapes / pictures (tables and SmartArt groups write their own)
+        sanitizedXml = applyElementLocksXml(sanitizedXml, slideLockSpecs[slideNum]);
 
         // Real tables replace their placeholders (after sanitizing: the frame XML uses integer EMUs only)
         sanitizedXml = injectTableFrames(sanitizedXml, slideTableSpecs[slideNum]);

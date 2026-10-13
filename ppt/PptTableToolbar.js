@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { PptValueCard } from './PptValueCard';
 import { PptSafeAreaRoot, useEditorInsets } from './useEditorInsets';
 import * as T from './tableModel';
+import { PptArrangePanel } from './PptArrangePanel';
 
 const kd = T.toKurdishDigits;
 
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'size', label: 'قەبارە', icon: 'resize-outline' },
   { key: 'rowcol', label: 'ڕیز و ستوون', icon: 'add-circle-outline' },
   { key: 'effects', label: 'کاریگەری', icon: 'sparkles-outline' },
+  { key: 'arrange', label: 'ڕێکخستن', icon: 'grid-outline' },
 ];
 
 const OPTIONS = [
@@ -600,6 +602,11 @@ export const PptTableToolbar = forwardRef(({
         )}
 
         {/* ---------------- کاریگەری ---------------- */}
+        {/* "ڕێکخستن": lock + align to slide (shared panel) */}
+        {activeTab === 'arrange' && (
+          <PptArrangePanel element={element} onChangeElement={onChangeElement} slideHeightPt={slideHeightPt} />
+        )}
+
         {activeTab === 'effects' && (
           <View>
             <View style={styles.toggleRow}>
